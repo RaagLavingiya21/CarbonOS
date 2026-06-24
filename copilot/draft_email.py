@@ -9,13 +9,11 @@ from __future__ import annotations
 import json
 import re
 import time
-from pathlib import Path
 
 import anthropic
 from dotenv import load_dotenv
 
 from copilot.models import EmailDraft, EmailDraftResult, EngagementCandidate
-from db.store import DB_PATH
 from observability.logger import log_llm_call
 from rag.retriever import IndexNotBuiltError, retrieve
 
@@ -106,7 +104,6 @@ def run(
     candidate: EngagementCandidate,
     product_name: str,
     session_id: str | None = None,
-    db_path: Path = DB_PATH,
 ) -> EmailDraftResult:
     """Draft a GHG Protocol-grounded data request email for one supplier engagement candidate."""
     try:

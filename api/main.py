@@ -8,16 +8,13 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
 from api.routes import advisor, analyzer, copilot, gap_analyzer
-from db.copilot_store import init_copilot_db
-from db.store import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    init_db()
-    init_copilot_db()
     yield
 
 
@@ -38,6 +35,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SupabaseAuthMiddleware)
 
 app.include_router(analyzer.router)
 app.include_router(advisor.router)

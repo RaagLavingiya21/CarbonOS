@@ -1,90 +1,20 @@
-"""SQLite schema and CRUD for the Supplier Engagement Copilot.
+"""Supabase schema and CRUD for the Supplier Engagement Copilot.
 
-Three new tables in db/footprints.db:
-  suppliers   — contact directory (pre-populated with dummy data)
-  engagements — one row per supplier engagement, tracks full lifecycle
-  audit_log   — append-only event log, exportable for inventory audits
+Tables (managed by supabase/migrations/):
+  suppliers   — shared contact directory (seeded in migration)
+  engagements — user-owned engagement lifecycle records
+  audit_log   — user-owned append-only event log
 
 No Streamlit imports — callable from any Python context.
 """
 
 from __future__ import annotations
 
-import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
-from db.store import DB_PATH
+from db.client import get_user_client
 
-# ---------------------------------------------------------------------------
-# DDL
-# ---------------------------------------------------------------------------
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS suppliers (
-    supplier_id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    supplier_name  TEXT    NOT NULL UNIQUE,
-    contact_name   TEXT,
-    contact_email  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS engagements (
-    engagement_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    supplier_name         TEXT    NOT NULL,
-    product_name          TEXT    NOT NULL,
-    component_name        TEXT,
-    material              TEXT,
-    kg_co2e               REAL,
-    share_pct             REAL,
-    status                TEXT    NOT NULL DEFAULT 'open',
-    email_draft           TEXT,
-    email_sent            TEXT,
-    response_received     TEXT,
-    routing_decision      TEXT,
-    decision_rationale    TEXT,
-    ghg_protocol_citation TEXT,
-    next_step             TEXT,
-    created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
-    last_action_date      TEXT
-);
-
-CREATE TABLE IF NOT EXISTS audit_log (
-    log_id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp             TEXT    NOT NULL DEFAULT (datetime('now')),
-    event                 TEXT    NOT NULL,
-    workflow              TEXT    NOT NULL,
-    model                 TEXT,
-    supplier_name         TEXT,
-    product_name          TEXT,
-    component_name        TEXT,
-    email_sent            TEXT,
-    response_received     TEXT,
-    routing_decision      TEXT,
-    decision_rationale    TEXT,
-    ghg_protocol_citation TEXT,
-    data_collected        TEXT,
-    status                TEXT
-);
-"""
-
-# ---------------------------------------------------------------------------
-# Seed data — six realistic consumer-goods suppliers
-# ---------------------------------------------------------------------------
-
-_SEED_SUPPLIERS = [
-    ("FiberTex Global",        "Sarah Chen",     "sarah.chen@fibertex.example.com"),
-    ("PolyNova Materials",     "Raj Patel",       "raj.patel@polynova.example.com"),
-    ("ChemDyes International", "Maria Santos",    "maria.santos@chemdyes.example.com"),
-    ("PackRight Solutions",    "Tom Eriksson",    "tom.eriksson@packright.example.com"),
-    ("MetalWorks Industries",  "Aisha Okonkwo",  "aisha.okonkwo@metalworks.example.com"),
-    ("SilicaSoft Technologies","James Liu",       "james.liu@silicasoft.example.com"),
-]
-
-
-# ---------------------------------------------------------------------------
-# Dataclasses
-# ---------------------------------------------------------------------------
 
 @dataclass
 class Supplier:
@@ -134,50 +64,29 @@ class AuditEntry:
     status: str | None
 
 
-# ---------------------------------------------------------------------------
-# Init + seed
-# ---------------------------------------------------------------------------
-
-def init_copilot_db(db_path: Path = DB_PATH) -> None:
-    """Create tables and seed suppliers if the table is empty. Safe to call repeatedly."""
-    with sqlite3.connect(db_path) as conn:
-        conn.executescript(_DDL)
-        count = conn.execute("SELECT COUNT(*) FROM suppliers").fetchone()[0]
-        if count == 0:
-            conn.executemany(
-                "INSERT INTO suppliers (supplier_name, contact_name, contact_email) VALUES (?, ?, ?)",
-                _SEED_SUPPLIERS,
-            )
+def init_copilot_db() -> None:
+    """No-op: schema and supplier seed data are managed by supabase/migrations/."""
 
 
-# ---------------------------------------------------------------------------
-# Suppliers
-# ---------------------------------------------------------------------------
-
-def get_all_suppliers(db_path: Path = DB_PATH) -> list[Supplier]:
-    init_copilot_db(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM suppliers ORDER BY supplier_name"
-        ).fetchall()
-    return [Supplier(**dict(r)) for r in rows]
+def get_all_suppliers(access_token: str) -> list[Supplier]:
+    client = get_user_client(access_token)
+    response = client.table("suppliers").select("*").order("supplier_name").execute()
+    return [_supplier_from_row(row) for row in response.data]
 
 
-def get_supplier_by_name(name: str, db_path: Path = DB_PATH) -> Supplier | None:
-    init_copilot_db(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM suppliers WHERE supplier_name = ? COLLATE NOCASE",
-            (name,),
-        ).fetchone()
-    return Supplier(**dict(row)) if row else None
+def get_supplier_by_name(name: str, access_token: str) -> Supplier | None:
+    client = get_user_client(access_token)
+    response = (
+        client.table("suppliers")
+        .select("*")
+        .ilike("supplier_name", name)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return _supplier_from_row(response.data[0])
+    return None
 
-
-# ---------------------------------------------------------------------------
-# Engagements
-# ---------------------------------------------------------------------------
 
 def create_engagement(
     supplier_name: str,
@@ -186,85 +95,101 @@ def create_engagement(
     material: str | None,
     kg_co2e: float | None,
     share_pct: float | None,
+    *,
+    user_id: str,
+    access_token: str,
     email_draft: str | None = None,
-    db_path: Path = DB_PATH,
 ) -> int:
     """Insert a new engagement row and return its engagement_id."""
-    init_copilot_db(db_path)
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO engagements
-                (supplier_name, product_name, component_name, material,
-                 kg_co2e, share_pct, email_draft, status, created_at, last_action_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'), datetime('now'))
-            """,
-            (supplier_name, product_name, component_name, material, kg_co2e, share_pct, email_draft),
+    client = get_user_client(access_token)
+    now = _utc_now_iso()
+    response = (
+        client.table("engagements")
+        .insert(
+            {
+                "user_id": user_id,
+                "supplier_name": supplier_name,
+                "product_name": product_name,
+                "component_name": component_name,
+                "material": material,
+                "kg_co2e": kg_co2e,
+                "share_pct": share_pct,
+                "email_draft": email_draft,
+                "status": "open",
+                "created_at": now,
+                "last_action_date": now,
+            }
         )
-    return cursor.lastrowid
+        .execute()
+    )
+    return int(response.data[0]["engagement_id"])
 
 
 def update_engagement(
     engagement_id: int,
-    db_path: Path = DB_PATH,
+    *,
+    access_token: str,
     **fields,
 ) -> None:
     """Update any subset of engagement fields by keyword argument."""
     allowed = {
-        "status", "email_draft", "email_sent", "response_received",
-        "routing_decision", "decision_rationale", "ghg_protocol_citation",
+        "status",
+        "email_draft",
+        "email_sent",
+        "response_received",
+        "routing_decision",
+        "decision_rationale",
+        "ghg_protocol_citation",
         "next_step",
     }
-    updates = {k: v for k, v in fields.items() if k in allowed}
+    updates = {key: value for key, value in fields.items() if key in allowed}
     if not updates:
         return
-    updates["last_action_date"] = datetime.utcnow().isoformat(sep=" ", timespec="seconds")
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [engagement_id]
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            f"UPDATE engagements SET {set_clause} WHERE engagement_id = ?",
-            values,
-        )
+    updates["last_action_date"] = _utc_now_iso()
+    client = get_user_client(access_token)
+    client.table("engagements").update(updates).eq("engagement_id", engagement_id).execute()
 
 
-def get_engagement(engagement_id: int, db_path: Path = DB_PATH) -> Engagement | None:
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM engagements WHERE engagement_id = ?", (engagement_id,)
-        ).fetchone()
-    return Engagement(**dict(row)) if row else None
+def get_engagement(engagement_id: int, access_token: str) -> Engagement | None:
+    client = get_user_client(access_token)
+    response = (
+        client.table("engagements")
+        .select("*")
+        .eq("engagement_id", engagement_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    return _engagement_from_row(response.data[0])
 
 
-def get_engagements_for_product(
-    product_name: str, db_path: Path = DB_PATH
-) -> list[Engagement]:
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM engagements WHERE product_name = ? ORDER BY share_pct DESC",
-            (product_name,),
-        ).fetchall()
-    return [Engagement(**dict(r)) for r in rows]
+def get_engagements_for_product(product_name: str, access_token: str) -> list[Engagement]:
+    client = get_user_client(access_token)
+    response = (
+        client.table("engagements")
+        .select("*")
+        .eq("product_name", product_name)
+        .order("share_pct", desc=True)
+        .execute()
+    )
+    return [_engagement_from_row(row) for row in response.data]
 
 
-def get_all_engagements(db_path: Path = DB_PATH) -> list[Engagement]:
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM engagements ORDER BY created_at DESC"
-        ).fetchall()
-    return [Engagement(**dict(r)) for r in rows]
+def get_all_engagements(access_token: str) -> list[Engagement]:
+    client = get_user_client(access_token)
+    response = (
+        client.table("engagements").select("*").order("created_at", desc=True).execute()
+    )
+    return [_engagement_from_row(row) for row in response.data]
 
-
-# ---------------------------------------------------------------------------
-# Audit log
-# ---------------------------------------------------------------------------
 
 def append_audit_log(
     event: str,
     workflow: str,
+    *,
+    user_id: str,
+    access_token: str,
     supplier_name: str | None = None,
     product_name: str | None = None,
     component_name: str | None = None,
@@ -276,52 +201,95 @@ def append_audit_log(
     ghg_protocol_citation: str | None = None,
     data_collected: str | None = None,
     status: str | None = None,
-    db_path: Path = DB_PATH,
 ) -> None:
-    """Append one row to the audit log. Raises on failure (caller handles display)."""
-    init_copilot_db(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO audit_log
-                (event, workflow, model, supplier_name, product_name, component_name,
-                 email_sent, response_received, routing_decision, decision_rationale,
-                 ghg_protocol_citation, data_collected, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event, workflow, model, supplier_name, product_name, component_name,
-                email_sent, response_received, routing_decision, decision_rationale,
-                ghg_protocol_citation, data_collected, status,
-            ),
-        )
+    """Append one row to the audit log."""
+    client = get_user_client(access_token)
+    client.table("audit_log").insert(
+        {
+            "user_id": user_id,
+            "event": event,
+            "workflow": workflow,
+            "model": model,
+            "supplier_name": supplier_name,
+            "product_name": product_name,
+            "component_name": component_name,
+            "email_sent": email_sent,
+            "response_received": response_received,
+            "routing_decision": routing_decision,
+            "decision_rationale": decision_rationale,
+            "ghg_protocol_citation": ghg_protocol_citation,
+            "data_collected": data_collected,
+            "status": status,
+        }
+    ).execute()
 
 
 def get_audit_log(
+    access_token: str,
     supplier_name: str | None = None,
     product_name: str | None = None,
-    db_path: Path = DB_PATH,
 ) -> list[AuditEntry]:
     """Return audit log rows, optionally filtered by supplier or product."""
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        if supplier_name and product_name:
-            rows = conn.execute(
-                "SELECT * FROM audit_log WHERE supplier_name = ? AND product_name = ? ORDER BY timestamp DESC",
-                (supplier_name, product_name),
-            ).fetchall()
-        elif supplier_name:
-            rows = conn.execute(
-                "SELECT * FROM audit_log WHERE supplier_name = ? ORDER BY timestamp DESC",
-                (supplier_name,),
-            ).fetchall()
-        elif product_name:
-            rows = conn.execute(
-                "SELECT * FROM audit_log WHERE product_name = ? ORDER BY timestamp DESC",
-                (product_name,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM audit_log ORDER BY timestamp DESC"
-            ).fetchall()
-    return [AuditEntry(**dict(r)) for r in rows]
+    client = get_user_client(access_token)
+    query = client.table("audit_log").select("*")
+    if supplier_name:
+        query = query.eq("supplier_name", supplier_name)
+    if product_name:
+        query = query.eq("product_name", product_name)
+    response = query.order("timestamp", desc=True).execute()
+    return [_audit_from_row(row) for row in response.data]
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _supplier_from_row(row: dict) -> Supplier:
+    return Supplier(
+        supplier_id=int(row["supplier_id"]),
+        supplier_name=row["supplier_name"],
+        contact_name=row.get("contact_name"),
+        contact_email=row.get("contact_email"),
+    )
+
+
+def _engagement_from_row(row: dict) -> Engagement:
+    return Engagement(
+        engagement_id=int(row["engagement_id"]),
+        supplier_name=row["supplier_name"],
+        product_name=row["product_name"],
+        component_name=row.get("component_name"),
+        material=row.get("material"),
+        kg_co2e=row.get("kg_co2e"),
+        share_pct=row.get("share_pct"),
+        status=row["status"],
+        email_draft=row.get("email_draft"),
+        email_sent=row.get("email_sent"),
+        response_received=row.get("response_received"),
+        routing_decision=row.get("routing_decision"),
+        decision_rationale=row.get("decision_rationale"),
+        ghg_protocol_citation=row.get("ghg_protocol_citation"),
+        next_step=row.get("next_step"),
+        created_at=str(row.get("created_at", "")),
+        last_action_date=str(row["last_action_date"]) if row.get("last_action_date") else None,
+    )
+
+
+def _audit_from_row(row: dict) -> AuditEntry:
+    return AuditEntry(
+        log_id=int(row["log_id"]),
+        timestamp=str(row.get("timestamp", "")),
+        event=row["event"],
+        workflow=row["workflow"],
+        model=row.get("model"),
+        supplier_name=row.get("supplier_name"),
+        product_name=row.get("product_name"),
+        component_name=row.get("component_name"),
+        email_sent=row.get("email_sent"),
+        response_received=row.get("response_received"),
+        routing_decision=row.get("routing_decision"),
+        decision_rationale=row.get("decision_rationale"),
+        ghg_protocol_citation=row.get("ghg_protocol_citation"),
+        data_collected=row.get("data_collected"),
+        status=row.get("status"),
+    )
