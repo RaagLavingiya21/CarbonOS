@@ -18,7 +18,8 @@ def get_all_products(db_path: Path = DB_PATH) -> list[dict]:
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, flagged_items "
+            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
+            "flagged_items, status, flagged_comment "
             "FROM products ORDER BY analysis_date DESC"
         ).fetchall()
     return [dict(r) for r in rows]
@@ -35,9 +36,29 @@ def get_product_by_name(name: str, db_path: Path = DB_PATH) -> dict | None:
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, flagged_items "
+            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
+            "flagged_items, status, flagged_comment "
             "FROM products WHERE product_name = ? ORDER BY analysis_date DESC LIMIT 1",
             (name,),
+        ).fetchone()
+    if row is None:
+        return None
+    product = dict(row)
+    product["line_items"] = get_product_line_items(product["product_id"], db_path)
+    return product
+
+
+def get_product_by_id(product_id: int, db_path: Path = DB_PATH) -> dict | None:
+    """Return a product's summary row and line items by product ID."""
+    if not db_path.exists():
+        return None
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
+            "flagged_items, status, flagged_comment "
+            "FROM products WHERE product_id = ?",
+            (product_id,),
         ).fetchone()
     if row is None:
         return None
