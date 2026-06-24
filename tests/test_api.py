@@ -12,6 +12,7 @@ from copilot.models import (
 from factors.ef_lookup import EFMatch
 from gap_analyzer.models import CompanyProfile, Plan, PlanStep, ToolResult
 from llm.client import AdvisorResponse
+from tests.conftest import AUTH_HEADERS
 
 client = TestClient(app)
 
@@ -47,15 +48,23 @@ def test_analyzer_checkpoint_flow(monkeypatch) -> None:
             "text/csv",
         )
     }
-    parse_response = client.post("/api/analyze/parse", files=files)
+    parse_response = client.post("/api/analyze/parse", files=files, headers=AUTH_HEADERS)
     assert parse_response.status_code == 200
     session_id = parse_response.json()["session_id"]
 
-    match_response = client.post("/api/analyze/match-factors", json={"session_id": session_id})
+    match_response = client.post(
+        "/api/analyze/match-factors",
+        json={"session_id": session_id},
+        headers=AUTH_HEADERS,
+    )
     assert match_response.status_code == 200
     assert match_response.json()["warnings"] == []
 
-    calc_response = client.post("/api/analyze/calculate", json={"session_id": session_id})
+    calc_response = client.post(
+        "/api/analyze/calculate",
+        json={"session_id": session_id},
+        headers=AUTH_HEADERS,
+    )
     assert calc_response.status_code == 200
     payload = calc_response.json()
     assert payload["result"]["total_kg_co2e"] == 20.0
@@ -63,7 +72,10 @@ def test_analyzer_checkpoint_flow(monkeypatch) -> None:
 
 
 def test_advisor_chat_uses_business_client(monkeypatch) -> None:
-    monkeypatch.setattr("api.routes.advisor.build_llm_context", lambda: "Saved product context")
+    monkeypatch.setattr(
+        "api.routes.advisor.build_llm_context",
+        lambda access_token: "Saved product context",
+    )
 
     def fake_ask_advisor(**kwargs) -> AdvisorResponse:
         return AdvisorResponse(
@@ -77,6 +89,7 @@ def test_advisor_chat_uses_business_client(monkeypatch) -> None:
     response = client.post(
         "/api/advisor/chat",
         json={"user_message": "What is my footprint?", "conversation_history": []},
+        headers=AUTH_HEADERS,
     )
 
     assert response.status_code == 200
@@ -129,17 +142,23 @@ def test_gap_analysis_plan_execute_approve(monkeypatch) -> None:
                 "products": "shirts",
             }
         },
+        headers=AUTH_HEADERS,
     )
     assert plan_response.status_code == 200
     session_id = plan_response.json()["session_id"]
 
-    execute_response = client.post("/api/gap-analysis/execute", json={"session_id": session_id})
+    execute_response = client.post(
+        "/api/gap-analysis/execute",
+        json={"session_id": session_id},
+        headers=AUTH_HEADERS,
+    )
     assert execute_response.status_code == 200
     assert execute_response.json()["phase"] == "checkpoint"
 
     approve_response = client.post(
         "/api/gap-analysis/approve",
         json={"session_id": session_id, "action": "continue"},
+        headers=AUTH_HEADERS,
     )
     assert approve_response.status_code == 200
     assert approve_response.json()["phase"] == "done"
@@ -160,7 +179,7 @@ def test_copilot_suppliers_and_draft(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "api.routes.copilot.get_suppliers_list",
-        lambda product_name, top_n=10: SuppliersListResult(
+        lambda product_name, top_n=10, access_token=None: SuppliersListResult(
             candidates=[candidate],
             product_name=product_name,
         ),
@@ -178,14 +197,27 @@ def test_copilot_suppliers_and_draft(monkeypatch) -> None:
         ),
     )
 
-    suppliers_response = client.get("/api/copilot/suppliers", params={"product_name": "Test"})
+    suppliers_response = client.get(
+        "/api/copilot/suppliers",
+        params={"product_name": "Test"},
+        headers=AUTH_HEADERS,
+    )
     assert suppliers_response.status_code == 200
     candidate_payload = suppliers_response.json()["candidates"][0]
 
     draft_response = client.post(
         "/api/copilot/draft-email",
         json={"product_name": "Test", "candidate": candidate_payload},
+        headers=AUTH_HEADERS,
     )
 
     assert draft_response.status_code == 200
     assert draft_response.json()["draft"]["subject"] == "Scope 3 data request"
+
+
+def test_protected_route_requires_auth() -> None:
+    response = client.post(
+        "/api/advisor/chat",
+        json={"user_message": "Hello", "conversation_history": []},
+    )
+    assert response.status_code == 401

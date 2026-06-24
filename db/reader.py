@@ -5,102 +5,98 @@ No Streamlit imports — callable from any Python context.
 
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
+from db.client import get_user_client
 
-from db.store import DB_PATH
+_PRODUCT_COLUMNS = (
+    "product_id, product_name, analysis_date, total_kg_co2e, "
+    "matched_items, flagged_items, status, flagged_comment"
+)
 
-
-def get_all_products(db_path: Path = DB_PATH) -> list[dict]:
-    """Return all rows from the products table."""
-    if not db_path.exists():
-        return []
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
-            "flagged_items, status, flagged_comment "
-            "FROM products ORDER BY analysis_date DESC"
-        ).fetchall()
-    return [dict(r) for r in rows]
+_LINE_ITEM_COLUMNS = (
+    "component, material, spend_usd, matched_sector, emission_factor, "
+    "ef_source, kg_co2e, share_pct, flag_status"
+)
 
 
-def get_product_by_name(name: str, db_path: Path = DB_PATH) -> dict | None:
-    """Return a product's summary row and its line items by product name.
+def get_all_products(access_token: str) -> list[dict]:
+    """Return all product rows for the authenticated user (RLS-scoped)."""
+    client = get_user_client(access_token)
+    response = (
+        client.table("products")
+        .select(_PRODUCT_COLUMNS)
+        .order("analysis_date", desc=True)
+        .execute()
+    )
+    return [_normalize_product_row(row) for row in response.data]
 
-    If multiple products share the same name, returns the most recently saved one.
-    Returns None if no match is found or the DB does not exist.
-    """
-    if not db_path.exists():
+
+def get_product_by_name(name: str, access_token: str) -> dict | None:
+    """Return a product summary and line items by name (most recent match)."""
+    client = get_user_client(access_token)
+    response = (
+        client.table("products")
+        .select(_PRODUCT_COLUMNS)
+        .eq("product_name", name)
+        .order("analysis_date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
         return None
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
-            "flagged_items, status, flagged_comment "
-            "FROM products WHERE product_name = ? ORDER BY analysis_date DESC LIMIT 1",
-            (name,),
-        ).fetchone()
-    if row is None:
-        return None
-    product = dict(row)
-    product["line_items"] = get_product_line_items(product["product_id"], db_path)
+    product = _normalize_product_row(response.data[0])
+    product["line_items"] = get_product_line_items(product["product_id"], access_token)
     return product
 
 
-def get_product_by_id(product_id: int, db_path: Path = DB_PATH) -> dict | None:
-    """Return a product's summary row and line items by product ID."""
-    if not db_path.exists():
+def get_product_by_id(product_id: int, access_token: str) -> dict | None:
+    """Return a product summary and line items by product ID."""
+    client = get_user_client(access_token)
+    response = (
+        client.table("products")
+        .select(_PRODUCT_COLUMNS)
+        .eq("product_id", product_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
         return None
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT product_id, product_name, analysis_date, total_kg_co2e, matched_items, "
-            "flagged_items, status, flagged_comment "
-            "FROM products WHERE product_id = ?",
-            (product_id,),
-        ).fetchone()
-    if row is None:
-        return None
-    product = dict(row)
-    product["line_items"] = get_product_line_items(product["product_id"], db_path)
+    product = _normalize_product_row(response.data[0])
+    product["line_items"] = get_product_line_items(product_id, access_token)
     return product
 
 
-def get_product_line_items(product_id: int, db_path: Path = DB_PATH) -> list[dict]:
+def get_product_line_items(product_id: int, access_token: str) -> list[dict]:
     """Return all line items for a product."""
-    if not db_path.exists():
-        return []
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT component, material, spend_usd, matched_sector, emission_factor, "
-            "ef_source, kg_co2e, share_pct, flag_status "
-            "FROM line_items WHERE product_id = ? ORDER BY share_pct DESC NULLS LAST",
-            (product_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    client = get_user_client(access_token)
+    response = (
+        client.table("line_items")
+        .select(_LINE_ITEM_COLUMNS)
+        .eq("product_id", product_id)
+        .order("share_pct", desc=True, nullsfirst=False)
+        .execute()
+    )
+    return response.data
 
 
-def build_llm_context(db_path: Path = DB_PATH) -> str:
-    """Build a text summary of all saved analyses for the LLM system prompt."""
-    products = get_all_products(db_path)
+def build_llm_context(access_token: str) -> str:
+    """Build a text summary of saved analyses for the LLM system prompt."""
+    products = get_all_products(access_token)
 
     if not products:
         return "No product analyses have been saved yet."
 
     lines: list[str] = ["## Saved Product Footprint Analyses\n"]
 
-    for p in products:
+    for product in products:
         lines.append(
-            f"### Product: {p['product_name']} (ID: {p['product_id']})\n"
-            f"- Analysis date: {p['analysis_date']}\n"
-            f"- Total footprint: {p['total_kg_co2e']:.4f} kg CO₂e\n"
-            f"- Matched line items: {p['matched_items']}\n"
-            f"- Flagged line items: {p['flagged_items']}\n"
+            f"### Product: {product['product_name']} (ID: {product['product_id']})\n"
+            f"- Analysis date: {product['analysis_date']}\n"
+            f"- Total footprint: {product['total_kg_co2e']:.4f} kg CO₂e\n"
+            f"- Matched line items: {product['matched_items']}\n"
+            f"- Flagged line items: {product['flagged_items']}\n"
         )
 
-        items = get_product_line_items(p["product_id"], db_path)
+        items = get_product_line_items(product["product_id"], access_token)
         if items:
             lines.append("#### Line items (sorted by share, highest first):\n")
             for li in items:
@@ -119,3 +115,12 @@ def build_llm_context(db_path: Path = DB_PATH) -> str:
             lines.append("")
 
     return "\n".join(lines)
+
+
+def _normalize_product_row(row: dict) -> dict:
+    """Ensure analysis_date is a string for API compatibility."""
+    normalized = dict(row)
+    analysis_date = normalized.get("analysis_date")
+    if analysis_date is not None and not isinstance(analysis_date, str):
+        normalized["analysis_date"] = str(analysis_date)
+    return normalized
