@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Callable
 
+import httpx
 import jwt
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
@@ -85,6 +86,41 @@ def verify_supabase_jwt(token: str) -> str:
     return str(user_id)
 
 
+async def verify_with_supabase_auth(token: str) -> str:
+    """Validate the token against Supabase Auth as a fallback for local setup."""
+    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    if not supabase_url or not supabase_anon_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SUPABASE_URL and SUPABASE_ANON_KEY are required for token validation.",
+        )
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "apikey": supabase_anon_key,
+            },
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Supabase rejected token validation with status {response.status_code}.",
+        )
+
+    payload = response.json()
+    user_id = payload.get("id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Supabase token validation response did not include a user id.",
+        )
+    return str(user_id)
+
+
 def _is_public_path(path: str) -> bool:
     if path in PUBLIC_PATHS:
         return True
@@ -118,7 +154,13 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
         try:
             user_id = verify_supabase_jwt(token)
         except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            try:
+                user_id = await verify_with_supabase_auth(token)
+            except HTTPException as fallback_exc:
+                return JSONResponse(
+                    status_code=fallback_exc.status_code,
+                    content={"detail": f"{exc.detail} Fallback validation failed: {fallback_exc.detail}"},
+                )
 
         request.state.user_id = user_id
         request.state.access_token = token
