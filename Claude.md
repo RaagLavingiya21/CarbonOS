@@ -83,11 +83,34 @@ Bullet list. One bullet per case:
 - Confidence below threshold must must be flagged to human as low confidence. 
 
 
+## Architecture (Production Target)
+
+The app is being upgraded from a Streamlit prototype to a production stack:
+- **Backend:** FastAPI (Python, async) in `api/` — all business logic exposed as REST endpoints
+- **Frontend:** Next.js 14 + TypeScript + shadcn/ui in `frontend/` — deployed on Vercel
+- **Database:** Supabase (Postgres) with Row-Level Security — replaces SQLite
+- **Agent orchestration:** LangGraph StateGraphs in `api/graphs/` — replaces manual planner-executor
+- **Observability:** LangSmith for tracing + evals (auto-traces LangGraph runs)
+- **Auth:** Supabase Auth (JWT verified in FastAPI middleware)
+
+The original Streamlit app (app.py, pages/) is kept during migration but is not the target frontend.
+
+See `Architecture_Decisions.md` for detailed rationale behind each choice.
+See `IMPLEMENTATION_PLAN.md` for the phased build sequence.
+
+**Dependency rules (unchanged):**
+- `calc/`, `factors/`, `parsing/`, `llm/`, `rag/`, `gap_analyzer/`, `copilot/`, `db/` are business logic — no UI imports
+- `api/routes/` imports from business logic modules
+- `frontend/` communicates with backend only via HTTP (FastAPI endpoints or Supabase client)
+- No Streamlit calls outside `app.py` and `pages/`
+
 ## Coding Conventions
-- use python 3.13 for parsing, emission factor lookup and Calculation logic layers. use Ruff python formatter
-- Use Streamlit for presentation layer(app.py). 
-- All the units should be encoding of what is reprenets - eg. total_kg_CO2e rather than just total
-- Use Pytest for unit tests
+- Python 3.13 for backend. Ruff formatter.
+- TypeScript strict mode for frontend. ESLint + Prettier.
+- All units should encode what they represent — e.g. `total_kg_CO2e` rather than just `total`
+- Pytest for Python tests. Vitest for frontend tests.
+- FastAPI endpoints use Pydantic models for request/response validation
+- Async functions for all I/O-bound operations (LLM calls, DB queries)
 
 ## When to Ask the User
 Missing quantity → flag for human review
