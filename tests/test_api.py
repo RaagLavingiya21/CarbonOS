@@ -98,7 +98,7 @@ def test_gap_analysis_plan_execute_approve(monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "api.routes.gap_analyzer.generate_plan",
+        "api.graphs.gap_analyzer_graph.generate_plan",
         lambda profile, session_id=None: plan,
     )
 
@@ -116,7 +116,7 @@ def test_gap_analysis_plan_execute_approve(monkeypatch) -> None:
             citations=["GHG Protocol"],
         )
 
-    monkeypatch.setattr("api.routes.gap_analyzer.execute_step", fake_execute_step)
+    monkeypatch.setattr("api.graphs.gap_analyzer_graph.execute_step", fake_execute_step)
 
     plan_response = client.post(
         "/api/gap-analysis/plan",
@@ -166,7 +166,7 @@ def test_copilot_suppliers_and_draft(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        "api.routes.copilot.draft_email",
+        "api.graphs.supplier_copilot_graph.draft_email_run",
         lambda candidate, product_name, session_id=None: EmailDraftResult(
             draft=EmailDraft(
                 to="sarah@example.com",

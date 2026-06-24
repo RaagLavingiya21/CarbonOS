@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from api.graphs.gap_analyzer_graph import (
+    approve_gap_checkpoint,
+    execute_gap_step,
+    get_gap_state,
+    start_gap_analysis,
+)
 from api.models.schemas import (
     CompanyProfileDTO,
     GapApproveRequest,
@@ -17,8 +23,7 @@ from api.models.schemas import (
     ToolResultDTO,
 )
 from api.services.session_store import WorkflowSession, session_store
-from gap_analyzer import execute_step, generate_plan
-from gap_analyzer.models import CompanyProfile, Plan, ToolResult
+from gap_analyzer.models import CompanyProfile, ToolResult
 
 router = APIRouter(tags=["gap-analysis"])
 
@@ -35,6 +40,18 @@ def _session_or_404(session_id: str) -> WorkflowSession:
 
 def _results_dto(results: dict[str, ToolResult]) -> dict[str, ToolResultDTO]:
     return {name: ToolResultDTO.from_domain(result) for name, result in results.items()}
+
+
+def _sync_session_from_graph(session_id: str, state: dict) -> None:
+    session_store.update(
+        session_id,
+        phase=state.get("phase", "planning"),
+        profile=state.get("profile"),
+        plan=state.get("plan"),
+        current_step=state.get("current_step", 0),
+        results=state.get("results", {}),
+        call_counts=state.get("call_counts", {}),
+    )
 
 
 def _compile_report(profile: CompanyProfile, results: dict[str, ToolResult]) -> str:
@@ -71,102 +88,72 @@ def plan_gap_analysis(request: GapPlanRequest) -> GapPlanResponse:
         results={},
         call_counts={},
     )
-    plan = generate_plan(profile, session_id=session.session_id)
-    session_store.update(session.session_id, plan=plan)
+    state = start_gap_analysis(session.session_id, profile)
+    _sync_session_from_graph(session.session_id, state)
+
     return GapPlanResponse(
         session_id=session.session_id,
         phase="planning",
         profile=CompanyProfileDTO.from_domain(profile),
-        plan=PlanDTO.from_domain(plan),
-        current_step=0,
+        plan=PlanDTO.from_domain(state["plan"]),
+        current_step=state.get("current_step", 0),
     )
 
 
 @router.post("/api/gap-analysis/execute", response_model=GapExecuteResponse)
-def execute_gap_step(request: GapExecuteRequest) -> GapExecuteResponse:
+def execute_gap_step_route(request: GapExecuteRequest) -> GapExecuteResponse:
     session = _session_or_404(request.session_id)
-    profile: CompanyProfile | None = session.data.get("profile")
-    plan: Plan | None = session.data.get("plan")
-    current_step: int = session.data.get("current_step", 0)
-    results: dict[str, ToolResult] = session.data.get("results", {})
-    call_counts: dict[str, int] = session.data.get("call_counts", {})
+    graph_state = get_gap_state(request.session_id)
+    if graph_state is None:
+        raise HTTPException(status_code=409, detail="No gap analysis graph state found.")
 
-    if profile is None or plan is None:
+    plan = graph_state.get("plan")
+    current_step = graph_state.get("current_step", 0)
+    if plan is None:
         raise HTTPException(status_code=409, detail="No generated gap analysis plan found.")
-    if current_step >= len(plan.steps):
-        session_store.update(session.session_id, phase="done", current_step=current_step)
+    if current_step >= len(plan.steps) and graph_state.get("phase") == "done":
         return GapExecuteResponse(
             session_id=session.session_id,
             phase="done",
             current_step=current_step,
-            results=_results_dto(results),
+            results=_results_dto(graph_state.get("results", {})),
         )
 
-    step = plan.steps[current_step]
-    result = execute_step(
-        step=step,
-        company_profile=profile,
-        previous_results=results,
-        call_counts=call_counts,
-        session_id=session.session_id,
-    )
-    results = dict(results)
-    results[step.tool_name] = result
+    state = execute_gap_step(request.session_id)
+    _sync_session_from_graph(session.session_id, state)
 
-    has_stopping_error = result.error == "infinite_loop_guard" or (
-        result.error and result.error != "not_implemented"
-    )
-    if has_stopping_error:
-        phase = "checkpoint"
-    elif step.has_checkpoint_after:
-        phase = "checkpoint"
-    else:
-        current_step += 1
-        phase = "done" if current_step >= len(plan.steps) else "executing"
-
-    session_store.update(
-        session.session_id,
-        phase=phase,
-        current_step=current_step,
-        results=results,
-        call_counts=call_counts,
-    )
     return GapExecuteResponse(
         session_id=session.session_id,
-        phase=phase,
-        current_step=current_step,
-        result=ToolResultDTO.from_domain(result),
-        results=_results_dto(results),
+        phase=state.get("phase", "executing"),
+        current_step=state.get("current_step", 0),
+        result=ToolResultDTO.from_domain(state["result"]) if state.get("result") else None,
+        results=_results_dto(state.get("results", {})),
     )
 
 
 @router.post("/api/gap-analysis/approve", response_model=GapApproveResponse)
-def approve_gap_checkpoint(request: GapApproveRequest) -> GapApproveResponse:
+def approve_gap_checkpoint_route(request: GapApproveRequest) -> GapApproveResponse:
     session = _session_or_404(request.session_id)
-    plan: Plan | None = session.data.get("plan")
-    current_step: int = session.data.get("current_step", 0)
-    if plan is None:
+    graph_state = get_gap_state(request.session_id)
+    if graph_state is None or graph_state.get("plan") is None:
         raise HTTPException(status_code=409, detail="No generated gap analysis plan found.")
 
-    if request.action == "stop":
-        phase = "done"
-    else:
-        current_step += 1
-        phase = "done" if current_step >= len(plan.steps) else "executing"
+    state = approve_gap_checkpoint(request.session_id, request.action)
+    _sync_session_from_graph(session.session_id, state)
 
-    session_store.update(session.session_id, phase=phase, current_step=current_step)
     return GapApproveResponse(
         session_id=session.session_id,
-        phase=phase,
-        current_step=current_step,
+        phase=state.get("phase", "executing") if state.get("phase") != "done" else "done",
+        current_step=state.get("current_step", 0),
     )
 
 
 @router.get("/api/gap-analysis/sessions/{session_id}/report", response_model=GapReportResponse)
 def get_gap_report(session_id: str) -> GapReportResponse:
     session = _session_or_404(session_id)
-    profile: CompanyProfile | None = session.data.get("profile")
-    results: dict[str, ToolResult] = session.data.get("results", {})
+    graph_state = get_gap_state(session_id) or session.data
+    profile: CompanyProfile | None = graph_state.get("profile")
+    results: dict[str, ToolResult] = graph_state.get("results", {})
     if profile is None:
         raise HTTPException(status_code=409, detail="No company profile found for this session.")
     return GapReportResponse(
