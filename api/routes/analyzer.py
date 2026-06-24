@@ -7,7 +7,9 @@ import io
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+
+from api.middleware.auth import CurrentUser, get_current_user
 from fastapi.responses import StreamingResponse
 
 from api.models.schemas import (
@@ -163,6 +165,7 @@ async def analyze(
     save: bool = Form(False),
     status: Literal["approved", "flagged"] = Form("approved"),
     flagged_comment: str | None = Form(None),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalyzeResponse:
     raw_bytes = await file.read()
     bom = parse_bom_csv(raw_bytes, product_name or _product_name_from_upload(file))
@@ -183,6 +186,8 @@ async def analyze(
         product_id = save_analysis(
             product_name or bom.product_name,
             result,
+            user_id=current_user.user_id,
+            access_token=current_user.access_token,
             analysis_date=date.today(),
             status=status,
             flagged_comment=flagged_comment,
@@ -211,7 +216,10 @@ async def analyze(
 
 
 @router.post("/api/analyses", response_model=SaveAnalysisResponse)
-def save_analysis_result(request: SaveAnalysisRequest) -> SaveAnalysisResponse:
+def save_analysis_result(
+    request: SaveAnalysisRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SaveAnalysisResponse:
     session = _session_or_404(request.session_id)
     result = session.data.get("result")
     if result is None:
@@ -225,6 +233,8 @@ def save_analysis_result(request: SaveAnalysisRequest) -> SaveAnalysisResponse:
     product_id = save_analysis(
         request.product_name,
         result,
+        user_id=current_user.user_id,
+        access_token=current_user.access_token,
         analysis_date=date.today(),
         status=request.status,
         flagged_comment=request.flagged_comment,
@@ -234,23 +244,35 @@ def save_analysis_result(request: SaveAnalysisRequest) -> SaveAnalysisResponse:
 
 
 @router.get("/api/analyses", response_model=list[AnalysisSummaryDTO])
-def list_analyses() -> list[AnalysisSummaryDTO]:
-    return [AnalysisSummaryDTO.from_row(row) for row in get_all_products()]
+def list_analyses(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[AnalysisSummaryDTO]:
+    return [
+        AnalysisSummaryDTO.from_row(row)
+        for row in get_all_products(current_user.access_token)
+    ]
 
 
 @router.get("/api/analyses/{product_id}", response_model=AnalysisDetailDTO)
-def get_analysis(product_id: int) -> AnalysisDetailDTO:
-    product = get_product_by_id(product_id)
+def get_analysis(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> AnalysisDetailDTO:
+    product = get_product_by_id(product_id, current_user.access_token)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
     return AnalysisDetailDTO.from_row(product)
 
 
 @router.get("/api/analyses/{product_id}/export")
-def export_analysis(product_id: int, format: Literal["csv"] = "csv") -> StreamingResponse:
+def export_analysis(
+    product_id: int,
+    format: Literal["csv"] = "csv",
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
     if format != "csv":
         raise HTTPException(status_code=422, detail="Only CSV export is supported.")
-    product = get_product_by_id(product_id)
+    product = get_product_by_id(product_id, current_user.access_token)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
 

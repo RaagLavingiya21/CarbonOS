@@ -31,7 +31,6 @@ from db.copilot_store import (
     append_audit_log,
     create_engagement,
     get_engagement,
-    init_copilot_db,
     update_engagement,
 )
 
@@ -56,6 +55,8 @@ _STATUS_BY_ACTION = {
 
 class EmailDraftState(TypedDict, total=False):
     session_id: str
+    user_id: str
+    access_token: str
     product_name: str
     candidate: EngagementCandidate | None
     suppliers_result: SuppliersListResult | None
@@ -68,6 +69,8 @@ class EmailDraftState(TypedDict, total=False):
 
 class ResponseRoutingState(TypedDict, total=False):
     session_id: str
+    user_id: str
+    access_token: str
     engagement_id: int
     supplier_name: str
     component: str | None
@@ -86,7 +89,11 @@ def _select_supplier_node(state: EmailDraftState) -> dict:
     if state.get("candidate") is not None:
         return {"phase": "drafting", "suppliers_result": None}
 
-    result = suppliers_list_run(product_name, top_n=10)
+    result = suppliers_list_run(
+        product_name,
+        top_n=10,
+        access_token=state["access_token"],
+    )
     candidate = result.candidates[0] if result.candidates else None
     return {
         "suppliers_result": result,
@@ -128,7 +135,6 @@ def _send_email_node(state: EmailDraftState) -> dict:
         return {"phase": "done"}
 
     email_body = body or draft_result.draft.body
-    init_copilot_db()
     engagement_id = create_engagement(
         supplier_name=candidate.supplier_name,
         product_name=state["product_name"],
@@ -136,11 +142,15 @@ def _send_email_node(state: EmailDraftState) -> dict:
         material=candidate.material,
         kg_co2e=candidate.kg_co2e,
         share_pct=candidate.share_pct,
+        user_id=state["user_id"],
+        access_token=state["access_token"],
         email_draft=email_body,
     )
     append_audit_log(
         event="email_drafted",
         workflow="draft_email",
+        user_id=state["user_id"],
+        access_token=state["access_token"],
         supplier_name=candidate.supplier_name,
         product_name=state["product_name"],
         component_name=candidate.component,
@@ -190,9 +200,10 @@ def _apply_routing_node(state: ResponseRoutingState) -> dict:
     parse_result = state.get("parse_result")
     routing_result = state.get("routing_result")
     engagement_id = state["engagement_id"]
+    access_token = state["access_token"]
 
     if parse_result is None or parse_result.parsed is None or routing_result is None:
-        engagement = get_engagement(engagement_id)
+        engagement = get_engagement(engagement_id, access_token)
         return {
             "engagement_status": engagement.status if engagement else "open",
             "phase": "done",
@@ -200,17 +211,18 @@ def _apply_routing_node(state: ResponseRoutingState) -> dict:
 
     decision = routing_result.decision
     if decision is None:
-        engagement = get_engagement(engagement_id)
+        engagement = get_engagement(engagement_id, access_token)
         return {
             "engagement_status": engagement.status if engagement else "open",
             "phase": "done",
         }
 
     new_status = _STATUS_BY_ACTION.get(decision.action, "flagged")
-    engagement = get_engagement(engagement_id)
+    engagement = get_engagement(engagement_id, access_token)
 
     update_engagement(
         engagement_id,
+        access_token=access_token,
         status=new_status,
         response_received=state["response_text"],
         routing_decision=decision.action,
@@ -221,6 +233,8 @@ def _apply_routing_node(state: ResponseRoutingState) -> dict:
     append_audit_log(
         event="response_parsed_and_routed",
         workflow="parse_response+exception_router",
+        user_id=state["user_id"],
+        access_token=access_token,
         supplier_name=state["supplier_name"],
         product_name=engagement.product_name if engagement else None,
         component_name=state.get("component")
@@ -338,11 +352,16 @@ def start_email_draft(
     session_id: str,
     product_name: str,
     candidate: EngagementCandidate,
+    *,
+    user_id: str,
+    access_token: str,
 ) -> EmailDraftState:
     """Draft a supplier email and pause at the human review checkpoint."""
     graph = get_email_draft_graph()
     initial: EmailDraftState = {
         "session_id": session_id,
+        "user_id": user_id,
+        "access_token": access_token,
         "product_name": product_name,
         "candidate": candidate,
         "suppliers_result": None,
@@ -382,12 +401,16 @@ def start_response_routing(
     component: str | None = None,
     days_since_contact: int = 0,
     auto_apply: bool = True,
+    user_id: str,
+    access_token: str,
 ) -> ResponseRoutingState:
     """Parse and route a supplier response; auto-applies routing when auto_apply=True."""
     graph = get_response_routing_graph()
     thread_id = f"route-{session_id}-{engagement_id}"
     initial: ResponseRoutingState = {
         "session_id": session_id,
+        "user_id": user_id,
+        "access_token": access_token,
         "engagement_id": engagement_id,
         "supplier_name": supplier_name,
         "component": component,

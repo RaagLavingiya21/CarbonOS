@@ -10,32 +10,36 @@ column in line_items.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from db.copilot_store import get_engagements_for_product, get_supplier_by_name, init_copilot_db
+from db.copilot_store import get_engagements_for_product, get_supplier_by_name, get_all_suppliers
 from db.reader import get_all_products, get_product_line_items
-from db.store import DB_PATH
 from copilot.models import EngagementCandidate, SuppliersListResult
 
 
-def _match_supplier(component: str | None, material: str | None, db_path: Path) -> tuple:
+def _match_supplier(
+    component: str | None,
+    material: str | None,
+    access_token: str,
+) -> tuple:
     """Try to match a component or material name to the suppliers table.
 
     Returns (supplier_name, contact_name, contact_email, contact_found).
     Tries component first, then material, then falls back to component name.
     """
     for candidate_name in filter(None, [component, material]):
-        supplier = get_supplier_by_name(candidate_name, db_path)
+        supplier = get_supplier_by_name(candidate_name, access_token)
         if supplier:
             return supplier.supplier_name, supplier.contact_name, supplier.contact_email, True
 
-        # Substring match: check if any supplier name contains the component word or vice versa
-        from db.copilot_store import get_all_suppliers
-        for s in get_all_suppliers(db_path):
-            name_lower = s.supplier_name.lower()
+        for supplier_row in get_all_suppliers(access_token):
+            name_lower = supplier_row.supplier_name.lower()
             comp_lower = candidate_name.lower()
             if comp_lower in name_lower or name_lower in comp_lower:
-                return s.supplier_name, s.contact_name, s.contact_email, True
+                return (
+                    supplier_row.supplier_name,
+                    supplier_row.contact_name,
+                    supplier_row.contact_email,
+                    True,
+                )
 
     label = component or material or "Unknown"
     return label, None, None, False
@@ -44,25 +48,17 @@ def _match_supplier(component: str | None, material: str | None, db_path: Path) 
 def run(
     product_name: str,
     top_n: int = 5,
-    db_path: Path = DB_PATH,
+    *,
+    access_token: str,
 ) -> SuppliersListResult:
-    """Return the top-N highest-emitting engagement candidates for a product.
-
-    Args:
-        product_name: Exact or case-insensitive product name from the products table.
-        top_n:        Maximum number of candidates to return (sorted by kg_co2e descending).
-        db_path:      SQLite database path.
-    """
-    init_copilot_db(db_path)
-
-    # Find product_id by case-insensitive name match
-    all_products = get_all_products(db_path)
+    """Return the top-N highest-emitting engagement candidates for a product."""
+    all_products = get_all_products(access_token)
     product = next(
-        (p for p in all_products if p["product_name"].lower() == product_name.lower()),
+        (product_row for product_row in all_products if product_row["product_name"].lower() == product_name.lower()),
         None,
     )
     if product is None:
-        available = ", ".join(p["product_name"] for p in all_products) or "none"
+        available = ", ".join(product_row["product_name"] for product_row in all_products) or "none"
         return SuppliersListResult(
             candidates=[],
             product_name=product_name,
@@ -72,10 +68,10 @@ def run(
     product_id = product["product_id"]
     canonical_name = product["product_name"]
 
-    # Line items are already sorted by share_pct DESC; filter to matched-only rows
     line_items = [
-        li for li in get_product_line_items(product_id, db_path)
-        if li["kg_co2e"] is not None
+        line_item
+        for line_item in get_product_line_items(product_id, access_token)
+        if line_item["kg_co2e"] is not None
     ][:top_n]
 
     if not line_items:
@@ -85,29 +81,27 @@ def run(
             error="No matched line items found for this product.",
         )
 
-    # Build a quick lookup of existing engagements keyed by (supplier_name, component)
     existing = {
-        (e.supplier_name.lower(), (e.component_name or "").lower()): e
-        for e in get_engagements_for_product(canonical_name, db_path)
+        (engagement.supplier_name.lower(), (engagement.component_name or "").lower()): engagement
+        for engagement in get_engagements_for_product(canonical_name, access_token)
     }
 
     candidates: list[EngagementCandidate] = []
-    for li in line_items:
+    for line_item in line_items:
         supplier_name, contact_name, contact_email, contact_found = _match_supplier(
-            li["component"], li["material"], db_path
+            line_item["component"], line_item["material"], access_token
         )
 
-        # Check whether this component is already being engaged
-        key = (supplier_name.lower(), (li["component"] or "").lower())
+        key = (supplier_name.lower(), (line_item["component"] or "").lower())
         existing_eng = existing.get(key)
 
         candidates.append(
             EngagementCandidate(
                 supplier_name=supplier_name,
-                component=li["component"],
-                material=li["material"],
-                kg_co2e=li["kg_co2e"],
-                share_pct=li["share_pct"],
+                component=line_item["component"],
+                material=line_item["material"],
+                kg_co2e=line_item["kg_co2e"],
+                share_pct=line_item["share_pct"],
                 contact_found=contact_found,
                 contact_name=contact_name,
                 contact_email=contact_email,
