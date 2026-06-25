@@ -225,6 +225,11 @@ def test_email_llm_judge_cases() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _should_skip_in_ci() -> bool:
+    """PR CI should never run live LLM evals unless explicitly opted in."""
+    return os.getenv("GITHUB_ACTIONS") == "true" and os.getenv("RUN_LLM_JUDGE") != "true"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run LLM-as-judge quality evals")
     parser.add_argument(
@@ -234,6 +239,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if _should_skip_in_ci():
+        print("Skipping LLM judge evals in GitHub Actions (set RUN_LLM_JUDGE=true to enable).")
+        return 0
+
     if not _has_api_key():
         if args.skip_without_key:
             print("Skipping LLM judge evals: ANTHROPIC_API_KEY not set.")
@@ -241,7 +250,11 @@ def main(argv: list[str] | None = None) -> int:
         print("ANTHROPIC_API_KEY not set. Use --skip-without-key for CI.", file=sys.stderr)
         return 0
 
-    results = run_all_judge_evals()
+    try:
+        results = run_all_judge_evals()
+    except Exception as exc:
+        print(f"LLM judge evals failed: {exc}", file=sys.stderr)
+        return 1
     return _print_results(results)
 
 

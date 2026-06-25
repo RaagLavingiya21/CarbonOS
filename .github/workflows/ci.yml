@@ -8,11 +8,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      LANGSMITH_TRACING: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -29,5 +31,8 @@ jobs:
       - name: Golden-file evals
         run: pytest evals/test_golden_files.py -v
 
-      - name: LLM judge evals (skip without key)
+      - name: LLM judge evals (skip in PR CI)
+        env:
+          ANTHROPIC_API_KEY: ""
+          LANGSMITH_API_KEY: ""
         run: python -m evals.llm_judge --skip-without-key
