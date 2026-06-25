@@ -1,9 +1,6 @@
 """Tests for parsing/bom_parser.py — covers all three BOM examples from the Spec."""
 
-import io
 import textwrap
-
-import pytest
 
 from parsing.bom_parser import parse_bom_csv
 

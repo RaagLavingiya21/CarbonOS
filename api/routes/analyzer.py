@@ -8,10 +8,9 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-
-from api.middleware.auth import CurrentUser, get_current_user
 from fastapi.responses import StreamingResponse
 
+from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
     AnalysisDetailDTO,
     AnalysisSummaryDTO,

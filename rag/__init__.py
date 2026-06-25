@@ -1,3 +1,3 @@
-from rag.retriever import retrieve, RetrievalResult, IndexNotBuiltError
+from rag.retriever import IndexNotBuiltError, RetrievalResult, retrieve
 
 __all__ = ["retrieve", "RetrievalResult", "IndexNotBuiltError"]

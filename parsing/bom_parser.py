@@ -130,7 +130,7 @@ def _load_csv(source: Union[str, Path, bytes, io.IOBase]) -> tuple[pd.DataFrame,
             path = Path(source)
             if path.stat().st_size > MAX_FILE_BYTES:
                 return pd.DataFrame(), [
-                    f"File exceeds 5 MB limit. Please reduce the file size."
+                    "File exceeds 5 MB limit. Please reduce the file size."
                 ]
         df = pd.read_csv(source, dtype=str, encoding="utf-8", skip_blank_lines=True)
         df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]

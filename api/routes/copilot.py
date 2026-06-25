@@ -8,11 +8,10 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-
-from api.middleware.auth import CurrentUser, get_current_user
 from fastapi.responses import StreamingResponse
 
 from api.graphs.supplier_copilot_graph import start_email_draft, start_response_routing
+from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
     AuditEntryDTO,
     CreateEngagementsRequest,

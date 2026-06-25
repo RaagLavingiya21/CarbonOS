@@ -6,6 +6,7 @@ import os
 from functools import lru_cache
 
 from dotenv import load_dotenv
+
 from supabase import Client, create_client
 
 load_dotenv()

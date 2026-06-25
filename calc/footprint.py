@@ -9,7 +9,7 @@ A row is included in the total only when both spend_usd and ef_kg_co2e_per_usd a
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from factors.ef_lookup import EFMatch
 from parsing.bom_parser import BOMRow, ParsedBOM

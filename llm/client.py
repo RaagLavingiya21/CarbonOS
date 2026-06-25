@@ -249,7 +249,7 @@ def ask_advisor(
             ],
             messages=messages,
         )
-    except anthropic.RateLimitError as exc:
+    except anthropic.RateLimitError:
         log_llm_call(
             app_name="advisor", tool_name="chat", model=_MODEL,
             tokens_in=None, tokens_out=None,
@@ -263,7 +263,7 @@ def ask_advisor(
             content="", has_data_reference=False,
             error="Rate limit reached. Please wait a moment and try again.",
         )
-    except anthropic.APIConnectionError as exc:
+    except anthropic.APIConnectionError:
         log_llm_call(
             app_name="advisor", tool_name="chat", model=_MODEL,
             tokens_in=None, tokens_out=None,

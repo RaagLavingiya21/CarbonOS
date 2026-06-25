@@ -10,9 +10,9 @@ column in line_items.
 
 from __future__ import annotations
 
-from db.copilot_store import get_engagements_for_product, get_supplier_by_name, get_all_suppliers
-from db.reader import get_all_products, get_product_line_items
 from copilot.models import EngagementCandidate, SuppliersListResult
+from db.copilot_store import get_all_suppliers, get_engagements_for_product, get_supplier_by_name
+from db.reader import get_all_products, get_product_line_items
 
 
 def _match_supplier(
