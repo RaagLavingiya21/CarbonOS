@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from gap_analyzer.models import CompanyProfile, PlanStep, ToolResult
 from gap_analyzer.tools import (
-    assess_reporting_requirements,
-    assess_materiality,
     analyze_data_gaps,
+    assess_materiality,
+    assess_reporting_requirements,
     generate_recommendations,
 )
 

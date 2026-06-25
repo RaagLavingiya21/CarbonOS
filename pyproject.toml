@@ -6,4 +6,7 @@ line-length = 100
 select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "evals"]
+markers = [
+    "llm: live LLM evals requiring ANTHROPIC_API_KEY (deselect with '-m \"not llm\"')",
+]

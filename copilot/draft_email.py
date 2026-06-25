@@ -80,7 +80,7 @@ def _build_rag_context() -> tuple[str, list[str], list[str]]:
 
 def _user_message(candidate: EngagementCandidate, product_name: str) -> str:
     lines = [
-        f"Draft a supplier data request email for the following engagement:\n",
+        "Draft a supplier data request email for the following engagement:\n",
         f"- Product: {product_name}",
         f"- Component: {candidate.component or 'N/A'}",
         f"- Material: {candidate.material or 'N/A'}",

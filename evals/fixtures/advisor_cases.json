@@ -1,0 +1,16 @@
+[
+  {
+    "id": "advisor_hotspot",
+    "user_message": "Which component contributes the most emissions in my T-shirt analysis?",
+    "conversation_history": [],
+    "db_context": "Product: T-shirt Clean\nTotal footprint: 38.3 kg CO2e\nLine items:\n- body / cotton fabric: 25.0 kg CO2e (65.3%)\n- dye / reactive dye: 4.1 kg CO2e (10.7%)\n- thread / nylon: 3.2 kg CO2e (8.4%)\n- label / nylon: 3.2 kg CO2e (8.4%)\n- Packaging / LDPE: 2.8 kg CO2e (7.3%)\nEmission factors: Open CEDA 2025, Scope 3 Category 1, cradle-to-gate.",
+    "min_score": 4
+  },
+  {
+    "id": "advisor_guidance",
+    "user_message": "What GHG Protocol guidance applies to collecting primary data from suppliers for purchased goods?",
+    "conversation_history": [],
+    "db_context": "No saved product analyses.",
+    "min_score": 4
+  }
+]

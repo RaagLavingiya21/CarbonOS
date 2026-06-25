@@ -1,0 +1,19 @@
+[
+  {
+    "id": "email_cotton_supplier",
+    "product_name": "T-shirt Clean",
+    "candidate": {
+      "supplier_name": "FiberTex Global",
+      "component": "body",
+      "material": "cotton fabric",
+      "kg_co2e": 25.0,
+      "share_pct": 65.3,
+      "contact_found": true,
+      "contact_name": "Sarah Chen",
+      "contact_email": "sarah@fibertex.example.com",
+      "existing_engagement_id": null,
+      "engagement_status": "new"
+    },
+    "min_score": 4
+  }
+]

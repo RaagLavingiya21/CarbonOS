@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LANGSMITH_TRACING: "false"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ruff lint
+        run: ruff check --ignore E501 evals tests calc parsing factors api llm copilot gap_analyzer rag db observability
+
+      - name: Unit tests
+        run: pytest tests -v
+
+      - name: Golden-file evals
+        run: pytest evals/test_golden_files.py -v
+
+      - name: LLM judge evals (skip in PR CI)
+        env:
+          ANTHROPIC_API_KEY: ""
+          LANGSMITH_API_KEY: ""
+        run: python -m evals.llm_judge --skip-without-key

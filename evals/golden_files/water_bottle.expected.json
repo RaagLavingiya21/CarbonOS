@@ -1,0 +1,95 @@
+{
+  "product_name": "Water Bottle",
+  "ef_matches": [
+    {
+      "material_input": "stainless steel",
+      "sector_name": "Iron and steel mills",
+      "sector_code": "3311A0",
+      "ef_kg_co2e_per_usd": 5.5,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Iron and steel mills, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "SS304",
+      "sector_name": "Iron and steel mills",
+      "sector_code": "3311A0",
+      "ef_kg_co2e_per_usd": 5.5,
+      "country_used": "IND",
+      "confidence_score": 85.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Iron and steel mills, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "Silicone",
+      "sector_name": "Synthetic rubber manufacturing",
+      "sector_code": "3252B0",
+      "ef_kg_co2e_per_usd": 3.0,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Synthetic rubber manufacturing, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "aerogel",
+      "sector_name": "",
+      "sector_code": "",
+      "ef_kg_co2e_per_usd": 0.0,
+      "country_used": "IND",
+      "confidence_score": 0.0,
+      "is_low_confidence": false,
+      "is_no_match": true,
+      "source_citation": "",
+      "suggested_alternatives": ["Glass product manufacturing", "Mineral wool manufacturing"]
+    },
+    {
+      "material_input": "tritan copolyester",
+      "sector_name": "",
+      "sector_code": "",
+      "ef_kg_co2e_per_usd": 0.0,
+      "country_used": "IND",
+      "confidence_score": 0.0,
+      "is_low_confidence": false,
+      "is_no_match": true,
+      "source_citation": "",
+      "suggested_alternatives": ["Plastics material and resin manufacturing"]
+    },
+    {
+      "material_input": "cardboard",
+      "sector_name": "Paperboard container manufacturing",
+      "sector_code": "3222A0",
+      "ef_kg_co2e_per_usd": 1.2,
+      "country_used": "CHN",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Paperboard container manufacturing, CHN",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "coating",
+      "sector_name": "Paint and coating manufacturing",
+      "sector_code": "3255A0",
+      "ef_kg_co2e_per_usd": 3.8,
+      "country_used": "CHN",
+      "confidence_score": 68.0,
+      "is_low_confidence": true,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Paint and coating manufacturing, CHN",
+      "suggested_alternatives": ["Powder coating", "Anodizing", "Electroplating"]
+    }
+  ],
+  "expectations": {
+    "total_kg_co2e": 79.5,
+    "matched_count": 5,
+    "unmatched_count": 2,
+    "parser_flagged_rows": []
+  }
+}
