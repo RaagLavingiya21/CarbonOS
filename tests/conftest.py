@@ -15,3 +15,20 @@ def bypass_supabase_auth(monkeypatch: pytest.MonkeyPatch) -> None:
         return TEST_USER_ID
 
     monkeypatch.setattr("api.middleware.auth.verify_supabase_jwt", fake_verify)
+
+
+@pytest.fixture(autouse=True)
+def use_memory_checkpointer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use in-memory LangGraph checkpointer in tests — no Postgres required."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    import api.graphs.gap_analyzer_graph as gap_graph
+    import api.graphs.supplier_copilot_graph as copilot_graph
+
+    memory = MemorySaver()
+    monkeypatch.setattr("api.graphs.checkpointer.get_checkpointer", lambda: memory)
+    monkeypatch.setattr(gap_graph, "get_checkpointer", lambda: memory)
+    monkeypatch.setattr(copilot_graph, "get_checkpointer", lambda: memory)
+    gap_graph._gap_analyzer_graph = None
+    copilot_graph._email_draft_graph = None
+    copilot_graph._response_routing_graph = None

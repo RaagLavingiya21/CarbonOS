@@ -1,0 +1,71 @@
+{
+  "product_name": "T-shirt Clean",
+  "ef_matches": [
+    {
+      "material_input": "cotton fabric",
+      "sector_name": "Cotton farming",
+      "sector_code": "1119A0",
+      "ef_kg_co2e_per_usd": 2.5,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Cotton farming, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "nylon",
+      "sector_name": "Synthetic fiber manufacturing",
+      "sector_code": "3132A0",
+      "ef_kg_co2e_per_usd": 3.2,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Synthetic fiber manufacturing, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "nylon",
+      "sector_name": "Synthetic fiber manufacturing",
+      "sector_code": "3132A0",
+      "ef_kg_co2e_per_usd": 3.2,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Synthetic fiber manufacturing, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "reactive dye",
+      "sector_name": "Basic organic chemical manufacturing",
+      "sector_code": "3251A0",
+      "ef_kg_co2e_per_usd": 4.1,
+      "country_used": "IND",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Basic organic chemical manufacturing, IND",
+      "suggested_alternatives": []
+    },
+    {
+      "material_input": "LDPE",
+      "sector_name": "Plastics material and resin manufacturing",
+      "sector_code": "3252A0",
+      "ef_kg_co2e_per_usd": 2.8,
+      "country_used": "CHN",
+      "confidence_score": 100.0,
+      "is_low_confidence": false,
+      "is_no_match": false,
+      "source_citation": "Open CEDA 2025, Plastics material and resin manufacturing, CHN",
+      "suggested_alternatives": []
+    }
+  ],
+  "expectations": {
+    "total_kg_co2e": 38.3,
+    "matched_count": 5,
+    "unmatched_count": 0,
+    "parser_flagged_rows": []
+  }
+}
