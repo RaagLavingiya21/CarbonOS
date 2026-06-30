@@ -37,6 +37,8 @@ const navItems = [
 ];
 
 const publicRoutes = ["/login", "/signup"];
+// Routes rendered bare (no app chrome) and reachable by anyone, logged in or out.
+const bareRoutes = ["/demo"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -46,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const isPublicRoute = publicRoutes.includes(pathname);
+  const isBareRoute = bareRoutes.includes(pathname);
   // Logged-out visitors see the marketing landing page at "/"; logged-in
   // visitors see the dashboard there.
   const isLandingRoute = pathname === "/";
@@ -69,28 +72,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const userEmail = data.session?.user.email ?? null;
       setEmail(userEmail);
       setCheckingAuth(false);
-      if (!userEmail && !isPublicRoute && !isLandingRoute) router.replace("/login");
+      if (!userEmail && !isPublicRoute && !isLandingRoute && !isBareRoute)
+        router.replace("/login");
       if (userEmail && isPublicRoute) router.replace("/");
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const userEmail = session?.user.email ?? null;
       setEmail(userEmail);
-      if (!userEmail && !isPublicRoute && !isLandingRoute) router.replace("/login");
+      if (!userEmail && !isPublicRoute && !isLandingRoute && !isBareRoute)
+        router.replace("/login");
     });
 
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [isPublicRoute, isLandingRoute, router, supabase]);
+  }, [isPublicRoute, isLandingRoute, isBareRoute, router, supabase]);
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/login");
   }
 
-  if (isPublicRoute) {
+  if (isPublicRoute || isBareRoute) {
     return <>{children}</>;
   }
 
