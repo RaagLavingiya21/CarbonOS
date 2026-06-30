@@ -11,15 +11,18 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  Search,
   Settings,
   UploadCloud,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CommandMenu } from "@/components/layout/CommandMenu";
 import { GlobalChatIcon } from "@/components/layout/GlobalChatIcon";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { WorkspaceBadge } from "@/components/layout/WorkspaceBadge";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { toggleTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -39,8 +42,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [cmdkOpen, setCmdkOpen] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const isPublicRoute = publicRoutes.includes(pathname);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCmdkOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -137,9 +152,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="lg:pl-64">
         <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-sm">
-          <div className="hidden items-center justify-end gap-2 px-6 py-2.5 lg:flex">
-            <ThemeToggle />
-            <WorkspaceBadge />
+          <div className="hidden items-center justify-between gap-2 px-6 py-2.5 lg:flex">
+            <button
+              type="button"
+              onClick={() => setCmdkOpen(true)}
+              className="flex h-8 w-64 items-center gap-2 rounded-md border bg-card px-3 text-small text-muted-foreground transition-colors duration-micro hover:border-border hover:text-foreground"
+            >
+              <Search className="h-4 w-4" />
+              <span className="flex-1 text-left">Search or jump to…</span>
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 text-caption">⌘K</kbd>
+            </button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <WorkspaceBadge />
+            </div>
           </div>
           <div className="flex items-center justify-between px-4 py-2.5 lg:hidden">
             <Link href="/" className="flex items-center gap-2">
@@ -149,6 +175,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="font-display font-medium">Carbon Analyzer</span>
             </Link>
             <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Search or jump to"
+                onClick={() => setCmdkOpen(true)}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
               <ThemeToggle />
               <WorkspaceBadge />
               <Button variant="ghost" size="sm" onClick={signOut}>
@@ -180,6 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="container py-8 lg:py-10">{children}</main>
       </div>
       {pathname !== "/chat" ? <GlobalChatIcon /> : null}
+      <CommandMenu open={cmdkOpen} onOpenChange={setCmdkOpen} toggleTheme={toggleTheme} />
     </div>
   );
 }
