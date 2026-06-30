@@ -154,6 +154,18 @@ Read IMPLEMENTATION_PLAN.md and Architecture_Decisions.md. We're executing Phase
 
 ---
 
+## Phase 6: Platform Chat Agent
+
+**Goal:** Convert the Advisor chat into a central Platform Chat Agent that orchestrates the entire product — users can start any workflow, query any data, and navigate any module through a single conversational interface.
+
+This is a large feature with its own detailed plan. See **`PLATFORM_CHAT_AGENT_PLAN.md`** for:
+- Full design decisions (interaction model, skills architecture, memory layers, multi-tenancy)
+- Database schema changes (chat threads, semantic memory, org tables, active panels)
+- Four sub-phases (6A: Backend skills/memory, 6B: Frontend chat/panels, 6C: Semantic memory/orgs, 6D: Entry points/polish)
+- Prompts for each sub-phase
+
+---
+
 ## Order of Operations
 
 ```
@@ -164,9 +176,13 @@ Phase 1 (FastAPI)  ──> Phase 2 (LangGraph) ──> Phase 3 (Supabase)
                                                        |
                                                        v
                                               Phase 5 (Evals + CI)
+                                                       |
+                                                       v
+                                              Phase 6 (Platform Chat Agent)
+                                                 6A ──> 6B ──> 6C ──> 6D
 ```
 
-Phases 1-3 are backend. Phase 4 is frontend. Phase 5 is polish. Each phase produces a working, testable artifact.
+Phases 1-3 are backend. Phase 4 is frontend. Phase 5 is polish. Phase 6 is the chat agent. Each phase produces a working, testable artifact.
 
 ---
 

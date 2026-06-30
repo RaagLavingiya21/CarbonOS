@@ -586,3 +586,151 @@ class AuditEntryDTO(BaseModel):
     @classmethod
     def from_domain(cls, entry: Any) -> "AuditEntryDTO":
         return cls(**entry.__dict__)
+
+
+# Chat agent models
+
+
+class ChatThreadDTO(BaseModel):
+    thread_id: str
+    user_id: str
+    org_id: str | None = None
+    title: str | None = None
+    created_at: str
+    updated_at: str
+    deleted_at: str | None = None
+
+    @classmethod
+    def from_domain(cls, thread: Any) -> "ChatThreadDTO":
+        return cls(**{k: v for k, v in thread.__dict__.items() if k in cls.model_fields})
+
+
+class ChatMessageDTO(BaseModel):
+    message_id: str
+    thread_id: str
+    role: Literal["user", "assistant", "system"]
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+    @classmethod
+    def from_domain(cls, message: Any) -> "ChatMessageDTO":
+        return cls(**{k: v for k, v in message.__dict__.items() if k in cls.model_fields})
+
+
+class CreateThreadRequest(BaseModel):
+    title: str | None = None
+    org_id: str | None = None
+
+
+class ThreadDetailResponse(BaseModel):
+    thread: ChatThreadDTO
+    messages: list[ChatMessageDTO] = Field(default_factory=list)
+
+
+class SendMessageRequest(BaseModel):
+    content: str
+
+
+class SendMessageResponse(BaseModel):
+    thread_id: str
+    content: str
+    suggestions: list[str] = Field(default_factory=list)
+    module_launch: dict[str, Any] | None = None
+    title: str | None = None
+
+
+class DeleteThreadResponse(BaseModel):
+    deleted: bool
+
+
+# Panel models
+
+
+class ActivePanelDTO(BaseModel):
+    panel_id: str
+    user_id: str
+    thread_id: str | None = None
+    module_type: str
+    panel_state: dict[str, Any] = Field(default_factory=dict)
+    tab_order: int = 0
+    is_active: bool = True
+    created_at: str
+    updated_at: str
+
+    @classmethod
+    def from_domain(cls, panel: Any) -> "ActivePanelDTO":
+        return cls(**{k: v for k, v in panel.__dict__.items() if k in cls.model_fields})
+
+
+class CreatePanelRequest(BaseModel):
+    module_type: str
+    thread_id: str | None = None
+    panel_state: dict[str, Any] = Field(default_factory=dict)
+    tab_order: int = 0
+    is_active: bool = True
+
+
+class UpdatePanelRequest(BaseModel):
+    panel_state: dict[str, Any] | None = None
+    tab_order: int | None = None
+    is_active: bool | None = None
+
+
+class DeletePanelResponse(BaseModel):
+    deleted: bool
+
+
+# Organization models
+
+
+class CreateOrgRequest(BaseModel):
+    name: str
+
+
+class AddMemberRequest(BaseModel):
+    email: str
+
+
+class OrganizationDTO(BaseModel):
+    id: str
+    name: str
+    created_at: str
+    is_demo: bool = False
+
+    @classmethod
+    def from_domain(cls, org: Any) -> "OrganizationDTO":
+        return cls(
+            id=str(org.id),
+            name=org.name,
+            created_at=str(org.created_at),
+            is_demo=bool(getattr(org, "is_demo", False)),
+        )
+
+
+class OrgMemberDTO(BaseModel):
+    user_id: str
+    org_id: str
+    role: str
+
+    @classmethod
+    def from_domain(cls, member: Any) -> "OrgMemberDTO":
+        return cls(
+            user_id=str(member.user_id),
+            org_id=str(member.org_id),
+            role=member.role,
+        )
+
+
+class OrgDetailResponse(BaseModel):
+    orgs: list[OrganizationDTO] = Field(default_factory=list)
+    active_org: OrganizationDTO | None = None
+    members: list[OrgMemberDTO] = Field(default_factory=list)
+
+
+class SetActiveOrgRequest(BaseModel):
+    org_id: str
+
+
+class RemoveMemberResponse(BaseModel):
+    removed: bool

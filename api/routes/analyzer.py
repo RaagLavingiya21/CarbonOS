@@ -31,7 +31,7 @@ from api.models.schemas import (
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
-from db.reader import get_all_products, get_product_by_id
+from db.reader import get_product_by_id, get_products_for_active_org
 from db.store import save_analysis
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
@@ -248,7 +248,10 @@ def list_analyses(
 ) -> list[AnalysisSummaryDTO]:
     return [
         AnalysisSummaryDTO.from_row(row)
-        for row in get_all_products(current_user.access_token)
+        for row in get_products_for_active_org(
+            current_user.access_token,
+            user_id=current_user.user_id,
+        )
     ]
 
 

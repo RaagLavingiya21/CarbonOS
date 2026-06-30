@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
-from api.routes import advisor, analyzer, copilot, gap_analyzer
+from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, org, panels
 
 logger = logging.getLogger("api.request")
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +52,8 @@ app.add_middleware(SupabaseAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    # Next.js dev may use 3001+ when 3000 is taken
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,6 +79,9 @@ app.include_router(analyzer.router)
 app.include_router(advisor.router)
 app.include_router(gap_analyzer.router)
 app.include_router(copilot.router)
+app.include_router(chat.router)
+app.include_router(panels.router)
+app.include_router(org.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

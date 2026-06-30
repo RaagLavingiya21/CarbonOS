@@ -1,0 +1,6 @@
+# Frontend deploy on Vercel — skip Python dependency resolution (backend runs elsewhere).
+# See: https://github.com/vercel/vercel/issues/14041
+pyproject.toml
+uv.lock
+requirements.txt
+requirements-api.txt

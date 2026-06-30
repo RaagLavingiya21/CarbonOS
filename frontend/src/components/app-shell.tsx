@@ -10,19 +10,25 @@ import {
   FileSearch,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
+  Settings,
   UploadCloud,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { GlobalChatIcon } from "@/components/layout/GlobalChatIcon";
+import { WorkspaceBadge } from "@/components/layout/WorkspaceBadge";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/analyzer", label: "Analyzer", icon: UploadCloud },
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch },
   { href: "/advisor", label: "Advisor", icon: Bot },
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory },
+  { href: "/settings/org", label: "Settings", icon: Settings },
 ];
 
 const publicRoutes = ["/login", "/signup"];
@@ -128,16 +134,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="lg:pl-72">
-        <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur lg:hidden">
-          <div className="flex items-center justify-between px-4 py-3">
+        <header className="sticky top-0 z-30 border-b bg-white/80 backdrop-blur">
+          <div className="hidden items-center justify-end gap-3 px-6 py-3 lg:flex">
+            <WorkspaceBadge />
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 lg:hidden">
             <Link href="/" className="font-semibold">
               Carbon Analyzer
             </Link>
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              Sign out
-            </Button>
+            <div className="flex items-center gap-2">
+              <WorkspaceBadge />
+              <Button variant="ghost" size="sm" onClick={signOut}>
+                Sign out
+              </Button>
+            </div>
           </div>
-          <nav className="flex gap-2 overflow-x-auto px-4 pb-3">
+          <nav className="flex gap-2 overflow-x-auto px-4 pb-3 lg:hidden">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -151,6 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="container py-8 lg:py-10">{children}</main>
       </div>
+      {pathname !== "/chat" ? <GlobalChatIcon /> : null}
     </div>
   );
 }
