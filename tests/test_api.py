@@ -221,3 +221,162 @@ def test_protected_route_requires_auth() -> None:
         json={"user_message": "Hello", "conversation_history": []},
     )
     assert response.status_code == 401
+
+
+def test_chat_thread_crud_and_send_message(monkeypatch) -> None:
+    thread_id = "11111111-1111-1111-1111-111111111111"
+    thread = {
+        "thread_id": thread_id,
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "org_id": None,
+        "title": None,
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "updated_at": "2024-01-01T00:00:00+00:00",
+        "deleted_at": None,
+    }
+
+    class FakeThread:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_thread = FakeThread(**thread)
+    stored_messages: list[dict] = []
+
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.create_thread",
+        lambda **kwargs: thread_id,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.get_thread",
+        lambda tid, access_token: fake_thread if tid == thread_id else None,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.list_threads",
+        lambda access_token: [fake_thread],
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.list_messages",
+        lambda tid, access_token: stored_messages,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.delete_thread",
+        lambda tid, access_token: None,
+    )
+
+    async def fake_ainvoke_agent(messages, user_id, access_token, thread_id=None):
+        stored_messages.extend(
+            [
+                {"role": "user", "content": messages[-1]["content"]},
+                {"role": "assistant", "content": "Hello from the agent."},
+            ]
+        )
+        return {
+            "assistant_content": "Hello from the agent.",
+            "suggestions": ["Analyze a bill of materials"],
+            "module_launch": None,
+        }
+
+    monkeypatch.setattr("api.routes.chat.ainvoke_agent", fake_ainvoke_agent)
+
+    create_response = client.post("/api/chat/threads", json={}, headers=AUTH_HEADERS)
+    assert create_response.status_code == 200
+    assert create_response.json()["thread_id"] == thread_id
+
+    list_response = client.get("/api/chat/threads", headers=AUTH_HEADERS)
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+
+    detail_response = client.get(f"/api/chat/threads/{thread_id}", headers=AUTH_HEADERS)
+    assert detail_response.status_code == 200
+    assert detail_response.json()["thread"]["thread_id"] == thread_id
+
+    message_response = client.post(
+        f"/api/chat/threads/{thread_id}/messages",
+        json={"content": "What is Scope 3?"},
+        headers=AUTH_HEADERS,
+    )
+    assert message_response.status_code == 200
+    payload = message_response.json()
+    assert payload["content"] == "Hello from the agent."
+    assert payload["suggestions"] == ["Analyze a bill of materials"]
+    assert payload["module_launch"] is None
+
+    delete_response = client.delete(
+        f"/api/chat/threads/{thread_id}",
+        headers=AUTH_HEADERS,
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"deleted": True}
+
+
+def test_panel_crud(monkeypatch) -> None:
+    panel_id = "22222222-2222-2222-2222-222222222222"
+    panel_state = {"step": "review"}
+
+    class FakePanel:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_panel = FakePanel(
+        panel_id=panel_id,
+        user_id="00000000-0000-0000-0000-000000000001",
+        thread_id=None,
+        module_type="bom_analyzer",
+        panel_state=panel_state,
+        tab_order=0,
+        is_active=True,
+        created_at="2024-01-01T00:00:00+00:00",
+        updated_at="2024-01-01T00:00:00+00:00",
+    )
+
+    def fake_get_panel(pid, access_token):
+        return fake_panel if pid == panel_id else None
+
+    monkeypatch.setattr(
+        "api.routes.panels.panel_store.create_panel",
+        lambda module_type, **kwargs: panel_id,
+    )
+    monkeypatch.setattr("api.routes.panels.panel_store.get_panel", fake_get_panel)
+    monkeypatch.setattr(
+        "api.routes.panels.panel_store.list_panels",
+        lambda access_token: [fake_panel],
+    )
+
+    def fake_update_panel(pid, access_token, **fields):
+        if "panel_state" in fields:
+            fake_panel.panel_state = fields["panel_state"]
+        if "tab_order" in fields:
+            fake_panel.tab_order = fields["tab_order"]
+        if "is_active" in fields:
+            fake_panel.is_active = fields["is_active"]
+
+    monkeypatch.setattr("api.routes.panels.panel_store.update_panel", fake_update_panel)
+    monkeypatch.setattr(
+        "api.routes.panels.panel_store.delete_panel",
+        lambda pid, access_token: None,
+    )
+
+    create_response = client.post(
+        "/api/panels",
+        json={"module_type": "bom_analyzer", "panel_state": panel_state},
+        headers=AUTH_HEADERS,
+    )
+    assert create_response.status_code == 200
+    assert create_response.json()["module_type"] == "bom_analyzer"
+
+    list_response = client.get("/api/panels", headers=AUTH_HEADERS)
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+
+    patch_response = client.patch(
+        f"/api/panels/{panel_id}",
+        json={"panel_state": {"step": "results"}, "tab_order": 1},
+        headers=AUTH_HEADERS,
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["panel_state"] == {"step": "results"}
+    assert patch_response.json()["tab_order"] == 1
+
+    delete_response = client.delete(f"/api/panels/{panel_id}", headers=AUTH_HEADERS)
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"deleted": True}

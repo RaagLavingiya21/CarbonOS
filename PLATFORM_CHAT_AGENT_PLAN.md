@@ -277,11 +277,18 @@ Read PLATFORM_CHAT_AGENT_PLAN.md. Create api/skills/engagement.py — wraps copi
 - `api/agent/state.py` — TypedDict for the graph state (messages, active_skill, skill_result, suggestions, module_launch, etc.)
 - `api/agent/intake_forms.py` — predefined form template data structures per module
 
-**Verify:** Import the graph and invoke it with a test message. Verify "list my products" routes to Analysis skill. Verify "what is Scope 3?" routes to Guidance skill. Verify "hello" gets a direct answer without a skill call. Verify off-topic "write me a poem" gets the guardrail response.
+**Also in this step:** Create the API endpoints for chat and panels. These are thin wrappers — thread/message CRUD calls `db/chat_store.py`, the send-message endpoint invokes the graph, and panel CRUD calls `db/panel_store.py`. No reason to make a separate step for boilerplate REST routes.
+
+**Files to also create:**
+- `api/routes/chat.py` — POST/GET/DELETE for threads; POST for send message (invokes graph)
+- `api/routes/panels.py` — GET/POST/PATCH/DELETE for panels
+- Update `api/main.py` to include both new routers
+
+**Verify:** Import the graph and invoke it with a test message. Verify "list my products" routes to Analysis skill. Verify "what is Scope 3?" routes to Guidance skill. Verify "hello" gets a direct answer without a skill call. Verify off-topic "write me a poem" gets the guardrail response. Also verify via FastAPI `/docs`: create a thread, send a message, get a response. Create/list/update/delete a panel.
 
 **Prompt:**
 ```
-Read PLATFORM_CHAT_AGENT_PLAN.md, specifically "Agent Architecture" and the LangGraph structure. Create the agent core:
+Read PLATFORM_CHAT_AGENT_PLAN.md, specifically "Agent Architecture" and the LangGraph structure. Create the agent core AND the API endpoints (they're tested together):
 
 1. api/agent/state.py — TypedDict for graph state: messages (list), user_id, access_token, context_layers (dict), active_skill (str|None), skill_result (dict|None), suggestions (list[str]), module_launch (dict|None), thread_id.
 
@@ -293,40 +300,13 @@ Read PLATFORM_CHAT_AGENT_PLAN.md, specifically "Agent Architecture" and the Lang
 
 5. api/agent/intake_forms.py — dict mapping module names to their form schemas: bom_analyzer (file_upload + product_name), gap_analyzer (company_name, size, sector, geography, products), supplier_copilot (product_id + top_n).
 
-Use LangGraph's StateGraph and add_node/add_edge pattern. The graph should be importable and invocable with: result = await graph.ainvoke({"messages": [...], "user_id": "...", "access_token": "..."}).
-```
+6. api/routes/chat.py — POST /api/chat/threads (create), GET /api/chat/threads (list), GET /api/chat/threads/{thread_id} (get with messages), POST /api/chat/threads/{thread_id}/messages (send message → invoke graph → return response + suggestions + module_launch), DELETE /api/chat/threads/{thread_id}.
 
----
+7. api/routes/panels.py — GET /api/panels (list), POST /api/panels (create with module_type + thread_id + initial state), PATCH /api/panels/{panel_id} (update state + tab_order), DELETE /api/panels/{panel_id}.
 
-#### 6A-6: Chat and panel API endpoints
+8. Update api/main.py to include both new routers.
 
-**Goal:** Expose the agent and panel management as REST endpoints.
-
-**Files to create:**
-- `api/routes/chat.py` — endpoints for thread CRUD and message send (invokes the agent graph)
-- `api/routes/panels.py` — endpoints for panel CRUD
-- Update `api/main.py` to include the new routers
-
-**Verify:** Use FastAPI `/docs` to create a thread, send a message, verify the agent responds. Create a panel, list panels, update panel state, verify persistence.
-
-**Prompt:**
-```
-Read PLATFORM_CHAT_AGENT_PLAN.md. Create API routes:
-
-api/routes/chat.py:
-- POST /api/chat/threads — create thread (auto-generates title from first message later)
-- GET /api/chat/threads — list user's threads (newest first)
-- GET /api/chat/threads/{thread_id} — get thread with all messages
-- POST /api/chat/threads/{thread_id}/messages — send user message, invoke the agent graph from api/agent/graph.py, return agent response + suggestions + module_launch (if any)
-- DELETE /api/chat/threads/{thread_id} — soft delete thread
-
-api/routes/panels.py:
-- GET /api/panels — list user's active panels
-- POST /api/panels — create panel (module_type, thread_id, initial state)
-- PATCH /api/panels/{panel_id} — update panel_state JSON and tab_order
-- DELETE /api/panels/{panel_id} — close panel
-
-Add both routers to api/main.py. Use Pydantic models for request/response schemas in api/models/. Follow the existing route patterns (auth from middleware, access_token extraction).
+Use LangGraph's StateGraph and add_node/add_edge pattern. Use Pydantic models for request/response schemas. Follow existing route patterns for auth.
 ```
 
 ---
@@ -662,10 +642,9 @@ Frontend: Update frontend/lib/chat-api.ts to support SSE — add a sendMessageSt
   → 6A-2 (DB CRUD layer)
     → 6A-3 (Analysis + Guidance skills)
     → 6A-4 (Engagement + Memory skills)
-      → 6A-5 (Agent core — LangGraph)
-        → 6A-6 (API endpoints)
+      → 6A-5 (Agent core + API endpoints)
 
-6A-6 enables ↓
+6A-5 enables ↓
 
 6B-1 (Basic chat UI)
   → 6B-2 (Module buttons + suggestions)

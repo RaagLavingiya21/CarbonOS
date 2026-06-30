@@ -10,6 +10,7 @@ import {
   FileSearch,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   UploadCloud,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/analyzer", label: "Analyzer", icon: UploadCloud },
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch },
   { href: "/advisor", label: "Advisor", icon: Bot },

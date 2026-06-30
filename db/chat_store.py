@@ -16,7 +16,7 @@ from typing import Any
 from db.client import get_user_client
 
 _THREAD_COLUMNS = (
-    "thread_id, user_id, org_id, title, created_at, updated_at"
+    "thread_id, user_id, org_id, title, created_at, updated_at, deleted_at"
 )
 _MESSAGE_COLUMNS = (
     "message_id, thread_id, role, content, metadata, created_at"
@@ -31,6 +31,7 @@ class ChatThread:
     title: str | None
     created_at: str
     updated_at: str
+    deleted_at: str | None = None
 
 
 @dataclass
@@ -68,11 +69,12 @@ def create_thread(
 
 
 def list_threads(access_token: str) -> list[ChatThread]:
-    """Return all threads for the authenticated user, newest activity first."""
+    """Return non-deleted threads for the authenticated user, newest activity first."""
     client = get_user_client(access_token)
     response = (
         client.table("chat_threads")
         .select(_THREAD_COLUMNS)
+        .is_("deleted_at", "null")
         .order("updated_at", desc=True)
         .execute()
     )
@@ -80,12 +82,13 @@ def list_threads(access_token: str) -> list[ChatThread]:
 
 
 def get_thread(thread_id: str, access_token: str) -> ChatThread | None:
-    """Return a single thread by ID, or None if not found / not owned."""
+    """Return a single non-deleted thread by ID, or None if not found / not owned."""
     client = get_user_client(access_token)
     response = (
         client.table("chat_threads")
         .select(_THREAD_COLUMNS)
         .eq("thread_id", thread_id)
+        .is_("deleted_at", "null")
         .limit(1)
         .execute()
     )
@@ -114,9 +117,14 @@ def touch_thread(thread_id: str, *, access_token: str) -> None:
 
 
 def delete_thread(thread_id: str, *, access_token: str) -> None:
-    """Hard-delete a thread; messages cascade via FK."""
+    """Soft-delete a thread by setting deleted_at."""
     client = get_user_client(access_token)
-    client.table("chat_threads").delete().eq("thread_id", thread_id).execute()
+    client.table("chat_threads").update(
+        {
+            "deleted_at": _utc_now_iso(),
+            "updated_at": _utc_now_iso(),
+        }
+    ).eq("thread_id", thread_id).execute()
 
 
 def create_message(
@@ -164,6 +172,7 @@ def _utc_now_iso() -> str:
 def _thread_from_row(row: dict) -> ChatThread:
     org_id = row.get("org_id")
     title = row.get("title")
+    deleted_at = row.get("deleted_at")
     return ChatThread(
         thread_id=str(row["thread_id"]),
         user_id=str(row["user_id"]),
@@ -171,6 +180,7 @@ def _thread_from_row(row: dict) -> ChatThread:
         title=str(title) if title is not None else None,
         created_at=str(row.get("created_at", "")),
         updated_at=str(row.get("updated_at", "")),
+        deleted_at=str(deleted_at) if deleted_at is not None else None,
     )
 
 
