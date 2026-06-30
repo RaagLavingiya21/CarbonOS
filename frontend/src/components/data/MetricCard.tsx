@@ -17,7 +17,7 @@ export function MetricCard({
   label: string;
   value: string | number;
   unit?: string;
-  hint?: string;
+  hint?: ReactNode;
   footer?: ReactNode;
   className?: string;
 }) {

@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
+import { Term } from "@/components/data/Term";
 import { AnalysisDetail, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg } from "@/lib/utils";
@@ -110,7 +111,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               label="Total footprint"
               value={formatKg(analysis.total_kg_co2e)}
               unit="kg CO₂e"
-              hint="Scope 3 Category 1, cradle-to-gate"
+              hint={
+                <>
+                  <Term name="scope 3 category 1">Scope 3 Category 1</Term>,{" "}
+                  <Term name="cradle-to-gate">cradle-to-gate</Term>
+                </>
+              }
             />
             <MetricCard label="Matched line items" value={analysis.matched_items} hint="Included in total" />
             <MetricCard label="Flagged line items" value={analysis.flagged_items} hint="Need human review" />
@@ -120,7 +126,9 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             <CardHeader>
               <CardTitle>Emission hotspots</CardTitle>
               <CardDescription>
-                Line-item contribution to the total footprint, largest first. Every factor cites its source.
+                Line-item contribution to the total footprint, largest first. Each{" "}
+                <Term name="hotspot">hotspot</Term> shows the{" "}
+                <Term name="emission factor">emission factor</Term> source it used.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
