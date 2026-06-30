@@ -14,8 +14,10 @@ from datetime import datetime, timezone
 
 from db.client import get_user_client
 
+MAX_ACTIVE_USER_MEMORIES = 10
+
 _USER_MEMORY_COLUMNS = (
-    "memory_id, user_id, content, category, created_at, updated_at"
+    "memory_id, user_id, content, category, created_at, updated_at, archived_at"
 )
 _ORG_MEMORY_COLUMNS = (
     "memory_id, org_id, created_by, content, category, created_at, updated_at"
@@ -30,6 +32,13 @@ class UserMemory:
     category: str
     created_at: str
     updated_at: str
+    archived_at: str | None = None
+
+
+@dataclass
+class CreateUserMemoryResult:
+    memory_id: str
+    archived_memory_id: str | None = None
 
 
 @dataclass
@@ -49,9 +58,18 @@ def create_user_memory(
     *,
     user_id: str,
     access_token: str,
-) -> str:
-    """Insert a user memory entry and return its memory_id."""
+) -> CreateUserMemoryResult:
+    """Insert a user memory entry, archiving the oldest active if at cap."""
     client = get_user_client(access_token)
+    archived_memory_id: str | None = None
+
+    active_count = count_active_user_memory(access_token)
+    if active_count >= MAX_ACTIVE_USER_MEMORIES:
+        oldest = _get_oldest_active_user_memory(client)
+        if oldest is not None:
+            archive_user_memory(oldest.memory_id, access_token=access_token)
+            archived_memory_id = oldest.memory_id
+
     now = _utc_now_iso()
     response = (
         client.table("user_memory")
@@ -66,19 +84,46 @@ def create_user_memory(
         )
         .execute()
     )
-    return str(response.data[0]["memory_id"])
+    memory_id = str(response.data[0]["memory_id"])
+    return CreateUserMemoryResult(
+        memory_id=memory_id,
+        archived_memory_id=archived_memory_id,
+    )
 
 
 def list_user_memory(access_token: str) -> list[UserMemory]:
-    """Return all memory entries for the authenticated user."""
+    """Return active memory entries for the authenticated user."""
     client = get_user_client(access_token)
     response = (
         client.table("user_memory")
         .select(_USER_MEMORY_COLUMNS)
+        .is_("archived_at", "null")
         .order("updated_at", desc=True)
         .execute()
     )
     return [_user_memory_from_row(row) for row in response.data]
+
+
+def count_active_user_memory(access_token: str) -> int:
+    """Return the number of active (non-archived) memories for the user."""
+    client = get_user_client(access_token)
+    response = (
+        client.table("user_memory")
+        .select("memory_id", count="exact")
+        .is_("archived_at", "null")
+        .execute()
+    )
+    if response.count is not None:
+        return response.count
+    return len(response.data)
+
+
+def archive_user_memory(memory_id: str, *, access_token: str) -> None:
+    """Soft-archive a user memory entry by setting archived_at."""
+    client = get_user_client(access_token)
+    client.table("user_memory").update(
+        {"archived_at": _utc_now_iso(), "updated_at": _utc_now_iso()}
+    ).eq("memory_id", memory_id).execute()
 
 
 def update_user_memory(memory_id: str, *, access_token: str, **fields) -> None:
@@ -164,11 +209,26 @@ def delete_org_memory(memory_id: str, *, access_token: str) -> None:
     client.table("org_memory").delete().eq("memory_id", memory_id).execute()
 
 
+def _get_oldest_active_user_memory(client) -> UserMemory | None:
+    response = (
+        client.table("user_memory")
+        .select(_USER_MEMORY_COLUMNS)
+        .is_("archived_at", "null")
+        .order("created_at", desc=False)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    return _user_memory_from_row(response.data[0])
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def _user_memory_from_row(row: dict) -> UserMemory:
+    archived_at = row.get("archived_at")
     return UserMemory(
         memory_id=str(row["memory_id"]),
         user_id=str(row["user_id"]),
@@ -176,6 +236,7 @@ def _user_memory_from_row(row: dict) -> UserMemory:
         category=row["category"],
         created_at=str(row.get("created_at", "")),
         updated_at=str(row.get("updated_at", "")),
+        archived_at=str(archived_at) if archived_at else None,
     )
 
 

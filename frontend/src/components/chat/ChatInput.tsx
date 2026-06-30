@@ -10,9 +10,14 @@ import { Textarea } from "@/components/ui/textarea";
 interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
+  showModuleButtons?: boolean;
 }
 
-export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled = false,
+  showModuleButtons = true,
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -53,7 +58,9 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
           Send
         </Button>
       </form>
-      <ModuleButtons onSelect={onSend} disabled={disabled} />
+      {showModuleButtons ? (
+        <ModuleButtons onSelect={onSend} disabled={disabled} />
+      ) : null}
     </div>
   );
 }

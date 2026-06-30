@@ -12,11 +12,13 @@ from dotenv import load_dotenv
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 
+from api.agent.context_manager import build_conversation_context
 from api.agent.intent_router import route_intent
 from api.agent.state import AgentState
 from api.agent.system_prompt import build_system_prompt
 from api.skills.registry import registry
 from db.chat_store import create_message, touch_thread
+from db.memory_store import create_user_memory
 from observability.logger import log_llm_call
 
 load_dotenv()
@@ -61,6 +63,7 @@ def _build_workflow() -> StateGraph:
     builder.add_node("format_response", _format_response_node)
     builder.add_node("generate_suggestions", _generate_suggestions_node)
     builder.add_node("save_to_history", _save_to_history_node)
+    builder.add_node("evaluate_memory", _evaluate_memory_node)
 
     builder.add_edge(START, "build_context")
     builder.add_edge("build_context", "route_intent")
@@ -75,7 +78,8 @@ def _build_workflow() -> StateGraph:
     builder.add_edge("execute_skill", "generate_suggestions")
     builder.add_edge("format_response", "generate_suggestions")
     builder.add_edge("generate_suggestions", "save_to_history")
-    builder.add_edge("save_to_history", END)
+    builder.add_edge("save_to_history", "evaluate_memory")
+    builder.add_edge("evaluate_memory", END)
 
     return builder
 
@@ -130,7 +134,36 @@ async def _build_context_node(state: AgentState) -> dict[str, Any]:
     )
     context_layers = dict(state.get("context_layers") or {})
     context_layers["system_prompt"] = system_prompt
-    return {"context_layers": context_layers}
+
+    thread_id = state.get("thread_id")
+    if not thread_id:
+        return {"context_layers": context_layers}
+
+    conversation_context = await build_conversation_context(
+        thread_id,
+        state["access_token"],
+    )
+
+    if conversation_context.summary:
+        context_layers["system_prompt"] = (
+            system_prompt
+            + "\n\n## Conversation summary so far\n\n"
+            + conversation_context.summary
+        )
+
+    incoming_messages = list(state.get("messages") or [])
+    current_user_message: dict[str, str] | None = None
+    if incoming_messages and incoming_messages[-1].get("role") == "user":
+        current_user_message = incoming_messages[-1]
+
+    windowed_messages = list(conversation_context.recent_messages)
+    if current_user_message is not None:
+        windowed_messages.append(current_user_message)
+
+    return {
+        "context_layers": context_layers,
+        "messages": windowed_messages,
+    }
 
 
 async def _route_intent_node(state: AgentState) -> dict[str, Any]:
@@ -286,6 +319,106 @@ def _save_to_history_node(state: AgentState) -> dict[str, Any]:
         touch_thread(thread_id, access_token=access_token)
 
     return {}
+
+
+async def _evaluate_memory_node(state: AgentState) -> dict[str, Any]:
+    """Post-process a turn: decide whether to persist durable user preferences."""
+    thread_id = state.get("thread_id")
+    user_id = state.get("user_id")
+    access_token = state.get("access_token")
+    assistant_content = state.get("assistant_content", "")
+
+    if not thread_id or not user_id or not access_token or not assistant_content:
+        return {}
+
+    user_message = _latest_user_message(state.get("messages") or [])
+    if not user_message:
+        return {}
+
+    prompt = (
+        f"User message: {user_message}\n"
+        f"Assistant reply: {assistant_content}\n\n"
+        "Should anything durable be saved to this user's long-term memory? "
+        "Save only stable preferences, focus areas, or working patterns "
+        "(e.g. 'focused on reducing packaging emissions', 'prefers metric tons'). "
+        "Do NOT save transient chit-chat, one-off questions, or facts already "
+        "in the platform database.\n\n"
+        "Return only JSON with this shape:\n"
+        '{"save": false, "content": "", "category": ""}\n'
+        "category must be one of: preference, focus_area, working_pattern."
+    )
+
+    client = anthropic.AsyncAnthropic()
+    t0 = time.perf_counter()
+    try:
+        response = await client.messages.create(
+            model=_SUGGESTIONS_MODEL,
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.APIError as exc:
+        log_llm_call(
+            app_name="platform_agent",
+            tool_name="evaluate_memory",
+            model=_SUGGESTIONS_MODEL,
+            tokens_in=None,
+            tokens_out=None,
+            latency_seconds=time.perf_counter() - t0,
+            rag_used=False,
+            error=str(exc),
+            session_id=thread_id,
+        )
+        return {}
+
+    log_llm_call(
+        app_name="platform_agent",
+        tool_name="evaluate_memory",
+        model=_SUGGESTIONS_MODEL,
+        tokens_in=response.usage.input_tokens,
+        tokens_out=response.usage.output_tokens,
+        latency_seconds=time.perf_counter() - t0,
+        rag_used=False,
+        session_id=thread_id,
+    )
+
+    text = "".join(
+        block.text for block in response.content if getattr(block, "type", None) == "text"
+    ).strip()
+    decision = _parse_memory_decision_json(text)
+    if not decision or not decision.get("save"):
+        return {}
+
+    content = str(decision.get("content", "")).strip()
+    category = str(decision.get("category", "")).strip()
+    if not content or not category:
+        return {}
+
+    try:
+        create_user_memory(
+            content,
+            category,
+            user_id=user_id,
+            access_token=access_token,
+        )
+    except Exception:
+        return {}
+
+    return {}
+
+
+def _parse_memory_decision_json(text: str) -> dict[str, Any] | None:
+    import re
+
+    match = re.search(r"\{.*?\}", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
 
 
 async def _synthesize_skill_response(

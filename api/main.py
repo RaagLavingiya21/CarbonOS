@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
-from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, panels
+from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, org, panels
 
 logger = logging.getLogger("api.request")
 logging.basicConfig(level=logging.INFO)
@@ -81,6 +81,7 @@ app.include_router(gap_analyzer.router)
 app.include_router(copilot.router)
 app.include_router(chat.router)
 app.include_router(panels.router)
+app.include_router(org.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

@@ -26,8 +26,12 @@ from db.copilot_store import (
     update_engagement,
 )
 from db.memory_store import (
+    MAX_ACTIVE_USER_MEMORIES,
+    CreateUserMemoryResult,
     OrgMemory,
     UserMemory,
+    archive_user_memory,
+    count_active_user_memory,
     create_org_memory,
     create_user_memory,
     delete_org_memory,
@@ -97,10 +101,14 @@ __all__ = [
     "create_message",
     "list_messages",
     # memory
+    "MAX_ACTIVE_USER_MEMORIES",
     "UserMemory",
     "OrgMemory",
+    "CreateUserMemoryResult",
     "create_user_memory",
     "list_user_memory",
+    "count_active_user_memory",
+    "archive_user_memory",
     "update_user_memory",
     "delete_user_memory",
     "create_org_memory",

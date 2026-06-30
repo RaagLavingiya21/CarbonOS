@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatThread } from "@/components/chat/ChatThread";
@@ -82,6 +83,9 @@ function sortThreadsByUpdatedAt(threads: ChatThreadType[]): ChatThreadType[] {
 
 function ChatWorkspace() {
   const { openPanel } = usePanels();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const autoSendHandledRef = useRef(false);
   const [threads, setThreads] = useState<ChatThreadType[]>([]);
   const [thread, setThread] = useState<ChatThreadType | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,6 +93,12 @@ function ChatWorkspace() {
   const [loading, setLoading] = useState(false);
   const [switchingThread, setSwitchingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamErrorText, setStreamErrorText] = useState<string | null>(null);
+  const [retryText, setRetryText] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null,
+  );
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [submittedIntakeMessageIds, setSubmittedIntakeMessageIds] = useState<
     Set<string>
   >(() => new Set());
@@ -145,10 +155,33 @@ function ChatWorkspace() {
     setInitializing(true);
     setError(null);
 
+    const messageParam = searchParams.get("message");
+    const threadParam = searchParams.get("thread");
+
     try {
       const listed = await refreshThreads();
 
-      if (listed.length > 0) {
+      if (messageParam && !autoSendHandledRef.current) {
+        autoSendHandledRef.current = true;
+        const created = await chatApi.createThread();
+        setThread(created);
+        setMessages([]);
+        setSubmittedIntakeMessageIds(new Set());
+        setThreads(
+          sortThreadsByUpdatedAt([
+            created,
+            ...listed.filter((item) => item.thread_id !== created.thread_id),
+          ]),
+        );
+        setPendingMessage(messageParam);
+        router.replace("/chat");
+      } else if (threadParam) {
+        const detail = await chatApi.getThread(threadParam);
+        setThread(detail.thread);
+        setMessages(detail.messages);
+        setSubmittedIntakeMessageIds(new Set());
+        router.replace("/chat");
+      } else if (listed.length > 0) {
         const detail = await chatApi.getThread(listed[0].thread_id);
         setThread(detail.thread);
         setMessages(detail.messages);
@@ -162,11 +195,13 @@ function ChatWorkspace() {
     } finally {
       setInitializing(false);
     }
-  }, [refreshThreads, startThread]);
+  }, [refreshThreads, router, searchParams, startThread]);
 
   useEffect(() => {
     void initializeWorkspace();
-  }, [initializeWorkspace]);
+    // Run once on mount; query params are read inside initializeWorkspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleNewChat = useCallback(async () => {
     setSwitchingThread(true);
@@ -223,51 +258,99 @@ function ChatWorkspace() {
         created_at: new Date().toISOString(),
       };
 
-      setMessages((current) => [...current, optimisticUserMessage]);
+      const streamingAssistantId = `temp-assistant-${Date.now()}`;
+      const streamingAssistantMessage: ChatMessage = {
+        message_id: streamingAssistantId,
+        thread_id: thread.thread_id,
+        role: "assistant",
+        content: "",
+        metadata: {},
+        created_at: new Date().toISOString(),
+      };
+
+      setMessages((current) => [
+        ...current,
+        optimisticUserMessage,
+        streamingAssistantMessage,
+      ]);
+      setStreamingMessageId(streamingAssistantId);
       setLoading(true);
       setError(null);
+      setStreamErrorText(null);
+      setRetryText(text);
 
       try {
-        const response = await chatApi.sendMessage(thread.thread_id, text);
-        const moduleLaunch = response.module_launch;
+        for await (const event of chatApi.sendMessageStream(
+          thread.thread_id,
+          text,
+        )) {
+          if (event.type === "chunk") {
+            setMessages((current) =>
+              current.map((message) =>
+                message.message_id === streamingAssistantId
+                  ? { ...message, content: message.content + event.text }
+                  : message,
+              ),
+            );
+          } else if (event.type === "meta") {
+            const moduleLaunch = event.module_launch;
 
-        if (shouldOpenPanel(moduleLaunch)) {
-          openPanel(
-            moduleLaunch!.module_type,
-            moduleLaunchPanelState(moduleLaunch!),
-            undefined,
-            thread.thread_id,
-          );
-        }
+            if (shouldOpenPanel(moduleLaunch)) {
+              openPanel(
+                moduleLaunch!.module_type,
+                moduleLaunchPanelState(moduleLaunch!),
+                undefined,
+                thread.thread_id,
+              );
+            }
 
-        const assistantMessage: ChatMessage = {
-          message_id: `temp-assistant-${Date.now()}`,
-          thread_id: thread.thread_id,
-          role: "assistant",
-          content: response.content,
-          metadata: {
-            suggestions: response.suggestions ?? [],
-            ...(moduleLaunch ? { module_launch: moduleLaunch } : {}),
-          },
-          created_at: new Date().toISOString(),
-        };
-        setMessages((current) => [...current, assistantMessage]);
+            setMessages((current) =>
+              current.map((message) =>
+                message.message_id === streamingAssistantId
+                  ? {
+                      ...message,
+                      metadata: {
+                        suggestions: event.suggestions ?? [],
+                        ...(moduleLaunch ? { module_launch: moduleLaunch } : {}),
+                      },
+                    }
+                  : message,
+              ),
+            );
 
-        const refreshed = await refreshThreads();
-        const activeThread = refreshed.find(
-          (item) => item.thread_id === thread.thread_id,
-        );
-        if (activeThread) {
-          setThread(activeThread);
+            const refreshed = await refreshThreads();
+            const activeThread = refreshed.find(
+              (item) => item.thread_id === thread.thread_id,
+            );
+            if (activeThread) {
+              setThread(activeThread);
+            } else if (event.title) {
+              setThread((current) =>
+                current
+                  ? { ...current, title: event.title, updated_at: new Date().toISOString() }
+                  : current,
+              );
+            }
+          }
         }
       } catch (err) {
-        setError((err as Error).message);
+        setMessages((current) =>
+          current.filter((message) => message.message_id !== streamingAssistantId),
+        );
+        setStreamErrorText((err as Error).message);
       } finally {
+        setStreamingMessageId(null);
         setLoading(false);
       }
     },
     [thread, openPanel, refreshThreads],
   );
+
+  const handleRetry = useCallback(() => {
+    if (!retryText) return;
+    setStreamErrorText(null);
+    void handleSend(retryText);
+  }, [retryText, handleSend]);
 
   const handleIntakeSubmit = useCallback(
     async (payload: IntakeSubmitPayload, messageId: string) => {
@@ -287,6 +370,16 @@ function ChatWorkspace() {
     },
     [thread, handleSend, openPanel],
   );
+
+  useEffect(() => {
+    if (!pendingMessage || !thread || initializing) {
+      return;
+    }
+
+    const text = pendingMessage;
+    setPendingMessage(null);
+    void handleSend(text);
+  }, [pendingMessage, thread, initializing, handleSend]);
 
   const chatDisabled = loading || switchingThread;
 
@@ -358,9 +451,12 @@ function ChatWorkspace() {
                     <ChatThread
                       messages={messages}
                       loading={loading}
+                      streamingMessageId={streamingMessageId}
+                      errorText={streamErrorText}
                       submittedIntakeMessageIds={submittedIntakeMessageIds}
                       onSuggestionSelect={handleSend}
                       onIntakeSubmit={handleIntakeSubmit}
+                      onRetry={handleRetry}
                     />
                     <ChatInput onSend={handleSend} disabled={chatDisabled} />
                   </>
@@ -375,10 +471,20 @@ function ChatWorkspace() {
   );
 }
 
+function ChatPageFallback() {
+  return (
+    <div className="flex min-h-[400px] items-center justify-center">
+      <p className="text-sm text-muted-foreground">Loading chat...</p>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   return (
     <PanelProvider>
-      <ChatWorkspace />
+      <Suspense fallback={<ChatPageFallback />}>
+        <ChatWorkspace />
+      </Suspense>
     </PanelProvider>
   );
 }

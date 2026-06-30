@@ -6,11 +6,13 @@ from typing import Any
 
 from api.agent.intake_forms import get_intake_form
 from api.skills.base import Skill
+from db.org_store import get_active_org, get_active_org_member_ids
 from db.reader import (
     get_all_products,
     get_product_by_id,
     get_product_by_name,
     get_product_line_items,
+    get_products_for_active_org,
 )
 
 _HOTSPOT_LIMIT = 5
@@ -64,6 +66,18 @@ class AnalysisSkill(Skill):
                 "type": "integer",
                 "description": "Max hotspots to return (default 5).",
             },
+            "scope": {
+                "type": "string",
+                "enum": ["personal", "org"],
+                "description": (
+                    "Data scope: 'org' includes all team members' products (default when "
+                    "user has an org); 'personal' restricts to the current user's products."
+                ),
+            },
+            "user_id": {
+                "type": "string",
+                "description": "Authenticated user ID (injected by the agent).",
+            },
         },
         "required": ["action", "access_token"],
     }
@@ -85,11 +99,23 @@ class AnalysisSkill(Skill):
         except Exception as exc:
             return _error(action, str(exc))
 
-    def _list_products(self, *, access_token: str, **_: Any) -> dict[str, Any]:
-        products = get_all_products(access_token)
+    def _list_products(
+        self,
+        *,
+        access_token: str,
+        scope: str | None = None,
+        user_id: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        effective_scope = _resolve_scope(scope, access_token, user_id=user_id)
+        if effective_scope == "personal":
+            products = get_all_products(access_token, user_id=user_id)
+        else:
+            products = get_products_for_active_org(access_token, user_id=user_id)
         return _success(
             "list_products",
             {
+                "scope": effective_scope,
                 "count": len(products),
                 "products": [_product_summary(p) for p in products],
             },
@@ -151,8 +177,19 @@ class AnalysisSkill(Skill):
         access_token: str,
         product_names: list[str] | None = None,
         product_ids: list[int] | None = None,
+        scope: str | None = None,
+        user_id: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
+        effective_scope = _resolve_scope(scope, access_token, user_id=user_id)
+        if effective_scope == "personal":
+            allowed_products = get_all_products(access_token, user_id=user_id)
+        else:
+            allowed_products = get_products_for_active_org(access_token, user_id=user_id)
+
+        allowed_by_id = {p["product_id"]: p for p in allowed_products}
+        allowed_by_name = {p["product_name"].lower(): p for p in allowed_products}
+
         names = product_names or []
         ids = product_ids or []
         if not names and not ids:
@@ -167,13 +204,13 @@ class AnalysisSkill(Skill):
         for pid in ids:
             if pid in seen_ids:
                 continue
-            product = get_product_by_id(pid, access_token)
+            product = allowed_by_id.get(pid)
             if product:
                 products.append(product)
                 seen_ids.add(product["product_id"])
 
         for name in names:
-            product = get_product_by_name(name, access_token)
+            product = allowed_by_name.get(name.strip().lower())
             if product and product["product_id"] not in seen_ids:
                 products.append(product)
                 seen_ids.add(product["product_id"])
@@ -196,6 +233,7 @@ class AnalysisSkill(Skill):
         return _success(
             "compare_products",
             {
+                "scope": effective_scope,
                 "product_count": len(products),
                 "products": [_product_summary(p) for p in products],
                 "highest_emitter": _product_summary(highest),
@@ -237,6 +275,19 @@ class AnalysisSkill(Skill):
                 },
             },
         )
+
+
+def _resolve_scope(
+    scope: str | None,
+    access_token: str,
+    *,
+    user_id: str | None = None,
+) -> str:
+    """Default to org when the user has an active org; otherwise personal."""
+    if scope in ("personal", "org"):
+        return scope
+    org = get_active_org(access_token, user_id=user_id)
+    return "org" if org is not None else "personal"
 
 
 def _resolve_product(

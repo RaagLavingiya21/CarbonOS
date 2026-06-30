@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from api.skills.memory import memory_skill
+from api.skills.memory import build_profile_summary
 from api.skills.registry import registry
 from db.memory_store import list_org_memory, list_user_memory
-from db.org_store import get_user_org
+from db.org_store import get_active_org
 
 _LAYER1_IDENTITY = """\
 You are the Platform Chat Agent for a product carbon footprint analyzer used by \
@@ -67,23 +67,17 @@ def _format_skill_descriptions() -> str:
 
 async def _build_layer2_profile(user_id: str, access_token: str) -> str | None:
     try:
-        result = await memory_skill.run(
-            action="build_profile_summary",
-            access_token=access_token,
-            user_id=user_id,
-        )
-        if result.get("success") and result.get("data", {}).get("summary"):
-            return str(result["data"]["summary"])
+        summary = build_profile_summary(user_id, access_token)
+        return summary or None
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _build_layer3_memory(access_token: str) -> str | None:
     try:
         user_memories = list_user_memory(access_token)
         org_memories: list = []
-        org = get_user_org(access_token)
+        org = get_active_org(access_token)
         if org:
             org_memories = list_org_memory(org.id, access_token)
 
@@ -92,14 +86,12 @@ def _build_layer3_memory(access_token: str) -> str | None:
 
         lines: list[str] = []
         if user_memories:
-            lines.append("User preferences and focus areas:")
-            for memory in user_memories:
-                lines.append(f"- {memory.content}")
+            bullets = " • ".join(memory.content for memory in user_memories)
+            lines.append(f"User preferences: • {bullets}")
 
         if org_memories:
-            lines.append("Organization context:")
-            for memory in org_memories:
-                lines.append(f"- {memory.content}")
+            bullets = " • ".join(memory.content for memory in org_memories)
+            lines.append(f"Organization context: • {bullets}")
 
         return "\n".join(lines)
     except Exception:

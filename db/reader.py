@@ -8,7 +8,7 @@ from __future__ import annotations
 from db.client import get_user_client
 
 _PRODUCT_COLUMNS = (
-    "product_id, product_name, analysis_date, total_kg_co2e, "
+    "product_id, user_id, product_name, analysis_date, total_kg_co2e, "
     "matched_items, flagged_items, status, flagged_comment"
 )
 
@@ -18,16 +18,35 @@ _LINE_ITEM_COLUMNS = (
 )
 
 
-def get_all_products(access_token: str) -> list[dict]:
-    """Return all product rows for the authenticated user (RLS-scoped)."""
+def get_all_products(
+    access_token: str,
+    *,
+    user_id: str | None = None,
+    member_user_ids: list[str] | None = None,
+) -> list[dict]:
+    """Return product rows for the authenticated user (RLS-scoped).
+
+    When user_id is provided, restrict to that user's products (personal scope).
+    When member_user_ids is provided, restrict to those org members (org scope).
+    """
     client = get_user_client(access_token)
-    response = (
-        client.table("products")
-        .select(_PRODUCT_COLUMNS)
-        .order("analysis_date", desc=True)
-        .execute()
-    )
+    query = client.table("products").select(_PRODUCT_COLUMNS)
+    if user_id is not None:
+        query = query.eq("user_id", user_id)
+    elif member_user_ids:
+        query = query.in_("user_id", member_user_ids)
+    response = query.order("analysis_date", desc=True).execute()
     return [_normalize_product_row(row) for row in response.data]
+
+
+def get_products_for_active_org(access_token: str, *, user_id: str | None = None) -> list[dict]:
+    """Return products visible in the user's active workspace org."""
+    from db.org_store import get_active_org_member_ids
+
+    member_ids = get_active_org_member_ids(access_token, user_id=user_id)
+    if not member_ids:
+        return get_all_products(access_token, user_id=user_id)
+    return get_all_products(access_token, member_user_ids=member_ids)
 
 
 def get_product_by_name(name: str, access_token: str) -> dict | None:
@@ -78,9 +97,9 @@ def get_product_line_items(product_id: int, access_token: str) -> list[dict]:
     return response.data
 
 
-def build_llm_context(access_token: str) -> str:
+def build_llm_context(access_token: str, *, user_id: str | None = None) -> str:
     """Build a text summary of saved analyses for the LLM system prompt."""
-    products = get_all_products(access_token)
+    products = get_products_for_active_org(access_token, user_id=user_id)
 
     if not products:
         return "No product analyses have been saved yet."

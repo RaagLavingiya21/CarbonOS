@@ -102,6 +102,112 @@ export interface SendMessageResult {
   content: string;
   suggestions: string[];
   module_launch: ModuleLaunch | null;
+  title?: string | null;
+}
+
+export type StreamChunkEvent = {
+  type: "chunk";
+  text: string;
+};
+
+export type StreamMetaEvent = {
+  type: "meta";
+  thread_id: string;
+  suggestions: string[];
+  module_launch: ModuleLaunch | null;
+  title: string | null;
+};
+
+export type StreamEvent = StreamChunkEvent | StreamMetaEvent;
+
+function parseSseFrame(frame: string): { event: string; data: string } | null {
+  let event = "message";
+  let data = "";
+
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      data += line.slice(5).trim();
+    }
+  }
+
+  if (!data && event === "message") {
+    return null;
+  }
+  return { event, data };
+}
+
+export async function* sendMessageStream(
+  threadId: string,
+  content: string,
+): AsyncGenerator<StreamEvent> {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new Error("You must be signed in to continue.");
+  }
+
+  const response = await fetch(
+    `${BACKEND_URL}/api/chat/threads/${threadId}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Streaming response body is unavailable.");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+
+    for (const frame of frames) {
+      const parsed = parseSseFrame(frame);
+      if (!parsed) {
+        continue;
+      }
+
+      if (parsed.event === "chunk") {
+        const payload = JSON.parse(parsed.data) as { text: string };
+        yield { type: "chunk", text: payload.text };
+      } else if (parsed.event === "meta") {
+        const payload = JSON.parse(parsed.data) as {
+          thread_id: string;
+          suggestions: string[];
+          module_launch: ModuleLaunch | null;
+          title: string | null;
+        };
+        yield {
+          type: "meta",
+          thread_id: payload.thread_id,
+          suggestions: payload.suggestions ?? [],
+          module_launch: payload.module_launch,
+          title: payload.title ?? null,
+        };
+      }
+    }
+  }
 }
 
 export function formatIntakeSubmitMessage(payload: IntakeSubmitPayload): string {
@@ -262,6 +368,7 @@ export const chatApi = {
   listThreads,
   getThread,
   sendMessage,
+  sendMessageStream,
   deleteThread,
   listPanels,
   createPanel,

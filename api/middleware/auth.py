@@ -15,6 +15,8 @@ from jwt import PyJWKClient
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from db import org_store
+
 load_dotenv()
 
 PUBLIC_PATHS: frozenset[str] = frozenset(
@@ -164,6 +166,10 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
 
         request.state.user_id = user_id
         request.state.access_token = token
+        try:
+            org_store.ensure_demo_membership(user_id)
+        except Exception:
+            pass
         return await call_next(request)
 
 

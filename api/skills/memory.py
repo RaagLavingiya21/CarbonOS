@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from api.skills.base import Skill
+from db.client import get_service_client
 from db.copilot_store import get_all_engagements
 from db.memory_store import (
+    MAX_ACTIVE_USER_MEMORIES,
     OrgMemory,
     UserMemory,
     create_org_memory,
@@ -14,10 +17,12 @@ from db.memory_store import (
     list_org_memory,
     list_user_memory,
 )
-from db.org_store import get_user_org, list_members
-from db.reader import get_all_products
+from db.org_store import OrgMember, get_active_org, list_members
+from db.reader import get_all_products, get_products_for_active_org
 
 _ACTIVE_ENGAGEMENT_STATUSES = {"open", "drafted", "sent", "awaiting_response"}
+_PROFILE_TTL_SECONDS = 300
+_profile_cache: dict[str, tuple[float, str]] = {}
 
 
 class MemorySkill(Skill):
@@ -112,23 +117,33 @@ class MemorySkill(Skill):
         if not category or not category.strip():
             return _error("write_user_memory", "Provide category.")
 
-        memory_id = create_user_memory(
+        result = create_user_memory(
             content.strip(),
             category.strip(),
             user_id=user_id,
             access_token=access_token,
         )
-        return _success("write_user_memory", {"memory_id": memory_id})
+        payload: dict[str, Any] = {
+            "memory_id": result.memory_id,
+            "max_active_memories": MAX_ACTIVE_USER_MEMORIES,
+        }
+        if result.archived_memory_id:
+            payload["archived_memory_id"] = result.archived_memory_id
+        return _success("write_user_memory", payload)
 
     def _read_org_memory(
         self,
         *,
         access_token: str,
         org_id: str | None = None,
+        user_id: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         if not org_id:
-            return _error("read_org_memory", "Provide org_id.")
+            org = get_active_org(access_token, user_id=user_id)
+            if org is None:
+                return _error("read_org_memory", "No active organization.")
+            org_id = org.id
 
         memories = list_org_memory(org_id, access_token)
         return _success(
@@ -175,41 +190,61 @@ class MemorySkill(Skill):
         user_id: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
-        products = get_all_products(access_token)
-        engagements = get_all_engagements(access_token)
-        active_engagements = [
-            e for e in engagements if e.status.lower() in _ACTIVE_ENGAGEMENT_STATUSES
-        ]
+        if not user_id:
+            return _error("build_profile_summary", "Provide user_id.")
+        summary = build_profile_summary(user_id, access_token)
+        return _success("build_profile_summary", {"summary": summary, "user_id": user_id})
 
-        org = get_user_org(access_token)
-        org_info: dict[str, Any] | None = None
-        member_count = 0
-        if org:
-            members = list_members(org.id, access_token)
-            member_count = len(members)
-            org_info = {
-                "id": org.id,
-                "name": org.name,
-                "member_count": member_count,
-            }
 
-        summary = _compose_profile_summary(
-            products=products,
-            active_engagement_count=len(active_engagements),
-            org=org,
-            member_count=member_count,
+def build_profile_summary(user_id: str, access_token: str) -> str:
+    """Build Layer 2 profile summary with a 5-minute in-memory TTL cache."""
+    cached = _profile_cache.get(user_id)
+    if cached and (time.monotonic() - cached[0]) < _PROFILE_TTL_SECONDS:
+        return cached[1]
+
+    products = get_all_products(access_token, user_id=user_id)
+
+    engagements = get_all_engagements(access_token)
+    active_count = sum(
+        1 for e in engagements if e.status.lower() in _ACTIVE_ENGAGEMENT_STATUSES
+    )
+
+    org = get_active_org(access_token, user_id=user_id)
+    member_count = 0
+    org_product_count: int | None = None
+    workspace_products: list[dict] = []
+    if org:
+        members = list_members(org.id, access_token)
+        member_count = len(members)
+        workspace_products = get_products_for_active_org(access_token, user_id=user_id)
+        org_product_count = len(workspace_products)
+
+    summary = _compose_profile_summary(
+        products=products,
+        active_engagement_count=active_count,
+        org=org,
+        member_count=member_count,
+        org_product_count=org_product_count,
+    )
+    _profile_cache[user_id] = (time.monotonic(), summary)
+    return summary
+
+
+def _count_org_products(members: list[OrgMember]) -> int | None:
+    member_ids = [m.user_id for m in members]
+    if not member_ids:
+        return None
+    try:
+        client = get_service_client()
+        response = (
+            client.table("products")
+            .select("product_id", count="exact")
+            .in_("user_id", member_ids)
+            .execute()
         )
-
-        return _success(
-            "build_profile_summary",
-            {
-                "summary": summary,
-                "product_count": len(products),
-                "engagement_count": len(active_engagements),
-                "org": org_info,
-                "user_id": user_id,
-            },
-        )
+        return response.count if response.count is not None else len(response.data)
+    except Exception:
+        return None
 
 
 def _compose_profile_summary(
@@ -218,6 +253,7 @@ def _compose_profile_summary(
     active_engagement_count: int,
     org: Any | None,
     member_count: int,
+    org_product_count: int | None = None,
 ) -> str:
     parts: list[str] = []
 
@@ -246,10 +282,17 @@ def _compose_profile_summary(
         parts.append("No active supplier engagements.")
 
     if org:
-        parts.append(
-            f"Member of {org.name} ({member_count} team member"
-            f"{'' if member_count == 1 else 's'})."
-        )
+        org_label = f"Demo workspace {org.name}" if getattr(org, "is_demo", False) else org.name
+        if org_product_count is not None:
+            parts.append(
+                f"Active workspace: {org_label} ({member_count} team member"
+                f"{'' if member_count == 1 else 's'}, {org_product_count} products in workspace)."
+            )
+        else:
+            parts.append(
+                f"Active workspace: {org_label} ({member_count} team member"
+                f"{'' if member_count == 1 else 's'})."
+            )
 
     return " ".join(parts)
 
@@ -262,6 +305,7 @@ def _user_memory_dict(memory: UserMemory) -> dict[str, Any]:
         "category": memory.category,
         "created_at": memory.created_at,
         "updated_at": memory.updated_at,
+        "archived_at": memory.archived_at,
     }
 
 

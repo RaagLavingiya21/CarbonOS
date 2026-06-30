@@ -637,6 +637,7 @@ class SendMessageResponse(BaseModel):
     content: str
     suggestions: list[str] = Field(default_factory=list)
     module_launch: dict[str, Any] | None = None
+    title: str | None = None
 
 
 class DeleteThreadResponse(BaseModel):
@@ -678,3 +679,58 @@ class UpdatePanelRequest(BaseModel):
 
 class DeletePanelResponse(BaseModel):
     deleted: bool
+
+
+# Organization models
+
+
+class CreateOrgRequest(BaseModel):
+    name: str
+
+
+class AddMemberRequest(BaseModel):
+    email: str
+
+
+class OrganizationDTO(BaseModel):
+    id: str
+    name: str
+    created_at: str
+    is_demo: bool = False
+
+    @classmethod
+    def from_domain(cls, org: Any) -> "OrganizationDTO":
+        return cls(
+            id=str(org.id),
+            name=org.name,
+            created_at=str(org.created_at),
+            is_demo=bool(getattr(org, "is_demo", False)),
+        )
+
+
+class OrgMemberDTO(BaseModel):
+    user_id: str
+    org_id: str
+    role: str
+
+    @classmethod
+    def from_domain(cls, member: Any) -> "OrgMemberDTO":
+        return cls(
+            user_id=str(member.user_id),
+            org_id=str(member.org_id),
+            role=member.role,
+        )
+
+
+class OrgDetailResponse(BaseModel):
+    orgs: list[OrganizationDTO] = Field(default_factory=list)
+    active_org: OrganizationDTO | None = None
+    members: list[OrgMemberDTO] = Field(default_factory=list)
+
+
+class SetActiveOrgRequest(BaseModel):
+    org_id: str
+
+
+class RemoveMemberResponse(BaseModel):
+    removed: bool

@@ -309,6 +309,58 @@ def test_chat_thread_crud_and_send_message(monkeypatch) -> None:
     assert delete_response.json() == {"deleted": True}
 
 
+def test_chat_send_message_stream(monkeypatch) -> None:
+    thread_id = "11111111-1111-1111-1111-111111111111"
+
+    class FakeThread:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_thread = FakeThread(
+        thread_id=thread_id,
+        user_id="00000000-0000-0000-0000-000000000001",
+        org_id=None,
+        title=None,
+        created_at="2024-01-01T00:00:00+00:00",
+        updated_at="2024-01-01T00:00:00+00:00",
+        deleted_at=None,
+    )
+
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.get_thread",
+        lambda tid, access_token: fake_thread if tid == thread_id else None,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.list_messages",
+        lambda tid, access_token: [],
+    )
+
+    async def fake_ainvoke_agent(messages, user_id, access_token, thread_id=None):
+        return {
+            "assistant_content": "Hello streaming world",
+            "suggestions": ["Analyze a bill of materials"],
+            "module_launch": None,
+        }
+
+    monkeypatch.setattr("api.routes.chat.ainvoke_agent", fake_ainvoke_agent)
+
+    with client.stream(
+        "POST",
+        f"/api/chat/threads/{thread_id}/messages/stream",
+        json={"content": "What is Scope 3?"},
+        headers=AUTH_HEADERS,
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = response.read().decode()
+
+    assert "event: chunk" in body
+    assert "Hello" in body
+    assert "event: meta" in body
+    assert "Analyze a bill of materials" in body
+    assert "event: done" in body
+
+
 def test_panel_crud(monkeypatch) -> None:
     panel_id = "22222222-2222-2222-2222-222222222222"
     panel_state = {"step": "review"}
