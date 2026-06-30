@@ -52,8 +52,14 @@ app.add_middleware(SupabaseAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    # Next.js dev may use 3001+ when 3000 is taken
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    # Allow localhost dev (any port) and all Vercel deployments for this
+    # project: the production alias plus per-branch/per-commit preview URLs
+    # (e.g. carbon-os-git-<branch>-<team>.vercel.app). Auth is via Bearer
+    # token, not cookies, so a broad vercel.app match is safe here.
+    allow_origin_regex=(
+        r"http://(localhost|127\.0\.0\.1):\d+"
+        r"|https://[a-z0-9-]+\.vercel\.app"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
