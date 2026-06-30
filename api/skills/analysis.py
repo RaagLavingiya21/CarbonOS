@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.agent.intake_forms import get_intake_form
 from api.skills.base import Skill
 from db.reader import (
     get_all_products,
@@ -19,7 +20,8 @@ class AnalysisSkill(Skill):
     name = "analysis"
     description = (
         "Query saved product footprint analyses: list products, get details, "
-        "identify emission hotspots, and compare products."
+        "identify emission hotspots, compare products, and launch the BOM Analyzer "
+        "or Gap Analyzer modules with intake forms."
     )
     parameters_schema = {
         "type": "object",
@@ -31,6 +33,8 @@ class AnalysisSkill(Skill):
                     "get_product_details",
                     "get_hotspots",
                     "compare_products",
+                    "launch_bom_analyzer",
+                    "launch_gap_analyzer",
                 ],
                 "description": "The analysis operation to perform.",
             },
@@ -70,6 +74,8 @@ class AnalysisSkill(Skill):
             "get_product_details": self._get_product_details,
             "get_hotspots": self._get_hotspots,
             "compare_products": self._compare_products,
+            "launch_bom_analyzer": self._launch_bom_analyzer,
+            "launch_gap_analyzer": self._launch_gap_analyzer,
         }
         handler = handlers.get(action)
         if handler is None:
@@ -199,6 +205,36 @@ class AnalysisSkill(Skill):
                     - (lowest.get("total_kg_co2e") or 0),
                     4,
                 ),
+            },
+        )
+
+    def _launch_bom_analyzer(self, **_: Any) -> dict[str, Any]:
+        intake_form = get_intake_form("bom_analyzer")
+        if intake_form is None:
+            return _error("launch_bom_analyzer", "BOM Analyzer intake form not found.")
+        return _success(
+            "launch_bom_analyzer",
+            {
+                "module_launch": {
+                    "module_type": "bom_analyzer",
+                    "step": "intake",
+                    "intake_form": intake_form,
+                },
+            },
+        )
+
+    def _launch_gap_analyzer(self, **_: Any) -> dict[str, Any]:
+        intake_form = get_intake_form("gap_analyzer")
+        if intake_form is None:
+            return _error("launch_gap_analyzer", "Gap Analyzer intake form not found.")
+        return _success(
+            "launch_gap_analyzer",
+            {
+                "module_launch": {
+                    "module_type": "gap_analyzer",
+                    "step": "intake",
+                    "intake_form": intake_form,
+                },
             },
         )
 

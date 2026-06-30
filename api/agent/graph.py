@@ -35,6 +35,22 @@ _checkpointer_cm: Any = None
 _compiled_graph: Any = None
 
 
+_INTAKE_LAUNCH_MESSAGES: dict[str, str] = {
+    "bom_analyzer": (
+        "I've opened the BOM Analyzer intake form below — upload your bill of "
+        "materials and enter a product name to continue."
+    ),
+    "gap_analyzer": (
+        "I've opened the Gap Analyzer intake form below — fill in your company "
+        "profile to continue."
+    ),
+    "supplier_copilot": (
+        "I've opened the Supplier Copilot intake form below — select a product "
+        "and number of suppliers to rank."
+    ),
+}
+
+
 def _build_workflow() -> StateGraph:
     """Build the uncompiled StateGraph (no checkpointer required)."""
     builder = StateGraph(AgentState)
@@ -181,17 +197,34 @@ async def _execute_skill_node(state: AgentState) -> dict[str, Any]:
         }
 
     skill_result = await skill.run(action=action, **params)
+
+    module_launch = None
+    data = skill_result.get("data") if isinstance(skill_result.get("data"), dict) else {}
+    if isinstance(data, dict) and data.get("module_launch"):
+        module_launch = data["module_launch"]
+
+    if (
+        skill_result.get("success")
+        and isinstance(module_launch, dict)
+        and module_launch.get("step") == "intake"
+    ):
+        module_type = module_launch.get("module_type", "")
+        assistant_content = _INTAKE_LAUNCH_MESSAGES.get(
+            str(module_type),
+            "Please fill in the intake form below to continue.",
+        )
+        return {
+            "skill_result": skill_result,
+            "assistant_content": assistant_content,
+            "module_launch": module_launch,
+        }
+
     assistant_content = await _synthesize_skill_response(
         state["context_layers"]["system_prompt"],
         state["messages"],
         skill_result,
         session_id=state.get("thread_id"),
     )
-
-    module_launch = None
-    data = skill_result.get("data") if isinstance(skill_result.get("data"), dict) else {}
-    if isinstance(data, dict) and data.get("module_launch"):
-        module_launch = data["module_launch"]
 
     return {
         "skill_result": skill_result,

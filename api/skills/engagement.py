@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.agent.intake_forms import get_intake_form
 from api.skills.base import Skill
 from copilot.draft_email import run as draft_email
 from copilot.models import EngagementCandidate
@@ -22,7 +23,8 @@ class EngagementSkill(Skill):
     name = "engagement"
     description = (
         "Supplier engagement workflows: list engagement candidates for a product, "
-        "check engagement status, and draft supplier data-request emails."
+        "check engagement status, draft supplier data-request emails, and launch "
+        "the Supplier Copilot module with an intake form."
     )
     parameters_schema = {
         "type": "object",
@@ -33,6 +35,7 @@ class EngagementSkill(Skill):
                     "list_engagement_candidates",
                     "get_engagement_status",
                     "trigger_email_draft",
+                    "launch_supplier_copilot",
                 ],
                 "description": "The engagement operation to perform.",
             },
@@ -73,6 +76,7 @@ class EngagementSkill(Skill):
             "list_engagement_candidates": self._list_engagement_candidates,
             "get_engagement_status": self._get_engagement_status,
             "trigger_email_draft": self._trigger_email_draft,
+            "launch_supplier_copilot": self._launch_supplier_copilot,
         }
         handler = handlers.get(action)
         if handler is None:
@@ -210,6 +214,24 @@ class EngagementSkill(Skill):
                 "body": draft_result.draft.body,
                 "ghg_protocol_basis": draft_result.draft.ghg_protocol_basis,
                 "citations": draft_result.citations,
+            },
+        )
+
+    def _launch_supplier_copilot(self, **_: Any) -> dict[str, Any]:
+        intake_form = get_intake_form("supplier_copilot")
+        if intake_form is None:
+            return _error(
+                "launch_supplier_copilot",
+                "Supplier Copilot intake form not found.",
+            )
+        return _success(
+            "launch_supplier_copilot",
+            {
+                "module_launch": {
+                    "module_type": "supplier_copilot",
+                    "step": "intake",
+                    "intake_form": intake_form,
+                },
             },
         )
 

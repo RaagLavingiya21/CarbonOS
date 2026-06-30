@@ -6,6 +6,73 @@ const BACKEND_URL =
 
 export type ChatRole = "user" | "assistant" | "system";
 
+export type ModuleType =
+  | "bom_analyzer"
+  | "gap_analyzer"
+  | "supplier_copilot"
+  | "advisor";
+
+export interface IntakeFormField {
+  name: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  placeholder?: string;
+  accept?: string;
+  options?: string[];
+  default?: number | string;
+  min?: number;
+  max?: number;
+  source?: string;
+}
+
+export interface IntakeForm {
+  module_type: ModuleType;
+  title: string;
+  description: string;
+  fields: IntakeFormField[];
+}
+
+export interface ModuleLaunch {
+  module_type: ModuleType;
+  step: "intake" | string;
+  intake_form?: IntakeForm;
+}
+
+export interface ChatMessageMetadata {
+  suggestions?: string[];
+  module_launch?: ModuleLaunch;
+  skill?: string;
+  [key: string]: unknown;
+}
+
+export interface BomIntakePayload {
+  module_type: "bom_analyzer";
+  product_name: string;
+  file: File;
+}
+
+export interface GapAnalyzerIntakePayload {
+  module_type: "gap_analyzer";
+  company_name: string;
+  size: string;
+  sector: string;
+  geography: string;
+  products: string;
+}
+
+export interface SupplierCopilotIntakePayload {
+  module_type: "supplier_copilot";
+  product_id: number;
+  product_name: string;
+  top_n: number;
+}
+
+export type IntakeSubmitPayload =
+  | BomIntakePayload
+  | GapAnalyzerIntakePayload
+  | SupplierCopilotIntakePayload;
+
 export interface ChatThread {
   thread_id: string;
   user_id: string;
@@ -21,7 +88,7 @@ export interface ChatMessage {
   thread_id: string;
   role: ChatRole;
   content: string;
-  metadata: Record<string, unknown>;
+  metadata: ChatMessageMetadata;
   created_at: string;
 }
 
@@ -34,7 +101,26 @@ export interface SendMessageResult {
   thread_id: string;
   content: string;
   suggestions: string[];
-  module_launch: Record<string, unknown> | null;
+  module_launch: ModuleLaunch | null;
+}
+
+export function formatIntakeSubmitMessage(payload: IntakeSubmitPayload): string {
+  switch (payload.module_type) {
+    case "bom_analyzer":
+      return `Submitted BOM Analyzer intake: product "${payload.product_name}", file ${payload.file.name}`;
+    case "gap_analyzer":
+      return (
+        `Submitted Gap Analyzer intake: ${payload.company_name} ` +
+        `(${payload.size}, ${payload.sector}, ${payload.geography})`
+      );
+    case "supplier_copilot":
+      return (
+        `Submitted Supplier Copilot intake: product "${payload.product_name}", ` +
+        `top ${payload.top_n} suppliers`
+      );
+    default:
+      return "Submitted module intake form";
+  }
 }
 
 async function getAccessToken() {

@@ -4,26 +4,52 @@ import { Bot, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { IntakeFormMessage } from "@/components/chat/forms/IntakeFormMessage";
 import { SuggestionChips } from "@/components/chat/SuggestionChips";
-import type { ChatRole } from "@/lib/chat-api";
+import type {
+  ChatRole,
+  IntakeForm,
+  IntakeSubmitPayload,
+  ModuleLaunch,
+} from "@/lib/chat-api";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
   role: ChatRole;
   content: string;
   suggestions?: string[];
+  moduleLaunch?: ModuleLaunch | null;
+  intakeFormSubmitted?: boolean;
   onSuggestionSelect?: (suggestion: string) => void;
+  onIntakeSubmit?: (payload: IntakeSubmitPayload) => void;
   suggestionsDisabled?: boolean;
+}
+
+function getIntakeForm(moduleLaunch?: ModuleLaunch | null): IntakeForm | null {
+  if (
+    moduleLaunch?.step === "intake" &&
+    moduleLaunch.intake_form &&
+    typeof moduleLaunch.intake_form === "object"
+  ) {
+    return moduleLaunch.intake_form;
+  }
+  return null;
 }
 
 export function ChatMessage({
   role,
   content,
   suggestions = [],
+  moduleLaunch,
+  intakeFormSubmitted = false,
   onSuggestionSelect,
+  onIntakeSubmit,
   suggestionsDisabled = false,
 }: ChatMessageProps) {
   const isUser = role === "user";
+  const intakeForm = getIntakeForm(moduleLaunch);
+  const showIntakeForm =
+    !isUser && intakeForm && onIntakeSubmit && !intakeFormSubmitted;
 
   return (
     <div
@@ -49,7 +75,20 @@ export function ChatMessage({
           {isUser ? (
             <p className="whitespace-pre-wrap">{content}</p>
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <>
+              {content ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {content}
+                </ReactMarkdown>
+              ) : null}
+              {showIntakeForm ? (
+                <IntakeFormMessage
+                  intakeForm={intakeForm}
+                  disabled={suggestionsDisabled}
+                  onSubmit={onIntakeSubmit}
+                />
+              ) : null}
+            </>
           )}
         </div>
         {!isUser && onSuggestionSelect ? (

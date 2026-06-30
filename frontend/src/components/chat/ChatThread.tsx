@@ -4,18 +4,34 @@ import { useEffect, useRef } from "react";
 import { Bot } from "lucide-react";
 
 import { ChatMessage } from "@/components/chat/ChatMessage";
-import type { ChatMessage as ChatMessageType } from "@/lib/chat-api";
+import type {
+  ChatMessage as ChatMessageType,
+  IntakeSubmitPayload,
+  ModuleLaunch,
+} from "@/lib/chat-api";
 
 interface ChatThreadProps {
   messages: ChatMessageType[];
   loading: boolean;
+  submittedIntakeMessageIds?: Set<string>;
   onSuggestionSelect?: (suggestion: string) => void;
+  onIntakeSubmit?: (payload: IntakeSubmitPayload, messageId: string) => void;
+}
+
+function getModuleLaunch(message: ChatMessageType): ModuleLaunch | null {
+  const moduleLaunch = message.metadata?.module_launch;
+  if (moduleLaunch && typeof moduleLaunch === "object") {
+    return moduleLaunch as ModuleLaunch;
+  }
+  return null;
 }
 
 export function ChatThread({
   messages,
   loading,
+  submittedIntakeMessageIds,
   onSuggestionSelect,
+  onIntakeSubmit,
 }: ChatThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -36,10 +52,17 @@ export function ChatThread({
           content={message.content}
           suggestions={
             Array.isArray(message.metadata?.suggestions)
-              ? (message.metadata.suggestions as string[])
+              ? message.metadata.suggestions
               : []
           }
+          moduleLaunch={getModuleLaunch(message)}
+          intakeFormSubmitted={submittedIntakeMessageIds?.has(message.message_id)}
           onSuggestionSelect={onSuggestionSelect}
+          onIntakeSubmit={
+            onIntakeSubmit
+              ? (payload) => onIntakeSubmit(payload, message.message_id)
+              : undefined
+          }
           suggestionsDisabled={loading}
         />
       ))}
