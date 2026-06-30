@@ -10,6 +10,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
@@ -64,6 +65,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return unhandled errors as JSON so the browser sees a real message.
+
+    Without this, a crash bubbles up to Starlette's ServerErrorMiddleware
+    (outside CORSMiddleware), so the 500 lacks CORS headers and the browser
+    masks it as an "Access-Control-Allow-Origin" failure. Returning a
+    JSONResponse here keeps the response inside the CORS layer.
+    """
+    logger.exception(
+        "Unhandled error on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {type(exc).__name__}: {exc}"},
+    )
 
 
 @app.middleware("http")
