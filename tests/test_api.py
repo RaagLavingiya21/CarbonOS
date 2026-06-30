@@ -278,6 +278,18 @@ def test_chat_thread_crud_and_send_message(monkeypatch) -> None:
 
     monkeypatch.setattr("api.routes.chat.ainvoke_agent", fake_ainvoke_agent)
 
+    async def fake_generate_thread_title(first_message, *, session_id=None):
+        return "Scope 3 chat"
+
+    monkeypatch.setattr(
+        "api.routes.chat._generate_thread_title",
+        fake_generate_thread_title,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.update_thread_title",
+        lambda thread_id, title, access_token: None,
+    )
+
     create_response = client.post("/api/chat/threads", json={}, headers=AUTH_HEADERS)
     assert create_response.status_code == 200
     assert create_response.json()["thread_id"] == thread_id
@@ -343,6 +355,18 @@ def test_chat_send_message_stream(monkeypatch) -> None:
         }
 
     monkeypatch.setattr("api.routes.chat.ainvoke_agent", fake_ainvoke_agent)
+
+    async def fake_generate_thread_title(first_message, *, session_id=None):
+        return "Scope 3 chat"
+
+    monkeypatch.setattr(
+        "api.routes.chat._generate_thread_title",
+        fake_generate_thread_title,
+    )
+    monkeypatch.setattr(
+        "api.routes.chat.chat_store.update_thread_title",
+        lambda thread_id, title, access_token: None,
+    )
 
     with client.stream(
         "POST",

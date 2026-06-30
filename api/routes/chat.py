@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 from typing import Any, AsyncIterator
@@ -68,6 +69,9 @@ async def _generate_thread_title(
     session_id: str | None = None,
 ) -> str | None:
     """Generate a short thread title from the user's first message."""
+    if not os.getenv("ANTHROPIC_API_KEY", "").strip():
+        return None
+
     client = anthropic.AsyncAnthropic()
     t0 = time.perf_counter()
     try:
@@ -77,7 +81,7 @@ async def _generate_thread_title(
             system=_TITLE_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": first_message}],
         )
-    except anthropic.APIError as exc:
+    except (anthropic.APIError, TypeError) as exc:
         log_llm_call(
             app_name="platform_agent",
             tool_name="generate_thread_title",
