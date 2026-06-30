@@ -7,6 +7,7 @@ import { ArrowLeft, Download, FileWarning } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import {
   Card,
   CardContent,
@@ -74,9 +75,11 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
           <Skeleton className="h-64 rounded-lg" />
         </div>
       ) : error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ErrorState
+          title="Couldn't load this analysis"
+          message={error}
+          onRetry={() => window.location.reload()}
+        />
       ) : analysis ? (
         <>
           <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
