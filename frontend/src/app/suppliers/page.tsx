@@ -169,7 +169,7 @@ export default function SuppliersPage() {
                     {suppliers.candidates.map((candidate) => (
                       <button
                         key={`${candidate.supplier_name}-${candidate.component}`}
-                        className={`rounded-xl border bg-white p-4 text-left transition hover:border-primary ${selected?.supplier_name === candidate.supplier_name ? "border-primary ring-2 ring-primary/20" : ""}`}
+                        className={`rounded-xl border bg-card p-4 text-left transition hover:border-primary ${selected?.supplier_name === candidate.supplier_name ? "border-primary ring-2 ring-primary/20" : ""}`}
                         onClick={() => {
                           setSelected(candidate);
                           setDraft(null);
@@ -233,7 +233,7 @@ export default function SuppliersPage() {
                   </Alert>
                 ) : null}
                 {draft?.draft ? (
-                  <div className="space-y-3 rounded-xl border bg-white p-4">
+                  <div className="space-y-3 rounded-xl border bg-card p-4">
                     <div>
                       <Label>To</Label>
                       <p className="mt-1 text-sm">{draft.draft.to}</p>

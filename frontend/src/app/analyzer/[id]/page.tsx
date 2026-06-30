@@ -99,19 +99,19 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
           ) : null}
 
           <section className="grid gap-4 md:grid-cols-3">
-            <Card className="glass-card">
+            <Card className="">
               <CardHeader>
                 <CardDescription>Total footprint</CardDescription>
                 <CardTitle className="text-3xl">{formatKg(analysis.total_kg_co2e)}</CardTitle>
               </CardHeader>
             </Card>
-            <Card className="glass-card">
+            <Card className="">
               <CardHeader>
                 <CardDescription>Matched line items</CardDescription>
                 <CardTitle className="text-3xl">{analysis.matched_items}</CardTitle>
               </CardHeader>
             </Card>
-            <Card className="glass-card">
+            <Card className="">
               <CardHeader>
                 <CardDescription>Flagged line items</CardDescription>
                 <CardTitle className="text-3xl">{analysis.flagged_items}</CardTitle>

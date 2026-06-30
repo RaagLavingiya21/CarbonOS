@@ -248,7 +248,7 @@ export function GapAnalyzerPanel({
             {plan.plan.steps.map((planStep, index) => (
               <div
                 key={planStep.step_num}
-                className="flex gap-4 rounded-xl border bg-white p-4"
+                className="flex gap-4 rounded-xl border bg-card p-4"
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                   {index + 1}
@@ -350,7 +350,7 @@ export function GapAnalyzerPanel({
           <CheckCircle2 className="h-4 w-4" />
           <AlertTitle>Gap analysis complete</AlertTitle>
           <AlertDescription>
-            <pre className="mt-3 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-lg bg-white p-4 text-xs text-foreground">
+            <pre className="mt-3 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-lg bg-card p-4 text-xs text-foreground">
               {report.markdown}
             </pre>
           </AlertDescription>

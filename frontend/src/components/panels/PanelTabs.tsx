@@ -25,7 +25,7 @@ export function PanelTabs() {
             className={cn(
               "group flex max-w-[200px] shrink-0 items-center gap-1 rounded-t-lg border border-b-0 px-3 py-2 text-sm transition-colors",
               isActive
-                ? "border-border bg-white font-medium text-foreground shadow-sm"
+                ? "border-border bg-card font-medium text-foreground shadow-xs"
                 : "border-transparent bg-secondary/60 text-muted-foreground hover:bg-secondary",
             )}
           >

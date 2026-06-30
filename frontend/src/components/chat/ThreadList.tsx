@@ -58,7 +58,7 @@ export function ThreadList({
 
   if (collapsed) {
     return (
-      <aside className="flex w-12 shrink-0 flex-col items-center border-r bg-white py-3">
+      <aside className="flex w-12 shrink-0 flex-col items-center border-r bg-card py-3">
         <Button
           type="button"
           variant="ghost"
@@ -73,7 +73,7 @@ export function ThreadList({
   }
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r bg-white">
+    <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
       <div className="flex items-center gap-2 border-b px-3 py-3">
         <Button
           type="button"

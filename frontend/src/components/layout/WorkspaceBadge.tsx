@@ -81,15 +81,15 @@ export function WorkspaceBadge() {
             aria-label="Close workspace menu"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-2 min-w-[240px] rounded-xl border bg-white p-2 shadow-lg">
-            <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+          <div className="absolute right-0 top-full z-50 mt-2 min-w-[240px] rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-overlay">
+            <p className="px-2 py-1 text-caption font-medium text-muted-foreground">
               Switch workspace
             </p>
             {orgs.map((org) => (
               <button
                 key={org.id}
                 type="button"
-                className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-accent"
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-small transition-colors duration-micro hover:bg-accent hover:text-accent-foreground"
                 onClick={() => void handleSwitch(org.id)}
               >
                 <span>{workspaceLabel(org)}</span>

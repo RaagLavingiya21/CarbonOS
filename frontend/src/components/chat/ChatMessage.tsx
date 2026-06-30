@@ -84,12 +84,12 @@ export function ChatMessage({
       <div className={cn("max-w-[82%]", isUser ? "" : "flex flex-col")}>
         <div
           className={cn(
-            "rounded-2xl px-4 py-3 text-sm shadow-sm",
+            "rounded-2xl px-4 py-3 text-sm shadow-xs",
             isUser
               ? "bg-primary text-primary-foreground"
               : isError
                 ? "border border-destructive/40 bg-destructive/10 text-destructive"
-                : "bg-white prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2",
+                : "bg-card prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2",
           )}
         >
           {isUser ? (

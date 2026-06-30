@@ -120,25 +120,25 @@ export default function Home() {
   );
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-8">
+    <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-10">
       <section className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+        <h1 className="text-h1 font-medium text-balance md:text-display">
           Carbon footprint assistant
         </h1>
-        <p className="mx-auto max-w-xl text-muted-foreground">
+        <p className="mx-auto max-w-xl text-body-lg text-muted-foreground text-pretty">
           Ask questions, analyze bills of materials, and explore Scope 3 hotspots
           — all from one conversation.
         </p>
       </section>
 
       <section className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 rounded-2xl border bg-white px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-2 shadow-xs transition-shadow duration-micro focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
           <Input
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything about your product footprints..."
-            className="border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
+            placeholder="Ask anything about your product footprints…"
+            className="border-0 bg-transparent text-body shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <Button
             type="button"
@@ -162,7 +162,7 @@ export default function Home() {
               onClick={() => navigateToChat(message)}
               className="group text-left"
             >
-              <Card className="h-full transition hover:border-primary/40 hover:shadow-md">
+              <Card className="h-full transition-[border-color,box-shadow,transform] duration-micro ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-xs">
                 <CardHeader className="pb-2">
                   <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
@@ -191,7 +191,7 @@ export default function Home() {
                 onClick={() => navigateToChat(message)}
                 className="group text-left"
               >
-                <Card className="h-full transition hover:border-primary/40 hover:shadow-md">
+                <Card className="h-full transition-[border-color,box-shadow,transform] duration-micro ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-xs">
                   <CardHeader>
                     <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary">
                       <Icon className="h-5 w-5 text-primary" />

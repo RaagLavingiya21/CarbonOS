@@ -17,7 +17,7 @@ export function GlobalChatIcon() {
         size="icon"
         aria-label="Open AI assistant"
         className={cn(
-          "fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg",
+          "fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-overlay ring-1 ring-primary/20 transition-transform duration-micro ease-out hover:scale-105",
         )}
         onClick={() => setOpen(true)}
       >

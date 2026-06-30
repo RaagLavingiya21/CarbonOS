@@ -138,13 +138,13 @@ export default function AnalyzerPage() {
           ) : analysis ? (
             <>
               <section className="grid gap-4 md:grid-cols-4">
-                <Card className="glass-card md:col-span-2">
+                <Card className="md:col-span-2">
                   <CardHeader>
                     <CardDescription>Total footprint</CardDescription>
                     <CardTitle className="text-3xl">{formatKg(analysis.result.total_kg_co2e)}</CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="glass-card">
+                <Card className="">
                   <CardHeader>
                     <CardDescription>Completeness</CardDescription>
                     <CardTitle className="text-3xl">{formatPct(analysis.result.completeness_pct)}</CardTitle>
@@ -153,7 +153,7 @@ export default function AnalyzerPage() {
                     <Progress value={analysis.result.completeness_pct} />
                   </CardContent>
                 </Card>
-                <Card className="glass-card">
+                <Card className="">
                   <CardHeader>
                     <CardDescription>Flagged items</CardDescription>
                     <CardTitle className="text-3xl">{analysis.result.flagged_count}</CardTitle>
@@ -230,7 +230,7 @@ export default function AnalyzerPage() {
                       </thead>
                       <tbody>
                         {analysis.result.line_items.map((item) => (
-                          <tr key={item.row_index} className="border-t bg-white">
+                          <tr key={item.row_index} className="border-t bg-card">
                             <td className="px-4 py-3">{item.component ?? "-"}</td>
                             <td className="px-4 py-3">{item.material ?? "-"}</td>
                             <td className="px-4 py-3">{item.supplier ?? "-"}</td>

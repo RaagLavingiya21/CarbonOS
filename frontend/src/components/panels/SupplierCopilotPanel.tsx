@@ -260,7 +260,7 @@ export function SupplierCopilotPanel({
                   <button
                     key={candidateKey(candidate)}
                     type="button"
-                    className={`rounded-xl border bg-white p-4 text-left transition hover:border-primary ${
+                    className={`rounded-xl border bg-card p-4 text-left transition hover:border-primary ${
                       selected && candidateKey(selected) === candidateKey(candidate)
                         ? "border-primary ring-2 ring-primary/20"
                         : ""
@@ -328,7 +328,7 @@ export function SupplierCopilotPanel({
               </Alert>
             ) : null}
             {draft?.draft ? (
-              <div className="space-y-3 rounded-xl border bg-white p-4">
+              <div className="space-y-3 rounded-xl border bg-card p-4">
                 <div>
                   <Label>To</Label>
                   <p className="mt-1 text-sm">{draft.draft.to}</p>

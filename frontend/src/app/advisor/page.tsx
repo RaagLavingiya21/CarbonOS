@@ -80,7 +80,7 @@ export default function AdvisorPage() {
       ) : null}
 
       <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-white">
+        <CardHeader className="border-b bg-card">
           <CardTitle>Advisor chat</CardTitle>
           <CardDescription>{sessionId ? `Session ${sessionId}` : "New session"}</CardDescription>
         </CardHeader>
@@ -95,7 +95,7 @@ export default function AdvisorPage() {
                       <Bot className="h-4 w-4" />
                     </div>
                   ) : null}
-                  <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm ${isUser ? "bg-primary text-primary-foreground" : "bg-white"}`}>
+                  <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-xs ${isUser ? "bg-primary text-primary-foreground" : "bg-card"}`}>
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
                   {isUser ? (
@@ -111,13 +111,13 @@ export default function AdvisorPage() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
                   <Bot className="h-4 w-4" />
                 </div>
-                <div className="rounded-2xl bg-white px-4 py-3 text-sm shadow-sm">
+                <div className="rounded-2xl bg-card px-4 py-3 text-sm shadow-xs">
                   Thinking through your footprint data...
                 </div>
               </div>
             ) : null}
           </div>
-          <form ref={formRef} className="flex flex-col gap-3 border-t bg-white p-4 md:flex-row" onSubmit={sendMessage}>
+          <form ref={formRef} className="flex flex-col gap-3 border-t bg-card p-4 md:flex-row" onSubmit={sendMessage}>
             <Textarea
               className="min-h-[56px] md:min-h-[48px]"
               placeholder="Ask about hotspots, completeness, supplier priorities, or methodology..."

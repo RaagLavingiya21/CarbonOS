@@ -402,7 +402,7 @@ function ChatWorkspace() {
         </Alert>
       ) : null}
 
-      <div className="flex overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="flex overflow-hidden rounded-xl border bg-card shadow-xs">
         <ThreadList
           threads={threads}
           activeThreadId={thread?.thread_id ?? null}
@@ -412,7 +412,7 @@ function ChatWorkspace() {
         />
 
         <Card className="min-w-0 flex-1 rounded-none border-0 shadow-none">
-          <CardHeader className="border-b bg-white">
+          <CardHeader className="border-b bg-card">
             <CardTitle>Chat</CardTitle>
             <CardDescription>
               {initializing
