@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { ThreadList } from "@/components/chat/ThreadList";
 import { SplitLayout } from "@/components/layout/SplitLayout";
 import { PanelContainer } from "@/components/panels/PanelContainer";
 import {
@@ -45,40 +46,169 @@ function shouldOpenPanel(moduleLaunch: ModuleLaunch | null): boolean {
   return Boolean(moduleLaunch && moduleLaunch.step !== "intake");
 }
 
+function buildIntakePanelState(
+  payload: IntakeSubmitPayload,
+): Record<string, unknown> {
+  switch (payload.module_type) {
+    case "bom_analyzer":
+      return { step: "parsing", product_name: payload.product_name };
+    case "gap_analyzer":
+      return {
+        step: "planning",
+        company_name: payload.company_name,
+        size: payload.size,
+        sector: payload.sector,
+        geography: payload.geography,
+        products: payload.products,
+      };
+    case "supplier_copilot":
+      return {
+        step: "review",
+        product_id: payload.product_id,
+        product_name: payload.product_name,
+        top_n: payload.top_n,
+      };
+    default:
+      return { step: "review" };
+  }
+}
+
+function sortThreadsByUpdatedAt(threads: ChatThreadType[]): ChatThreadType[] {
+  return [...threads].sort(
+    (left, right) =>
+      new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+  );
+}
+
 function ChatWorkspace() {
   const { openPanel } = usePanels();
+  const [threads, setThreads] = useState<ChatThreadType[]>([]);
   const [thread, setThread] = useState<ChatThreadType | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [switchingThread, setSwitchingThread] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedIntakeMessageIds, setSubmittedIntakeMessageIds] = useState<
     Set<string>
   >(() => new Set());
-  const pendingIntakePayloadsRef = useRef<Map<string, IntakeSubmitPayload>>(
-    new Map(),
-  );
+
+  const refreshThreads = useCallback(async () => {
+    const listed = await chatApi.listThreads();
+    setThreads(sortThreadsByUpdatedAt(listed));
+    return sortThreadsByUpdatedAt(listed);
+  }, []);
+
+  const selectThread = useCallback(async (threadId: string) => {
+    if (thread?.thread_id === threadId) {
+      return;
+    }
+
+    setSwitchingThread(true);
+    setError(null);
+
+    try {
+      const detail = await chatApi.getThread(threadId);
+      setThread(detail.thread);
+      setMessages(detail.messages);
+      setSubmittedIntakeMessageIds(new Set());
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSwitchingThread(false);
+    }
+  }, [thread?.thread_id]);
 
   const startThread = useCallback(async () => {
-    setInitializing(true);
     setError(null);
+
     try {
       const created = await chatApi.createThread();
       setThread(created);
       setMessages([]);
       setSubmittedIntakeMessageIds(new Set());
-      pendingIntakePayloadsRef.current.clear();
+      setThreads((current) =>
+        sortThreadsByUpdatedAt([
+          created,
+          ...current.filter((item) => item.thread_id !== created.thread_id),
+        ]),
+      );
+      return created;
+    } catch (err) {
+      setThread(null);
+      setError((err as Error).message);
+      return null;
+    }
+  }, []);
+
+  const initializeWorkspace = useCallback(async () => {
+    setInitializing(true);
+    setError(null);
+
+    try {
+      const listed = await refreshThreads();
+
+      if (listed.length > 0) {
+        const detail = await chatApi.getThread(listed[0].thread_id);
+        setThread(detail.thread);
+        setMessages(detail.messages);
+        setSubmittedIntakeMessageIds(new Set());
+      } else {
+        await startThread();
+      }
     } catch (err) {
       setThread(null);
       setError((err as Error).message);
     } finally {
       setInitializing(false);
     }
-  }, []);
+  }, [refreshThreads, startThread]);
 
   useEffect(() => {
-    void startThread();
+    void initializeWorkspace();
+  }, [initializeWorkspace]);
+
+  const handleNewChat = useCallback(async () => {
+    setSwitchingThread(true);
+    try {
+      await startThread();
+    } finally {
+      setSwitchingThread(false);
+    }
   }, [startThread]);
+
+  const handleDeleteThread = useCallback(
+    async (threadId: string) => {
+      setError(null);
+
+      try {
+        await chatApi.deleteThread(threadId);
+        const remaining = sortThreadsByUpdatedAt(
+          threads.filter((item) => item.thread_id !== threadId),
+        );
+        setThreads(remaining);
+
+        if (thread?.thread_id !== threadId) {
+          return;
+        }
+
+        if (remaining.length > 0) {
+          await selectThread(remaining[0].thread_id);
+          return;
+        }
+
+        setSwitchingThread(true);
+        try {
+          await startThread();
+        } finally {
+          setSwitchingThread(false);
+        }
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    },
+    [thread?.thread_id, threads, selectThread, startThread],
+  );
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -105,6 +235,8 @@ function ChatWorkspace() {
           openPanel(
             moduleLaunch!.module_type,
             moduleLaunchPanelState(moduleLaunch!),
+            undefined,
+            thread.thread_id,
           );
         }
 
@@ -120,27 +252,43 @@ function ChatWorkspace() {
           created_at: new Date().toISOString(),
         };
         setMessages((current) => [...current, assistantMessage]);
+
+        const refreshed = await refreshThreads();
+        const activeThread = refreshed.find(
+          (item) => item.thread_id === thread.thread_id,
+        );
+        if (activeThread) {
+          setThread(activeThread);
+        }
       } catch (err) {
         setError((err as Error).message);
       } finally {
         setLoading(false);
       }
     },
-    [thread, openPanel],
+    [thread, openPanel, refreshThreads],
   );
 
   const handleIntakeSubmit = useCallback(
     async (payload: IntakeSubmitPayload, messageId: string) => {
       if (!thread) return;
 
-      pendingIntakePayloadsRef.current.set(messageId, payload);
       setSubmittedIntakeMessageIds((current) => new Set(current).add(messageId));
+
+      openPanel(
+        payload.module_type,
+        buildIntakePanelState(payload),
+        payload,
+        thread.thread_id,
+      );
 
       const summary = formatIntakeSubmitMessage(payload);
       await handleSend(summary);
     },
-    [thread, handleSend],
+    [thread, handleSend, openPanel],
   );
+
+  const chatDisabled = loading || switchingThread;
 
   return (
     <div className="space-y-8">
@@ -161,51 +309,68 @@ function ChatWorkspace() {
         </Alert>
       ) : null}
 
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-white">
-          <CardTitle>Chat</CardTitle>
-          <CardDescription>
-            {initializing
-              ? "Starting a new conversation..."
-              : thread?.title ?? "New conversation"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {initializing ? (
-            <div className="flex min-h-[460px] items-center justify-center bg-secondary/40 p-6">
-              <p className="text-sm text-muted-foreground">
-                Preparing your chat thread...
-              </p>
-            </div>
-          ) : !thread ? (
-            <div className="flex min-h-[460px] flex-col items-center justify-center gap-4 bg-secondary/40 p-6 text-center">
-              <p className="max-w-md text-sm text-muted-foreground">
-                Could not start a chat thread. Check that the backend is running
-                and your environment variables are set, then try again.
-              </p>
-              <Button onClick={() => void startThread()} type="button">
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <SplitLayout
-              chat={
-                <>
-                  <ChatThread
-                    messages={messages}
-                    loading={loading}
-                    submittedIntakeMessageIds={submittedIntakeMessageIds}
-                    onSuggestionSelect={handleSend}
-                    onIntakeSubmit={handleIntakeSubmit}
-                  />
-                  <ChatInput onSend={handleSend} disabled={loading} />
-                </>
-              }
-              panel={<PanelContainer />}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex overflow-hidden rounded-xl border bg-white shadow-sm">
+        <ThreadList
+          threads={threads}
+          activeThreadId={thread?.thread_id ?? null}
+          onSelect={(threadId) => void selectThread(threadId)}
+          onNewChat={() => void handleNewChat()}
+          onDelete={(threadId) => void handleDeleteThread(threadId)}
+        />
+
+        <Card className="min-w-0 flex-1 rounded-none border-0 shadow-none">
+          <CardHeader className="border-b bg-white">
+            <CardTitle>Chat</CardTitle>
+            <CardDescription>
+              {initializing
+                ? "Starting a new conversation..."
+                : thread?.title ?? "New conversation"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {initializing ? (
+              <div className="flex min-h-[460px] items-center justify-center bg-secondary/40 p-6">
+                <p className="text-sm text-muted-foreground">
+                  Preparing your chat thread...
+                </p>
+              </div>
+            ) : !thread ? (
+              <div className="flex min-h-[460px] flex-col items-center justify-center gap-4 bg-secondary/40 p-6 text-center">
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Could not start a chat thread. Check that the backend is
+                  running and your environment variables are set, then try
+                  again.
+                </p>
+                <Button onClick={() => void initializeWorkspace()} type="button">
+                  Retry
+                </Button>
+              </div>
+            ) : switchingThread ? (
+              <div className="flex min-h-[460px] items-center justify-center bg-secondary/40 p-6">
+                <p className="text-sm text-muted-foreground">
+                  Loading conversation...
+                </p>
+              </div>
+            ) : (
+              <SplitLayout
+                chat={
+                  <>
+                    <ChatThread
+                      messages={messages}
+                      loading={loading}
+                      submittedIntakeMessageIds={submittedIntakeMessageIds}
+                      onSuggestionSelect={handleSend}
+                      onIntakeSubmit={handleIntakeSubmit}
+                    />
+                    <ChatInput onSend={handleSend} disabled={chatDisabled} />
+                  </>
+                }
+                panel={<PanelContainer />}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

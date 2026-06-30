@@ -110,6 +110,39 @@ export type AnalyzeResponse = {
   product_id: number | null;
 };
 
+export type EFMatch = {
+  material_input: string;
+  sector_name: string;
+  sector_code: string;
+  ef_kg_co2e_per_usd: number;
+  country_used: string;
+  confidence_score: number;
+  is_low_confidence: boolean;
+  is_no_match: boolean;
+  source_citation: string;
+  suggested_alternatives: string[];
+};
+
+export type ParseBOMResponse = {
+  session_id: string;
+  phase: "bom_review";
+  bom: ParsedBom;
+};
+
+export type MatchFactorsResponse = {
+  session_id: string;
+  phase: "ef_review";
+  ef_matches: (EFMatch | null)[];
+  warnings: string[];
+};
+
+export type CalculateFootprintResponse = {
+  session_id: string;
+  phase: "calc_review";
+  result: FootprintResult;
+  critic_report: CriticReport;
+};
+
 export type Message = {
   role: "user" | "assistant";
   content: string;
@@ -301,6 +334,25 @@ export const api = {
       body: formData,
     });
   },
+  parseBom: (file: File, productName?: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (productName) formData.append("product_name", productName);
+    return request<ParseBOMResponse>("/api/analyze/parse", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  matchFactors: (sessionId: string) =>
+    request<MatchFactorsResponse>("/api/analyze/match-factors", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  calculateFootprint: (sessionId: string) =>
+    request<CalculateFootprintResponse>("/api/analyze/calculate", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
   saveAnalysis: (
     sessionId: string,
     productName: string,

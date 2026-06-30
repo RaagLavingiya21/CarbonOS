@@ -194,9 +194,77 @@ export async function sendMessage(
   );
 }
 
+export async function deleteThread(threadId: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/chat/threads/${threadId}`, {
+    method: "DELETE",
+  });
+}
+
+export interface ActivePanel {
+  panel_id: string;
+  user_id: string;
+  thread_id: string | null;
+  module_type: ModuleType;
+  panel_state: Record<string, unknown>;
+  tab_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePanelRequest {
+  module_type: ModuleType;
+  thread_id?: string | null;
+  panel_state?: Record<string, unknown>;
+  tab_order?: number;
+  is_active?: boolean;
+}
+
+export interface UpdatePanelRequest {
+  panel_state?: Record<string, unknown>;
+  tab_order?: number;
+  is_active?: boolean;
+}
+
+export async function listPanels(): Promise<ActivePanel[]> {
+  return request<ActivePanel[]>("/api/panels");
+}
+
+export async function createPanel(
+  body: CreatePanelRequest,
+): Promise<ActivePanel> {
+  return request<ActivePanel>("/api/panels", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updatePanel(
+  panelId: string,
+  body: UpdatePanelRequest,
+): Promise<ActivePanel> {
+  return request<ActivePanel>(`/api/panels/${panelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deletePanel(
+  panelId: string,
+): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>(`/api/panels/${panelId}`, {
+    method: "DELETE",
+  });
+}
+
 export const chatApi = {
   createThread,
   listThreads,
   getThread,
   sendMessage,
+  deleteThread,
+  listPanels,
+  createPanel,
+  updatePanel,
+  deletePanel,
 };
