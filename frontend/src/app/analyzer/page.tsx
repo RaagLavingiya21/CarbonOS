@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 import { AnalyzeResponse, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -71,15 +72,18 @@ export default function AnalyzerPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">BOM analyzer</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Upload a bill of materials
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Parse messy CSV BOM data, match emission factors, calculate Scope 3 Category 1 footprint, and keep every flagged assumption reviewable.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="analyzer"
+        icon={UploadCloud}
+        title="BOM Analyzer"
+        job="Estimate a product's footprint from its bill of materials."
+        steps={[
+          "Upload a BOM CSV",
+          "Review parsed rows and matched emission factors",
+          "Get the footprint and emission hotspots",
+        ]}
+        needs="A CSV with columns: component, material, quantity, spend_usd."
+      />
 
       {error ? (
         <Alert variant="destructive">

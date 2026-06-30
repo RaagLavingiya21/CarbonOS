@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { Bot, Send, User } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 import { Message, api } from "@/lib/api";
 
 export default function AdvisorPage() {
@@ -63,15 +63,18 @@ export default function AdvisorPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">Conversational advisor</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Ask carbon footprint questions
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          The advisor uses your saved analyses as context and answers through the FastAPI LLM endpoint.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="advisor"
+        icon={Bot}
+        title="Advisor"
+        job="Ask questions about your footprints and the GHG Protocol."
+        steps={[
+          "Ask in plain language",
+          "Grounded in your data plus the GHG Protocol",
+          "Every answer cites its sources",
+        ]}
+        needs="At least one saved analysis, to ask about your own data (optional)."
+      />
 
       {error ? (
         <Alert variant="destructive">

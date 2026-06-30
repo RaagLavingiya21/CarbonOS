@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, Play, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, FileSearch, Play, ShieldCheck } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import {
   GapReportResponse,
   api,
 } from "@/lib/api";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 
 export default function GapAnalysisPage() {
   const [profile, setProfile] = useState<CompanyProfile>({
@@ -98,15 +99,18 @@ export default function GapAnalysisPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">Human-in-the-loop</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Scope 3 gap analysis
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Generate a tool plan, execute each LangGraph step, and pause at checkpoints where an analyst should approve or stop the workflow.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="gap"
+        icon={FileSearch}
+        title="Scope 3 Gap Analyzer"
+        job="Assess your Scope 3 reporting readiness and find data gaps."
+        steps={[
+          "Describe your company",
+          "Review the generated assessment plan",
+          "Get data gaps and recommendations",
+        ]}
+        needs="Basic company details: size, sector, geography, and products."
+      />
 
       {error ? (
         <Alert variant="destructive">
