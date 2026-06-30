@@ -18,6 +18,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { CommandMenu } from "@/components/layout/CommandMenu";
+import { LandingPage } from "@/components/marketing/LandingPage";
 import { GlobalChatIcon } from "@/components/layout/GlobalChatIcon";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { WorkspaceBadge } from "@/components/layout/WorkspaceBadge";
@@ -45,6 +46,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const isPublicRoute = publicRoutes.includes(pathname);
+  // Logged-out visitors see the marketing landing page at "/"; logged-in
+  // visitors see the dashboard there.
+  const isLandingRoute = pathname === "/";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -65,21 +69,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const userEmail = data.session?.user.email ?? null;
       setEmail(userEmail);
       setCheckingAuth(false);
-      if (!userEmail && !isPublicRoute) router.replace("/login");
+      if (!userEmail && !isPublicRoute && !isLandingRoute) router.replace("/login");
       if (userEmail && isPublicRoute) router.replace("/");
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const userEmail = session?.user.email ?? null;
       setEmail(userEmail);
-      if (!userEmail && !isPublicRoute) router.replace("/login");
+      if (!userEmail && !isPublicRoute && !isLandingRoute) router.replace("/login");
     });
 
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [isPublicRoute, router, supabase]);
+  }, [isPublicRoute, isLandingRoute, router, supabase]);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -101,6 +105,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  // Logged-out visitor on "/" → marketing landing page (no app chrome).
+  if (!email && isLandingRoute) {
+    return <LandingPage />;
   }
 
   if (!email) return null;
