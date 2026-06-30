@@ -1,3 +1,15 @@
+from db.chat_store import (
+    ChatMessage,
+    ChatThread,
+    create_message,
+    create_thread,
+    delete_thread,
+    get_thread,
+    list_messages,
+    list_threads,
+    touch_thread,
+    update_thread_title,
+)
 from db.copilot_store import (
     AuditEntry,
     Engagement,
@@ -12,6 +24,35 @@ from db.copilot_store import (
     get_supplier_by_name,
     init_copilot_db,
     update_engagement,
+)
+from db.memory_store import (
+    OrgMemory,
+    UserMemory,
+    create_org_memory,
+    create_user_memory,
+    delete_org_memory,
+    delete_user_memory,
+    list_org_memory,
+    list_user_memory,
+    update_org_memory,
+    update_user_memory,
+)
+from db.org_store import (
+    Organization,
+    OrgMember,
+    add_member,
+    create_org,
+    get_user_org,
+    list_members,
+    remove_member,
+)
+from db.panel_store import (
+    ActivePanel,
+    create_panel,
+    delete_panel,
+    get_panel,
+    list_panels,
+    update_panel,
 )
 from db.reader import (
     build_llm_context,
@@ -44,4 +85,41 @@ __all__ = [
     "Supplier",
     "Engagement",
     "AuditEntry",
+    # chat
+    "ChatThread",
+    "ChatMessage",
+    "create_thread",
+    "list_threads",
+    "get_thread",
+    "update_thread_title",
+    "touch_thread",
+    "delete_thread",
+    "create_message",
+    "list_messages",
+    # memory
+    "UserMemory",
+    "OrgMemory",
+    "create_user_memory",
+    "list_user_memory",
+    "update_user_memory",
+    "delete_user_memory",
+    "create_org_memory",
+    "list_org_memory",
+    "update_org_memory",
+    "delete_org_memory",
+    # panels
+    "ActivePanel",
+    "create_panel",
+    "list_panels",
+    "get_panel",
+    "update_panel",
+    "delete_panel",
+    # organizations
+    "Organization",
+    "OrgMember",
+    "create_org",
+    "add_member",
+    "remove_member",
+    "get_user_org",
+    "list_members",
 ]
