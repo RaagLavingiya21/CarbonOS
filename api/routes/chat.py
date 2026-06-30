@@ -72,7 +72,8 @@ async def _generate_thread_title(
     if not os.getenv("ANTHROPIC_API_KEY", "").strip():
         return None
 
-    client = anthropic.AsyncAnthropic()
+    api_key = os.environ["ANTHROPIC_API_KEY"].strip()
+    client = anthropic.AsyncAnthropic(api_key=api_key)
     t0 = time.perf_counter()
     try:
         response = await client.messages.create(

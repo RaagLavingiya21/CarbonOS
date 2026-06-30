@@ -26,6 +26,8 @@ jobs:
         run: ruff check --ignore E501 evals tests calc parsing factors api llm copilot gap_analyzer rag db observability
 
       - name: Unit tests
+        env:
+          ANTHROPIC_API_KEY: ""
         run: pytest tests -v
 
       - name: Golden-file evals

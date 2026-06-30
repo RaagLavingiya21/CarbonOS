@@ -32,3 +32,21 @@ def use_memory_checkpointer(monkeypatch: pytest.MonkeyPatch) -> None:
     gap_graph._gap_analyzer_graph = None
     copilot_graph._email_draft_graph = None
     copilot_graph._response_routing_graph = None
+
+
+@pytest.fixture(autouse=True)
+def disable_live_thread_title_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid real Anthropic calls during API tests (CI may inject repo secrets)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+
+    async def fake_generate_thread_title(
+        first_message: str,
+        *,
+        session_id: str | None = None,
+    ) -> str | None:
+        return None
+
+    monkeypatch.setattr(
+        "api.routes.chat._generate_thread_title",
+        fake_generate_thread_title,
+    )
