@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -24,6 +25,15 @@ _DEV_ORIGINS = (
     "http://127.0.0.1:3000",
 )
 
+# Localhost dev (any port) plus all Vercel deployments for this project:
+# the production alias and per-branch/per-commit preview URLs (e.g.
+# carbon-os-git-<branch>-<team>.vercel.app). Auth is via Bearer token, not
+# cookies, so a broad vercel.app match is safe here.
+_CORS_ORIGIN_REGEX = re.compile(
+    r"http://(localhost|127\.0\.0\.1):\d+"
+    r"|https://[a-z0-9-]+\.vercel\.app"
+)
+
 
 def _cors_origins() -> list[str]:
     """Allowed browser origins: FRONTEND_URL in production, localhost for dev."""
@@ -32,6 +42,11 @@ def _cors_origins() -> list[str]:
     if frontend_url and frontend_url not in origins:
         origins.append(frontend_url)
     return origins
+
+
+def _origin_allowed(origin: str) -> bool:
+    """Whether a browser Origin is permitted (explicit list or regex)."""
+    return origin in _cors_origins() or bool(_CORS_ORIGIN_REGEX.fullmatch(origin))
 
 
 @asynccontextmanager
@@ -53,14 +68,7 @@ app.add_middleware(SupabaseAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    # Allow localhost dev (any port) and all Vercel deployments for this
-    # project: the production alias plus per-branch/per-commit preview URLs
-    # (e.g. carbon-os-git-<branch>-<team>.vercel.app). Auth is via Bearer
-    # token, not cookies, so a broad vercel.app match is safe here.
-    allow_origin_regex=(
-        r"http://(localhost|127\.0\.0\.1):\d+"
-        r"|https://[a-z0-9-]+\.vercel\.app"
-    ),
+    allow_origin_regex=_CORS_ORIGIN_REGEX.pattern,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,19 +77,30 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Return unhandled errors as JSON so the browser sees a real message.
+    """Return unhandled errors as JSON with CORS headers so the browser
+    sees the real message.
 
-    Without this, a crash bubbles up to Starlette's ServerErrorMiddleware
-    (outside CORSMiddleware), so the 500 lacks CORS headers and the browser
-    masks it as an "Access-Control-Allow-Origin" failure. Returning a
-    JSONResponse here keeps the response inside the CORS layer.
+    A catch-all Exception handler runs inside Starlette's
+    ServerErrorMiddleware, which sits OUTSIDE CORSMiddleware, so the 500 it
+    produces would otherwise lack CORS headers and the browser would mask
+    the real error as an "Access-Control-Allow-Origin" failure. We attach
+    the CORS headers manually here, mirroring the configured allow rules.
     """
     logger.exception(
         "Unhandled error on %s %s", request.method, request.url.path
     )
+
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    if origin and _origin_allowed(origin):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+
     return JSONResponse(
         status_code=500,
         content={"detail": f"Internal server error: {type(exc).__name__}: {exc}"},
+        headers=headers,
     )
 
 
