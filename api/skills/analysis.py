@@ -6,7 +6,7 @@ from typing import Any
 
 from api.agent.intake_forms import get_intake_form
 from api.skills.base import Skill
-from db.org_store import get_active_org, get_active_org_member_ids
+from db.org_store import get_active_org
 from db.reader import (
     get_all_products,
     get_product_by_id,

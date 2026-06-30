@@ -15,13 +15,13 @@ from fastapi.responses import StreamingResponse
 from api.agent.graph import ainvoke_agent
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
+    ChatMessageDTO,
     ChatThreadDTO,
     CreateThreadRequest,
     DeleteThreadResponse,
     SendMessageRequest,
     SendMessageResponse,
     ThreadDetailResponse,
-    ChatMessageDTO,
 )
 from db import chat_store
 from observability.logger import log_llm_call

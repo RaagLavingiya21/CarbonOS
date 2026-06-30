@@ -9,8 +9,8 @@ from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
     AddMemberRequest,
     CreateOrgRequest,
-    OrgDetailResponse,
     OrganizationDTO,
+    OrgDetailResponse,
     OrgMemberDTO,
     RemoveMemberResponse,
     SetActiveOrgRequest,
