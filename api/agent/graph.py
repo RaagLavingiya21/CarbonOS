@@ -18,6 +18,7 @@ from api.agent.state import AgentState
 from api.agent.system_prompt import build_system_prompt
 from api.skills.registry import registry
 from db.chat_store import create_message, touch_thread
+from db.database_url import get_database_url
 from db.memory_store import create_user_memory
 from observability.logger import log_llm_call
 
@@ -87,7 +88,7 @@ def _build_workflow() -> StateGraph:
 async def _get_checkpointer() -> AsyncPostgresSaver:
     global _checkpointer, _checkpointer_cm
     if _checkpointer is None:
-        db_url = os.getenv("DATABASE_URL")
+        db_url = get_database_url()
         if not db_url:
             raise RuntimeError(
                 "DATABASE_URL is required for the agent graph PostgresSaver checkpointer"

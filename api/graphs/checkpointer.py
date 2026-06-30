@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import ExitStack
 from typing import Any
 
 from dotenv import load_dotenv
 from langgraph.checkpoint.memory import MemorySaver
+
+from db.database_url import get_database_url
 
 load_dotenv()
 
@@ -19,7 +20,7 @@ def get_checkpointer():
     """Return a LangGraph checkpointer backed by Supabase Postgres when configured."""
     global _checkpointer
     if _checkpointer is None:
-        db_url = os.getenv("DATABASE_URL")
+        db_url = get_database_url()
         if db_url:
             from langgraph.checkpoint.postgres import PostgresSaver
 
