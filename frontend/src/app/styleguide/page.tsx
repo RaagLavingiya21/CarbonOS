@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BreakdownTable } from "@/components/data/BreakdownTable";
+import { ConfidenceBadge } from "@/components/data/ConfidenceBadge";
+import { HotspotBar } from "@/components/data/HotspotBar";
+import { MetricCard } from "@/components/data/MetricCard";
+import { SourceCitation } from "@/components/data/SourceCitation";
 import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 
 export default function StyleGuidePage() {
@@ -233,6 +239,77 @@ export default function StyleGuidePage() {
               <p className="text-small font-medium">data-info</p>
             </div>
           </div>
+        </section>
+
+        {/* Data components — the auditable-numbers system */}
+        <section className="space-y-6">
+          <h2 className="text-h2 font-display">Data components</h2>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MetricCard
+              label="Total footprint"
+              value="247.31"
+              unit="kg CO₂e"
+              hint="Scope 3 Cat. 1, cradle-to-gate"
+            />
+            <MetricCard label="Matched items" value={12} hint="Included in total" />
+            <MetricCard label="Flagged items" value={3} hint="Need human review" />
+          </div>
+
+          <div className="space-y-4 rounded-lg border p-4">
+            <HotspotBar label="Outer shell" sublabel="nylon" sharePct={46.2} value="114.2 kg" emphasized />
+            <HotspotBar label="Frame" sublabel="aluminum" sharePct={28.7} value="71.0 kg" />
+            <HotspotBar label="Lining" sublabel="polyester" sharePct={11.4} value="28.2 kg" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <ConfidenceBadge score={92} />
+            <ConfidenceBadge score={68} />
+            <ConfidenceBadge score={41} />
+            <ConfidenceBadge score={null} />
+            <SourceCitation source="Open CEDA 2025, Apparel manufacturing, USA" />
+            <Tooltip content="Hover tooltip example">
+              <span className="text-small underline decoration-dotted">hover me</span>
+            </Tooltip>
+          </div>
+
+          <BreakdownTable
+            rows={[
+              {
+                rowIndex: 0,
+                component: "Outer shell",
+                material: "nylon",
+                spendUsd: 4200,
+                sector: "Synthetic fibers manufacturing",
+                efSource: "Open CEDA 2025, Synthetic fibers, USA",
+                confidence: 92,
+                kgCo2e: 114.2,
+                sharePct: 46.2,
+              },
+              {
+                rowIndex: 1,
+                component: "Frame",
+                material: "aluminum",
+                spendUsd: 2600,
+                sector: "Aluminum manufacturing",
+                efSource: "Open CEDA 2025, Aluminum, USA",
+                confidence: 68,
+                kgCo2e: 71.0,
+                sharePct: 28.7,
+              },
+              {
+                rowIndex: 2,
+                component: "Zipper",
+                material: "unknown alloy",
+                spendUsd: 320,
+                sector: null,
+                efSource: null,
+                confidence: null,
+                kgCo2e: null,
+                sharePct: null,
+              },
+            ]}
+          />
         </section>
       </div>
     </div>
