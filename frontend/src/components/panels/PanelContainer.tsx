@@ -28,7 +28,7 @@ export function PanelContainer() {
     MODULE_LABELS[activePanel.module_type] ?? activePanel.module_type;
 
   return (
-    <div className="flex h-full min-h-[460px] flex-col bg-white">
+    <div className="flex h-full min-h-[460px] flex-col bg-card">
       <PanelTabs />
       <div className="flex flex-1 flex-col overflow-y-auto p-4">
         {activePanel.module_type === "bom_analyzer" ? (

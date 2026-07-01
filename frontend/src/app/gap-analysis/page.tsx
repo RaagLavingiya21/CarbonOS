@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardList, Play, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, FileSearch, Play, ShieldCheck } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import {
   GapReportResponse,
   api,
 } from "@/lib/api";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 
 export default function GapAnalysisPage() {
   const [profile, setProfile] = useState<CompanyProfile>({
@@ -98,15 +99,18 @@ export default function GapAnalysisPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">Human-in-the-loop</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Scope 3 gap analysis
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Generate a tool plan, execute each LangGraph step, and pause at checkpoints where an analyst should approve or stop the workflow.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="gap"
+        icon={FileSearch}
+        title="Scope 3 Gap Analyzer"
+        job="Assess your Scope 3 reporting readiness and find data gaps."
+        steps={[
+          "Describe your company",
+          "Review the generated assessment plan",
+          "Get data gaps and recommendations",
+        ]}
+        needs="Basic company details: size, sector, geography, and products."
+      />
 
       {error ? (
         <Alert variant="destructive">
@@ -161,7 +165,7 @@ export default function GapAnalysisPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {plan.plan.steps.map((step, index) => (
-                  <div key={step.step_num} className="flex gap-4 rounded-xl border bg-white p-4">
+                  <div key={step.step_num} className="flex gap-4 rounded-xl border bg-card p-4">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                       {index + 1}
                     </div>
@@ -232,7 +236,7 @@ export default function GapAnalysisPage() {
               <CheckCircle2 className="h-4 w-4" />
               <AlertTitle>Gap analysis complete</AlertTitle>
               <AlertDescription>
-                <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-lg bg-white p-4 text-xs text-foreground">
+                <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-lg bg-card p-4 text-xs text-foreground">
                   {report.markdown}
                 </pre>
               </AlertDescription>

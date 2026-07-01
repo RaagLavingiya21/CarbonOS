@@ -64,18 +64,18 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_32rem),linear-gradient(180deg,_#f8fafc,_#eef6f3)] px-4 py-12">
-      <Card className="w-full max-w-md border-white/70 bg-white/90 shadow-soft backdrop-blur">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+      <Card className="w-full max-w-md shadow-xs">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-            <Leaf className="h-6 w-6" />
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Leaf className="h-5 w-5" />
           </div>
-          <CardTitle className="text-2xl">
+          <CardTitle className="text-h2">
             {isSignup ? "Create your workspace" : "Welcome back"}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-body">
             {isSignup
-              ? "Use Supabase Auth to start tracking product carbon footprints."
+              ? "Start turning bills of materials into auditable product footprints."
               : "Sign in to continue to your Scope 3 analysis workspace."}
           </CardDescription>
         </CardHeader>

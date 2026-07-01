@@ -300,7 +300,7 @@ export function BOMPanel({ panel, onClose, onStateChange }: BOMPanelProps) {
                   </thead>
                   <tbody>
                     {bom.rows.map((row) => (
-                      <tr key={row.row_index} className="border-t bg-white">
+                      <tr key={row.row_index} className="border-t bg-card">
                         <td className="px-4 py-3">{row.row_index + 1}</td>
                         <td className="px-4 py-3">{row.component ?? "-"}</td>
                         <td className="px-4 py-3">{row.material ?? "-"}</td>
@@ -370,7 +370,7 @@ export function BOMPanel({ panel, onClose, onStateChange }: BOMPanelProps) {
               {efMatches.map((match, index) => (
                 <div
                   key={index}
-                  className="rounded-xl border bg-white p-4 text-sm"
+                  className="rounded-xl border bg-card p-4 text-sm"
                 >
                   {match ? (
                     <>
@@ -534,7 +534,7 @@ export function BOMPanel({ panel, onClose, onStateChange }: BOMPanelProps) {
                     </thead>
                     <tbody>
                       {result.line_items.map((item) => (
-                        <tr key={item.row_index} className="border-t bg-white">
+                        <tr key={item.row_index} className="border-t bg-card">
                           <td className="px-4 py-3">{item.component ?? "-"}</td>
                           <td className="px-4 py-3">{item.material ?? "-"}</td>
                           <td className="px-4 py-3">{item.sector_name}</td>

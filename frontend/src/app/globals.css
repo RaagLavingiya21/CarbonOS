@@ -2,28 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Editorial design direction — warm, calm, trustworthy.
+ * Inspiration: Watershed + Claude. See DESIGN.md.
+ */
+
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 160 84% 28%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 214 32% 91%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 166 76% 94%;
-    --accent-foreground: 167 85% 20%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 160 84% 28%;
-    --radius: 0.9rem;
+    /* ── Surfaces & ink ─────────────────────────────────────────── */
+    --background: 40 33% 98%;        /* warm paper canvas */
+    --foreground: 165 28% 13%;       /* deep forest ink */
+    --card: 40 25% 99%;
+    --card-foreground: 165 28% 13%;
+    --popover: 40 25% 99%;
+    --popover-foreground: 165 28% 13%;
+
+    /* ── Brand (used sparingly, primary actions only) ───────────── */
+    --primary: 160 58% 24%;          /* sophisticated deep green */
+    --primary-foreground: 40 33% 98%;
+
+    --secondary: 40 20% 94%;
+    --secondary-foreground: 165 24% 18%;
+    --muted: 40 18% 93%;
+    --muted-foreground: 165 10% 42%;
+    --accent: 155 32% 92%;
+    --accent-foreground: 162 48% 22%;
+
+    --destructive: 8 58% 47%;
+    --destructive-foreground: 40 33% 98%;
+
+    /* ── Lines ──────────────────────────────────────────────────── */
+    --border: 40 16% 88%;            /* hairline, low contrast */
+    --input: 40 16% 86%;
+    --ring: 160 58% 30%;
+
+    /* ── Semantic data palette (emission tiers + states) ────────── */
+    --data-low: 150 52% 32%;         /* low emission / good */
+    --data-low-bg: 150 40% 94%;
+    --data-medium: 36 78% 44%;       /* medium / warning */
+    --data-medium-bg: 38 80% 93%;
+    --data-high: 12 68% 47%;         /* hotspot / high */
+    --data-high-bg: 12 70% 95%;
+    --data-neutral: 165 8% 48%;
+    --data-neutral-bg: 165 12% 94%;
+    --data-info: 192 46% 38%;
+    --data-info-bg: 192 45% 93%;
+
+    /* ── Typography ─────────────────────────────────────────────── */
+    --font-serif: "Newsreader", "Iowan Old Style", "Palatino Linotype",
+      "Palatino", "Georgia", ui-serif, serif;
+    --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", sans-serif;
+    --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+    /* ── Motion ─────────────────────────────────────────────────── */
+    --ease-out: cubic-bezier(0.2, 0, 0, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-micro: 120ms;
+    --dur: 200ms;
+    --dur-panel: 320ms;
+
+    /* ── Shape & elevation ──────────────────────────────────────── */
+    --radius: 0.625rem;
+    --shadow-xs: 0 1px 2px -1px hsl(165 28% 13% / 0.08),
+      0 1px 1px hsl(165 28% 13% / 0.04);
+    --shadow-overlay: 0 16px 40px -12px hsl(165 28% 13% / 0.22),
+      0 4px 12px -4px hsl(165 28% 13% / 0.12);
+  }
+
+  .dark {
+    --background: 165 28% 8%;
+    --foreground: 40 20% 92%;
+    --card: 165 24% 11%;
+    --card-foreground: 40 20% 92%;
+    --popover: 165 24% 11%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 150 48% 46%;
+    --primary-foreground: 165 30% 8%;
+
+    --secondary: 165 18% 16%;
+    --secondary-foreground: 40 18% 88%;
+    --muted: 165 16% 16%;
+    --muted-foreground: 165 10% 60%;
+    --accent: 162 30% 18%;
+    --accent-foreground: 150 40% 80%;
+
+    --destructive: 8 56% 52%;
+    --destructive-foreground: 40 20% 92%;
+
+    --border: 165 14% 20%;
+    --input: 165 14% 22%;
+    --ring: 150 48% 50%;
+
+    --data-low: 150 46% 52%;
+    --data-low-bg: 150 30% 16%;
+    --data-medium: 38 72% 56%;
+    --data-medium-bg: 36 40% 16%;
+    --data-high: 12 64% 58%;
+    --data-high-bg: 12 40% 16%;
+    --data-neutral: 165 8% 62%;
+    --data-neutral-bg: 165 10% 18%;
+    --data-info: 192 44% 56%;
+    --data-info-bg: 192 35% 16%;
+
+    --shadow-xs: 0 1px 2px -1px hsl(0 0% 0% / 0.4), 0 1px 1px hsl(0 0% 0% / 0.3);
+    --shadow-overlay: 0 16px 40px -12px hsl(0 0% 0% / 0.55),
+      0 4px 12px -4px hsl(0 0% 0% / 0.4);
   }
 
   * {
@@ -32,6 +117,22 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Editorial headings: serif display, tight. */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+
+  /* Tabular figures for any numeric/data context. */
+  .tabular-nums,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
   }
 }
 
@@ -39,8 +140,18 @@
   .text-balance {
     text-wrap: balance;
   }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+}
 
-  .glass-card {
-    @apply border border-white/70 bg-white/80 shadow-soft backdrop-blur;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

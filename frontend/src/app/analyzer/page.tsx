@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 import { AnalyzeResponse, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -71,15 +72,18 @@ export default function AnalyzerPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">BOM analyzer</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Upload a bill of materials
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Parse messy CSV BOM data, match emission factors, calculate Scope 3 Category 1 footprint, and keep every flagged assumption reviewable.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="analyzer"
+        icon={UploadCloud}
+        title="BOM Analyzer"
+        job="Estimate a product's footprint from its bill of materials."
+        steps={[
+          "Upload a BOM CSV",
+          "Review parsed rows and matched emission factors",
+          "Get the footprint and emission hotspots",
+        ]}
+        needs="A CSV with columns: component, material, quantity, spend_usd."
+      />
 
       {error ? (
         <Alert variant="destructive">
@@ -138,13 +142,13 @@ export default function AnalyzerPage() {
           ) : analysis ? (
             <>
               <section className="grid gap-4 md:grid-cols-4">
-                <Card className="glass-card md:col-span-2">
+                <Card className="md:col-span-2">
                   <CardHeader>
                     <CardDescription>Total footprint</CardDescription>
                     <CardTitle className="text-3xl">{formatKg(analysis.result.total_kg_co2e)}</CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="glass-card">
+                <Card className="">
                   <CardHeader>
                     <CardDescription>Completeness</CardDescription>
                     <CardTitle className="text-3xl">{formatPct(analysis.result.completeness_pct)}</CardTitle>
@@ -153,7 +157,7 @@ export default function AnalyzerPage() {
                     <Progress value={analysis.result.completeness_pct} />
                   </CardContent>
                 </Card>
-                <Card className="glass-card">
+                <Card className="">
                   <CardHeader>
                     <CardDescription>Flagged items</CardDescription>
                     <CardTitle className="text-3xl">{analysis.result.flagged_count}</CardTitle>
@@ -230,7 +234,7 @@ export default function AnalyzerPage() {
                       </thead>
                       <tbody>
                         {analysis.result.line_items.map((item) => (
-                          <tr key={item.row_index} className="border-t bg-white">
+                          <tr key={item.row_index} className="border-t bg-card">
                             <td className="px-4 py-3">{item.component ?? "-"}</td>
                             <td className="px-4 py-3">{item.material ?? "-"}</td>
                             <td className="px-4 py-3">{item.supplier ?? "-"}</td>

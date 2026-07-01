@@ -6,17 +6,24 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
+  FileSearch,
   FileUp,
+  Factory,
   Flame,
   GitCompare,
   HelpCircle,
   Mail,
+  MessageSquare,
   Search,
   Send,
+  UploadCloud,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { MODULE_BUTTONS } from "@/components/chat/ModuleButtons";
+import {
+  ModuleFlipCard,
+  type ModuleFlipCardData,
+} from "@/components/dashboard/ModuleFlipCard";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -75,6 +82,65 @@ const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
   },
 ];
 
+const MODULE_FLIP_CARDS: ModuleFlipCardData[] = [
+  {
+    name: "Analyzer",
+    icon: UploadCloud,
+    job: "Estimate a product's footprint from its BOM.",
+    problem:
+      "Bills of materials are messy, and there's no easy way to get a Scope 3 number out of them.",
+    steps: [
+      "Parse & clean the uploaded BOM",
+      "Match each line to an emission factor",
+      "Calculate the footprint & rank hotspots",
+    ],
+    ctaLabel: "Analyze a BOM",
+    message: "I want to analyze a bill of materials",
+  },
+  {
+    name: "Gap Analyzer",
+    icon: FileSearch,
+    job: "Find what's missing in your Scope 3 data.",
+    problem:
+      "You can't improve what you can't measure — and data gaps hide your biggest risks.",
+    steps: [
+      "Assess your reporting requirements",
+      "Score what's material",
+      "Surface data gaps & next steps",
+    ],
+    ctaLabel: "Check my gaps",
+    message: "Check my Scope 3 gaps",
+  },
+  {
+    name: "Supplier Copilot",
+    icon: Factory,
+    job: "Engage the right suppliers first.",
+    problem:
+      "Supplier outreach is slow and unfocused; you need to start with the highest-impact ones.",
+    steps: [
+      "Rank suppliers by emission impact",
+      "Draft a GHG-grounded data request",
+      "Track responses",
+    ],
+    ctaLabel: "Start engagement",
+    message: "Draft a supplier email",
+  },
+  {
+    name: "Advisor",
+    icon: MessageSquare,
+    job: "Ask anything about your footprints & the GHG Protocol.",
+    problem:
+      "Methodology questions and your own data live in different places.",
+    steps: [
+      "Ask in plain language",
+      "Grounded in your data + GHG Protocol",
+      "Answers cite their sources",
+    ],
+    ctaLabel: "Open chat",
+    message: "What can you help me with?",
+  },
+];
+
 function sortThreadsByUpdatedAt(threads: ChatThread[]): ChatThread[] {
   return [...threads].sort(
     (left, right) =>
@@ -120,25 +186,25 @@ export default function Home() {
   );
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-8">
+    <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-10">
       <section className="space-y-3 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+        <h1 className="text-h1 font-medium text-balance md:text-display">
           Carbon footprint assistant
         </h1>
-        <p className="mx-auto max-w-xl text-muted-foreground">
+        <p className="mx-auto max-w-xl text-body-lg text-muted-foreground text-pretty">
           Ask questions, analyze bills of materials, and explore Scope 3 hotspots
           — all from one conversation.
         </p>
       </section>
 
       <section className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 rounded-2xl border bg-white px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-2 shadow-xs transition-shadow duration-micro focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
           <Input
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything about your product footprints..."
-            className="border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
+            placeholder="Ask anything about your product footprints…"
+            className="border-0 bg-transparent text-body shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <Button
             type="button"
@@ -162,7 +228,7 @@ export default function Home() {
               onClick={() => navigateToChat(message)}
               className="group text-left"
             >
-              <Card className="h-full transition hover:border-primary/40 hover:shadow-md">
+              <Card className="h-full transition-[border-color,box-shadow,transform] duration-micro ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-xs">
                 <CardHeader className="pb-2">
                   <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
@@ -183,26 +249,9 @@ export default function Home() {
           Or start with a module
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {MODULE_BUTTONS.map(
-            ({ homeLabel, description, icon: Icon, message }) => (
-              <button
-                key={homeLabel}
-                type="button"
-                onClick={() => navigateToChat(message)}
-                className="group text-left"
-              >
-                <Card className="h-full transition hover:border-primary/40 hover:shadow-md">
-                  <CardHeader>
-                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <CardTitle className="text-base">{homeLabel}</CardTitle>
-                    <CardDescription className="text-xs">{description}</CardDescription>
-                  </CardHeader>
-                </Card>
-              </button>
-            ),
-          )}
+          {MODULE_FLIP_CARDS.map((module) => (
+            <ModuleFlipCard key={module.name} {...module} />
+          ))}
         </div>
       </section>
 

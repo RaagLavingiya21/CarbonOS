@@ -35,7 +35,7 @@ function TypingIndicator() {
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
         <Bot className="h-4 w-4" />
       </div>
-      <div className="rounded-2xl bg-white px-4 py-3 text-sm shadow-sm">
+      <div className="rounded-2xl bg-card px-4 py-3 text-sm shadow-xs">
         <span className="inline-flex items-center gap-1">
           <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />

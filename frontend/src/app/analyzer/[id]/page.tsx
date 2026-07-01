@@ -7,6 +7,7 @@ import { ArrowLeft, Download, FileWarning } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import {
   Card,
   CardContent,
@@ -14,10 +15,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { HotspotBar } from "@/components/data/HotspotBar";
+import { MetricCard } from "@/components/data/MetricCard";
+import { SourceCitation } from "@/components/data/SourceCitation";
+import { Term } from "@/components/data/Term";
 import { AnalysisDetail, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
-import { formatKg, formatPct } from "@/lib/utils";
+import { formatKg } from "@/lib/utils";
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
@@ -61,20 +66,21 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       </Button>
 
       {loading ? (
-        <Card>
-          <CardContent className="p-8">
-            <div className="h-8 w-64 animate-pulse rounded bg-secondary" />
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="h-28 animate-pulse rounded-xl bg-secondary" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Skeleton className="h-9 w-64" />
+          <div className="grid gap-4 md:grid-cols-3">
+            {[1, 2, 3].map((item) => (
+              <Skeleton key={item} className="h-24 rounded-lg" />
+            ))}
+          </div>
+          <Skeleton className="h-64 rounded-lg" />
+        </div>
       ) : error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ErrorState
+          title="Couldn't load this analysis"
+          message={error}
+          onRetry={() => window.location.reload()}
+        />
       ) : analysis ? (
         <>
           <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -82,8 +88,10 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               <Badge variant={analysis.status === "flagged" ? "destructive" : "secondary"}>
                 {analysis.status ?? "saved"}
               </Badge>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight">{analysis.product_name}</h1>
-              <p className="mt-2 text-muted-foreground">Analysis date: {analysis.analysis_date}</p>
+              <h1 className="mt-3 text-h1">{analysis.product_name}</h1>
+              <p className="mt-2 text-small text-muted-foreground">
+                Analysis date: {analysis.analysis_date}
+              </p>
             </div>
             <Button variant="outline" onClick={exportCsv} disabled={exporting}>
               <Download className="h-4 w-4" />
@@ -99,50 +107,56 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
           ) : null}
 
           <section className="grid gap-4 md:grid-cols-3">
-            <Card className="glass-card">
-              <CardHeader>
-                <CardDescription>Total footprint</CardDescription>
-                <CardTitle className="text-3xl">{formatKg(analysis.total_kg_co2e)}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card className="glass-card">
-              <CardHeader>
-                <CardDescription>Matched line items</CardDescription>
-                <CardTitle className="text-3xl">{analysis.matched_items}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card className="glass-card">
-              <CardHeader>
-                <CardDescription>Flagged line items</CardDescription>
-                <CardTitle className="text-3xl">{analysis.flagged_items}</CardTitle>
-              </CardHeader>
-            </Card>
+            <MetricCard
+              label="Total footprint"
+              value={formatKg(analysis.total_kg_co2e)}
+              unit="kg CO₂e"
+              hint={
+                <>
+                  <Term name="scope 3 category 1">Scope 3 Category 1</Term>,{" "}
+                  <Term name="cradle-to-gate">cradle-to-gate</Term>
+                </>
+              }
+            />
+            <MetricCard label="Matched line items" value={analysis.matched_items} hint="Included in total" />
+            <MetricCard label="Flagged line items" value={analysis.flagged_items} hint="Need human review" />
           </section>
 
           <Card>
             <CardHeader>
-              <CardTitle>Emission breakdown</CardTitle>
-              <CardDescription>Line-item contribution to total product footprint.</CardDescription>
+              <CardTitle>Emission hotspots</CardTitle>
+              <CardDescription>
+                Line-item contribution to the total footprint, largest first. Each{" "}
+                <Term name="hotspot">hotspot</Term> shows the{" "}
+                <Term name="emission factor">emission factor</Term> source it used.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {analysis.line_items.map((item) => (
-                <div key={`${item.component}-${item.material}`} className="rounded-xl border p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-medium">{item.component ?? "Unnamed component"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.material ?? "Unknown material"} {"->"} {item.matched_sector ?? "No factor"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{formatKg(item.kg_co2e)}</p>
-                      <p className="text-sm text-muted-foreground">{formatPct(item.share_pct)}</p>
+              {[...analysis.line_items]
+                .filter((item) => item.kg_co2e != null)
+                .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
+                .map((item, index) => (
+                  <div key={`${item.component}-${item.material}-${index}`} className="space-y-1.5">
+                    <HotspotBar
+                      label={item.component ?? "Unnamed component"}
+                      sublabel={item.material ?? undefined}
+                      sharePct={item.share_pct ?? 0}
+                      value={`${formatKg(item.kg_co2e)} kg`}
+                      emphasized={index === 0}
+                    />
+                    <div className="flex items-center justify-between gap-2 pl-0.5">
+                      <span className="truncate text-caption text-muted-foreground">
+                        {item.matched_sector ?? "unmatched"}
+                      </span>
+                      {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
                     </div>
                   </div>
-                  <Progress className="mt-3" value={Math.min(item.share_pct ?? 0, 100)} />
-                  <p className="mt-2 text-xs text-muted-foreground">{item.ef_source ?? "No source cited"}</p>
-                </div>
-              ))}
+                ))}
+              {analysis.line_items.every((item) => item.kg_co2e == null) ? (
+                <p className="py-6 text-center text-small text-muted-foreground">
+                  No matched line items to chart yet.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         </>

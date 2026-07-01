@@ -23,6 +23,7 @@ import {
   SuppliersListResponse,
   api,
 } from "@/lib/api";
+import { ModuleIntro } from "@/components/modules/ModuleIntro";
 import { formatKg, formatPct } from "@/lib/utils";
 
 export default function SuppliersPage() {
@@ -107,15 +108,18 @@ export default function SuppliersPage() {
 
   return (
     <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">Supplier engagement</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Supplier copilot
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Identify high-impact suppliers, draft auditable outreach, create engagement records, and route supplier responses through the backend graph.
-        </p>
-      </section>
+      <ModuleIntro
+        moduleKey="suppliers"
+        icon={Factory}
+        title="Supplier Engagement Copilot"
+        job="Prioritize and reach out to your highest-impact suppliers."
+        steps={[
+          "Pick a saved product",
+          "Rank suppliers by emission impact",
+          "Draft a GHG-grounded data request",
+        ]}
+        needs="A saved product analysis with supplier line items."
+      />
 
       {error ? (
         <Alert variant="destructive">
@@ -169,7 +173,7 @@ export default function SuppliersPage() {
                     {suppliers.candidates.map((candidate) => (
                       <button
                         key={`${candidate.supplier_name}-${candidate.component}`}
-                        className={`rounded-xl border bg-white p-4 text-left transition hover:border-primary ${selected?.supplier_name === candidate.supplier_name ? "border-primary ring-2 ring-primary/20" : ""}`}
+                        className={`rounded-xl border bg-card p-4 text-left transition hover:border-primary ${selected?.supplier_name === candidate.supplier_name ? "border-primary ring-2 ring-primary/20" : ""}`}
                         onClick={() => {
                           setSelected(candidate);
                           setDraft(null);
@@ -233,7 +237,7 @@ export default function SuppliersPage() {
                   </Alert>
                 ) : null}
                 {draft?.draft ? (
-                  <div className="space-y-3 rounded-xl border bg-white p-4">
+                  <div className="space-y-3 rounded-xl border bg-card p-4">
                     <div>
                       <Label>To</Label>
                       <p className="mt-1 text-sm">{draft.draft.to}</p>

@@ -30,7 +30,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex flex-col gap-3 border-t bg-white p-4">
+    <div className="flex flex-col gap-3 border-t bg-card p-4">
       <form
         ref={formRef}
         className="flex flex-col gap-3 md:flex-row"
