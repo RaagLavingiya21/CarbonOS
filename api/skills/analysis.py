@@ -74,6 +74,10 @@ class AnalysisSkill(Skill):
                     "user has an org); 'personal' restricts to the current user's products."
                 ),
             },
+            "status": {
+                "type": "string",
+                "description": "Filter products by lifecycle status (e.g. approved, published).",
+            },
             "user_id": {
                 "type": "string",
                 "description": "Authenticated user ID (injected by the agent).",
@@ -105,13 +109,16 @@ class AnalysisSkill(Skill):
         access_token: str,
         scope: str | None = None,
         user_id: str | None = None,
+        status: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         effective_scope = _resolve_scope(scope, access_token, user_id=user_id)
         if effective_scope == "personal":
-            products = get_all_products(access_token, user_id=user_id)
+            products = get_all_products(access_token, user_id=user_id, status=status)
         else:
-            products = get_products_for_active_org(access_token, user_id=user_id)
+            products = get_products_for_active_org(
+                access_token, user_id=user_id, status=status
+            )
         return _success(
             "list_products",
             {
