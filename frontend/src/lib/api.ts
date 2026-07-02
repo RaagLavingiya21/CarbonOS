@@ -325,10 +325,31 @@ export const api = {
     }
     return response.blob();
   },
-  analyzeBom: (file: File, productName?: string) => {
+  analyzeBom: (
+    file: File,
+    productName?: string,
+    options?: {
+      productDescription?: string;
+      reportingPeriodStart?: string;
+      reportingPeriodEnd?: string;
+      geographyCountry?: string;
+    },
+  ) => {
     const formData = new FormData();
     formData.append("file", file);
     if (productName) formData.append("product_name", productName);
+    if (options?.productDescription) {
+      formData.append("product_description", options.productDescription);
+    }
+    if (options?.reportingPeriodStart) {
+      formData.append("reporting_period_start", options.reportingPeriodStart);
+    }
+    if (options?.reportingPeriodEnd) {
+      formData.append("reporting_period_end", options.reportingPeriodEnd);
+    }
+    if (options?.geographyCountry) {
+      formData.append("geography_country", options.geographyCountry);
+    }
     return request<AnalyzeResponse>("/api/analyze", {
       method: "POST",
       body: formData,
@@ -358,6 +379,12 @@ export const api = {
     productName: string,
     status: "approved" | "flagged",
     flaggedComment?: string,
+    options?: {
+      productDescription?: string;
+      reportingPeriodStart?: string;
+      reportingPeriodEnd?: string;
+      geographyCountry?: string;
+    },
   ) =>
     request<{ product_id: number; phase: "saved" }>("/api/analyses", {
       method: "POST",
@@ -366,8 +393,14 @@ export const api = {
         product_name: productName,
         status,
         flagged_comment: flaggedComment,
+        product_description: options?.productDescription,
+        reporting_period_start: options?.reportingPeriodStart,
+        reporting_period_end: options?.reportingPeriodEnd,
+        geography_country: options?.geographyCountry,
       }),
     }),
+  fetchPactPayload: (productId: number) =>
+    request<Record<string, unknown>>(`/api/footprints/${productId}/pact`),
   chatAdvisor: (
     userMessage: string,
     conversationHistory: Message[],
