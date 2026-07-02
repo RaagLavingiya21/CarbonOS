@@ -31,12 +31,36 @@ from api.models.schemas import (
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
+from db.org_store import get_active_org
 from db.reader import get_product_by_id, get_products_for_active_org
 from db.store import save_analysis
+from exchange.pact import build_product_footprint, validate_product_footprint
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
 
 router = APIRouter(tags=["analyzer"])
+
+
+def _parse_optional_date(value: str | None) -> date | None:
+    if not value or not value.strip():
+        return None
+    return date.fromisoformat(value.strip())
+
+
+def _default_reporting_period(analysis_date: date) -> tuple[date, date]:
+    return date(analysis_date.year, 1, 1), date(analysis_date.year, 12, 31)
+
+
+def _normalize_geography_country(value: str | None) -> str | None:
+    if not value or not value.strip():
+        return None
+    normalized = value.strip().upper()
+    if len(normalized) != 2 or not normalized.isalpha():
+        raise HTTPException(
+            status_code=422,
+            detail="geography_country must be a two-letter ISO 3166-1 alpha-2 code",
+        )
+    return normalized
 
 
 def _product_name_from_upload(upload: UploadFile) -> str:
@@ -164,6 +188,10 @@ async def analyze(
     save: bool = Form(False),
     status: Literal["approved", "flagged"] = Form("approved"),
     flagged_comment: str | None = Form(None),
+    product_description: str | None = Form(None),
+    reporting_period_start: str | None = Form(None),
+    reporting_period_end: str | None = Form(None),
+    geography_country: str | None = Form(None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalyzeResponse:
     raw_bytes = await file.read()
@@ -175,6 +203,11 @@ async def analyze(
     result, critic_report = run_critic(result)
     product_id = None
     phase: Literal["calc_review", "saved"] = "calc_review"
+    analysis_date = date.today()
+    period_start = _parse_optional_date(reporting_period_start)
+    period_end = _parse_optional_date(reporting_period_end)
+    if period_start is None or period_end is None:
+        period_start, period_end = _default_reporting_period(analysis_date)
 
     if save:
         if status == "flagged" and not (flagged_comment or "").strip():
@@ -187,9 +220,13 @@ async def analyze(
             result,
             user_id=current_user.user_id,
             access_token=current_user.access_token,
-            analysis_date=date.today(),
+            analysis_date=analysis_date,
             status=status,
             flagged_comment=flagged_comment,
+            product_description=product_description,
+            reporting_period_start=period_start,
+            reporting_period_end=period_end,
+            geography_country=_normalize_geography_country(geography_country),
         )
         phase = "saved"
 
@@ -229,14 +266,24 @@ def save_analysis_result(
             detail="flagged_comment is required when status is 'flagged'.",
         )
 
+    analysis_date = date.today()
+    period_start = request.reporting_period_start
+    period_end = request.reporting_period_end
+    if period_start is None or period_end is None:
+        period_start, period_end = _default_reporting_period(analysis_date)
+
     product_id = save_analysis(
         request.product_name,
         result,
         user_id=current_user.user_id,
         access_token=current_user.access_token,
-        analysis_date=date.today(),
+        analysis_date=analysis_date,
         status=request.status,
         flagged_comment=request.flagged_comment,
+        product_description=request.product_description,
+        reporting_period_start=period_start,
+        reporting_period_end=period_end,
+        geography_country=request.geography_country,
     )
     session_store.update(session.session_id, phase="saved", saved_product_id=product_id)
     return SaveAnalysisResponse(product_id=product_id, phase="saved")
@@ -264,6 +311,31 @@ def get_analysis(
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
     return AnalysisDetailDTO.from_row(product)
+
+
+@router.get("/api/footprints/{product_id}/pact")
+def export_pact(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    if product.get("status") != "approved":
+        raise HTTPException(
+            status_code=409,
+            detail="Only approved footprints can be exported.",
+        )
+
+    active_org = get_active_org(current_user.access_token, user_id=current_user.user_id)
+    org_name = active_org.name if active_org else None
+    org_id = active_org.id if active_org else None
+
+    payload = build_product_footprint(product, org_name, org_id)
+    violations = validate_product_footprint(payload)
+    if violations:
+        raise HTTPException(status_code=500, detail=violations)
+    return payload
 
 
 @router.get("/api/analyses/{product_id}/export")

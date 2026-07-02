@@ -35,10 +35,18 @@ def save_analysis(
     analysis_date: date | None = None,
     status: str = "approved",
     flagged_comment: str | None = None,
+    product_description: str | None = None,
+    reporting_period_start: date | None = None,
+    reporting_period_end: date | None = None,
+    geography_country: str | None = None,
 ) -> int:
     """Persist a footprint result. Returns the new product_id."""
     if analysis_date is None:
         analysis_date = date.today()
+
+    if reporting_period_start is None or reporting_period_end is None:
+        reporting_period_start = date(analysis_date.year, 1, 1)
+        reporting_period_end = date(analysis_date.year, 12, 31)
 
     client = get_user_client(access_token)
     product_response = (
@@ -53,6 +61,10 @@ def save_analysis(
                 "flagged_items": result.flagged_count,
                 "status": status,
                 "flagged_comment": flagged_comment.strip() if flagged_comment else None,
+                "product_description": product_description.strip() if product_description else None,
+                "reporting_period_start": reporting_period_start.isoformat(),
+                "reporting_period_end": reporting_period_end.isoformat(),
+                "geography_country": geography_country,
             }
         )
         .execute()
@@ -88,4 +100,5 @@ def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
         "kg_co2e": round(li.kg_co2e, 6) if li.is_matched else None,
         "share_pct": round(li.share_pct, 4) if li.is_matched else None,
         "flag_status": flag_status,
+        "data_source": "secondary",
     }

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from calc.critic import CriticFinding, CriticReport
 from calc.footprint import FootprintResult, LineItem
@@ -227,6 +229,20 @@ class SaveAnalysisRequest(BaseModel):
     product_name: str
     status: Literal["approved", "flagged"] = "approved"
     flagged_comment: str | None = None
+    product_description: str | None = None
+    reporting_period_start: date | None = None
+    reporting_period_end: date | None = None
+    geography_country: str | None = None
+
+    @field_validator("geography_country")
+    @classmethod
+    def validate_geography_country(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", normalized):
+            raise ValueError("geography_country must be a two-letter ISO 3166-1 alpha-2 code")
+        return normalized
 
 
 class SaveAnalysisResponse(BaseModel):
