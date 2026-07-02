@@ -3,6 +3,17 @@
 ## Project Purpose
 This project is to create a tool which will be used by sustainability analysts at consumer goods companies to estimate product-level Scope 3 footprints from messy BOM data so they can identify hotspots and prioritize supplier engagement. The tool fetches and parses the material data from uploaded bill of materials, fixes or flags messy or incomplete bill of material data, fetches emission factor from external emission factors database, calculates products emission footprint based on the BOM and emission factors. This enables the user to understand product's total emission, emission hotspots, and design decarbonization strategies to reduce the carbon footprint of product. 
 
+## Product Direction (source of truth)
+
+**`PCF_PLATFORM_DESIGN.md` is the product source of truth.** Read it before implementing any feature. The product is being repositioned from "a BOM calculator with AI features" to "the platform where a sustainability analyst manages their organization's product carbon footprints," anchored on five core jobs: **Establish, Manage the portfolio, Improve data quality, Reduce, Share.**
+
+Key standing decisions (do not re-litigate in implementation sessions):
+- The calculation engine stays **spend-based** (Open CEDA 2025, kg CO₂e per USD). No activity-based/hybrid engine. Results are labeled screening-grade.
+- The internal footprint data model mirrors the **WBCSD PACT v3 `ProductFootprint`** schema (declared unit, reporting period, geography, primary data share, status, version), so export is serialization, not translation.
+- Footprints have a lifecycle: `draft → calculated → under_review → approved → published`. Published versions are immutable; recalculation creates version n+1.
+- Build order: ① PACT data foundation + export → ② portfolio & lifecycle → ③ primary data loop + PDS → ④ scenario modeling.
+- Every aggregate number in the UI must drill down to the records that produced it (KPI → product → line item → source citation).
+
 
 ## User Persona
 This tool will be used by a sustainability analyst or business analyst. The company size - 500 to5,000 employees. 
@@ -81,6 +92,9 @@ Bullet list. One bullet per case:
 - Same input must produce the same output in terms of total footprint. 
 - Unmatched items must must be flagged for human review. 
 - Confidence below threshold must must be flagged to human as low confidence. 
+- Every exported PACT payload must contain all PACT v3 mandatory fields and pass the official PACT v3 JSON schema; decimals serialized as strings; geography fields mutually exclusive.
+- Primary Data Share (PDS) = kg CO₂e from primary-sourced line items ÷ total kg CO₂e. A footprint with no supplier-provided data has PDS = 0%.
+- A published footprint version must never change; any recalculation produces a new version.
 
 
 ## Architecture (Production Target)
@@ -96,7 +110,8 @@ The app is being upgraded from a Streamlit prototype to a production stack:
 The original Streamlit app (app.py, pages/) is kept during migration but is not the target frontend.
 
 See `Architecture_Decisions.md` for detailed rationale behind each choice.
-See `IMPLEMENTATION_PLAN.md` for the phased build sequence.
+See `IMPLEMENTATION_PLAN.md` for the phased build sequence (stack migration).
+See `PCF_PLATFORM_DESIGN.md` for the product design and the current 4-phase feature roadmap.
 
 **Dependency rules (unchanged):**
 - `calc/`, `factors/`, `parsing/`, `llm/`, `rag/`, `gap_analyzer/`, `copilot/`, `db/` are business logic — no UI imports
@@ -111,6 +126,14 @@ See `IMPLEMENTATION_PLAN.md` for the phased build sequence.
 - Pytest for Python tests. Vitest for frontend tests.
 - FastAPI endpoints use Pydantic models for request/response validation
 - Async functions for all I/O-bound operations (LLM calls, DB queries)
+
+## Rules for AI-Assisted Implementation
+Development is split: implementation plans are authored per phase (by Claude), then executed by an AI implementer (Cursor or Claude). When implementing:
+- **Follow the phase's implementation plan exactly.** Do not refactor, rename, or "improve" code outside the plan's stated scope. If the plan seems wrong or incomplete, stop and say so rather than improvising.
+- **Never write credentials, API keys, or Supabase URLs into source files.** Configuration comes from environment variables only (`.env` is gitignored). Never commit `.env` files.
+- **Test database migrations against a local/branch database first** — never run an untested migration against the database holding demo data.
+- CI must pass before a PR is mergeable: ruff + pytest + golden-file evals (backend), ESLint + `next build` (frontend).
+- New logic that implements an Eval Invariant ships with a pytest that enforces it.
 
 ## When to Ask the User
 Missing quantity → flag for human review
