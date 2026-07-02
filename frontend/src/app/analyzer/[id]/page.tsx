@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Download, FileWarning } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileWarning, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
@@ -22,12 +29,22 @@ import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
 import { AnalysisDetail, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
-import { formatKg } from "@/lib/utils";
+import { formatKg, formatPct } from "@/lib/utils";
+
+function statusBadgeVariant(status: string | null | undefined) {
+  if (status === "flagged") return "destructive" as const;
+  if (status === "published") return "default" as const;
+  return "secondary" as const;
+}
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [pactPayload, setPactPayload] = useState<Record<string, unknown> | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,6 +72,61 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       setExporting(false);
     }
   }
+
+  async function publishFootprint() {
+    if (!analysis) return;
+    setPublishing(true);
+    setError(null);
+    try {
+      const response = await api.publishAnalysis(analysis.product_id);
+      setAnalysis({
+        ...analysis,
+        status: response.status,
+        published_at: response.published_at,
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function exportPactPayload() {
+    if (!analysis) return;
+    setExportLoading(true);
+    setError(null);
+    try {
+      const payload = await api.fetchPactPayload(analysis.product_id);
+      setPactPayload(payload);
+      setExportOpen(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  const pactJson = pactPayload ? JSON.stringify(pactPayload, null, 2) : "";
+
+  async function copyPactJson() {
+    if (!pactJson) return;
+    await navigator.clipboard.writeText(pactJson);
+  }
+
+  function downloadPactJson() {
+    if (!pactJson || !analysis) return;
+    const blob = new Blob([pactJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `footprint-${analysis.product_id}-pact.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const recalculateHref = analysis
+    ? `/analyzer?recalculate_of=${analysis.product_id}&product_name=${encodeURIComponent(analysis.product_name)}`
+    : "/analyzer";
 
   return (
     <div className="space-y-6">
@@ -85,19 +157,81 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
         <>
           <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <Badge variant={analysis.status === "flagged" ? "destructive" : "secondary"}>
-                {analysis.status ?? "saved"}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={statusBadgeVariant(analysis.status)}>
+                  {analysis.status ?? "saved"}
+                </Badge>
+                {analysis.version ? (
+                  <Badge variant="outline">Version {analysis.version}</Badge>
+                ) : null}
+              </div>
               <h1 className="mt-3 text-h1">{analysis.product_name}</h1>
               <p className="mt-2 text-small text-muted-foreground">
                 Analysis date: {analysis.analysis_date}
+                {analysis.published_at
+                  ? ` · Published ${new Date(analysis.published_at).toLocaleDateString()}`
+                  : null}
               </p>
             </div>
-            <Button variant="outline" onClick={exportCsv} disabled={exporting}>
-              <Download className="h-4 w-4" />
-              {exporting ? "Exporting..." : "Export CSV"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {analysis.status === "approved" ? (
+                <>
+                  <Button
+                    disabled={exportLoading}
+                    onClick={exportPactPayload}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Download className="h-4 w-4" />
+                    {exportLoading ? "Loading..." : "Export PACT payload"}
+                  </Button>
+                  <Button disabled={publishing} onClick={publishFootprint} type="button">
+                    {publishing ? "Publishing..." : "Publish"}
+                  </Button>
+                </>
+              ) : analysis.status === "published" ? (
+                <Button disabled type="button" variant="outline">
+                  Published — read-only
+                </Button>
+              ) : null}
+              <Button asChild variant="ghost">
+                <Link href={recalculateHref}>
+                  <RefreshCw className="h-4 w-4" />
+                  Recalculate
+                </Link>
+              </Button>
+              <Button variant="outline" onClick={exportCsv} disabled={exporting}>
+                <Download className="h-4 w-4" />
+                {exporting ? "Exporting..." : "Export CSV"}
+              </Button>
+            </div>
           </section>
+
+          <Sheet open={exportOpen} onOpenChange={setExportOpen}>
+            <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+              <SheetHeader>
+                <SheetTitle>PACT v3 ProductFootprint</SheetTitle>
+                <SheetDescription>
+                  Preview and download the exported payload for product {analysis.product_id}.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-3">
+                <div className="flex gap-2">
+                  <Button onClick={copyPactJson} size="sm" type="button" variant="outline">
+                    <Copy className="h-4 w-4" />
+                    Copy JSON
+                  </Button>
+                  <Button onClick={downloadPactJson} size="sm" type="button" variant="outline">
+                    <Download className="h-4 w-4" />
+                    Download .json
+                  </Button>
+                </div>
+                <pre className="max-h-[70vh] overflow-auto rounded-xl border bg-secondary p-4 text-xs">
+                  {pactJson}
+                </pre>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {analysis.flagged_comment ? (
             <Alert>
@@ -106,7 +240,7 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </Alert>
           ) : null}
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 md:grid-cols-4">
             <MetricCard
               label="Total footprint"
               value={formatKg(analysis.total_kg_co2e)}
@@ -120,6 +254,11 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             />
             <MetricCard label="Matched line items" value={analysis.matched_items} hint="Included in total" />
             <MetricCard label="Flagged line items" value={analysis.flagged_items} hint="Need human review" />
+            <MetricCard
+              label="Primary data share"
+              value={formatPct((analysis.primary_data_share ?? 0) * 100)}
+              hint="Share of footprint from supplier-specific data"
+            />
           </section>
 
           <Card>

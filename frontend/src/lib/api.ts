@@ -13,6 +13,19 @@ export type AnalysisSummary = {
   flagged_items: number;
   status?: string | null;
   flagged_comment?: string | null;
+  product_lineage_id?: string | null;
+  published_at?: string | null;
+  version?: number | null;
+  primary_data_share?: number | null;
+  declared_unit?: string | null;
+};
+
+export type PortfolioSummary = {
+  total_kg_co2e: number;
+  avg_primary_data_share: number;
+  counts_by_status: Record<string, number>;
+  open_flags_count: number;
+  product_count: number;
 };
 
 export type AnalysisLineItem = {
@@ -310,7 +323,16 @@ async function request<T>(
 }
 
 export const api = {
-  listAnalyses: () => request<AnalysisSummary[]>("/api/analyses"),
+  listAnalyses: (options?: { status?: string }) => {
+    const params = options?.status ? `?status=${encodeURIComponent(options.status)}` : "";
+    return request<AnalysisSummary[]>(`/api/analyses${params}`);
+  },
+  getPortfolioSummary: () => request<PortfolioSummary>("/api/analyses/summary"),
+  publishAnalysis: (productId: number) =>
+    request<{ product_id: number; status: string; published_at: string }>(
+      `/api/analyses/${productId}/publish`,
+      { method: "POST" },
+    ),
   getAnalysis: (id: string) => request<AnalysisDetail>(`/api/analyses/${id}`),
   exportAnalysisCsv: async (id: string) => {
     const token = await getAccessToken();
@@ -384,6 +406,7 @@ export const api = {
       reportingPeriodStart?: string;
       reportingPeriodEnd?: string;
       geographyCountry?: string;
+      recalculateOfProductId?: number;
     },
   ) =>
     request<{ product_id: number; phase: "saved" }>("/api/analyses", {
@@ -397,6 +420,7 @@ export const api = {
         reporting_period_start: options?.reportingPeriodStart,
         reporting_period_end: options?.reportingPeriodEnd,
         geography_country: options?.geographyCountry,
+        recalculate_of_product_id: options?.recalculateOfProductId,
       }),
     }),
   fetchPactPayload: (productId: number) =>

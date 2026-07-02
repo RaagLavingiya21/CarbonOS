@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Copy, Download, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -37,8 +38,19 @@ function reportingDatesFromYear(year: number | ""): { start?: string; end?: stri
 }
 
 export default function AnalyzerPage() {
+  return (
+    <Suspense fallback={null}>
+      <AnalyzerPageContent />
+    </Suspense>
+  );
+}
+
+function AnalyzerPageContent() {
+  const searchParams = useSearchParams();
   const [file, setFile] = useState<File | null>(null);
   const [productName, setProductName] = useState("");
+  const [recalculateOfProductId, setRecalculateOfProductId] = useState<number | null>(null);
+  const [savedVersion, setSavedVersion] = useState<number | null>(null);
   const [productDescription, setProductDescription] = useState("");
   const [reportingYear, setReportingYear] = useState<number | "">(new Date().getFullYear());
   const [geographyCountry, setGeographyCountry] = useState("");
@@ -53,6 +65,20 @@ export default function AnalyzerPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const recalculateOf = searchParams.get("recalculate_of");
+    const nameFromUrl = searchParams.get("product_name");
+    if (recalculateOf) {
+      const parsed = Number(recalculateOf);
+      if (!Number.isNaN(parsed)) {
+        setRecalculateOfProductId(parsed);
+      }
+    }
+    if (nameFromUrl) {
+      setProductName(nameFromUrl);
+    }
+  }, [searchParams]);
 
   const topHotspot = useMemo(() => analysis?.result.hotspots[0], [analysis]);
   const intakeOptions = useMemo(() => {
@@ -72,6 +98,7 @@ export default function AnalyzerPage() {
     setError(null);
     setSavedProductId(null);
     setSavedAsApproved(false);
+    setSavedVersion(null);
     setPactPayload(null);
     try {
       const response = await api.analyzeBom(file, productName || undefined, intakeOptions);
@@ -94,10 +121,19 @@ export default function AnalyzerPage() {
         productName || analysis.result.product_name,
         status,
         status === "flagged" ? flaggedComment : undefined,
-        intakeOptions,
+        {
+          ...intakeOptions,
+          recalculateOfProductId: recalculateOfProductId ?? undefined,
+        },
       );
       setSavedProductId(response.product_id);
       setSavedAsApproved(status === "approved");
+      if (recalculateOfProductId) {
+        const saved = await api.getAnalysis(String(response.product_id));
+        setSavedVersion(saved.version ?? null);
+      } else {
+        setSavedVersion(null);
+      }
       setPactPayload(null);
     } catch (err) {
       setError((err as Error).message);
@@ -275,6 +311,11 @@ export default function AnalyzerPage() {
                   <AlertTitle>Analysis saved</AlertTitle>
                   <AlertDescription>
                     Product ID {savedProductId} is now available on the dashboard.
+                    {savedVersion && recalculateOfProductId ? (
+                      <span className="mt-1 block">
+                        This is version {savedVersion} of {productName || analysis.result.product_name}.
+                      </span>
+                    ) : null}
                     {savedAsApproved ? (
                       <span className="mt-2 block">
                         <Button
