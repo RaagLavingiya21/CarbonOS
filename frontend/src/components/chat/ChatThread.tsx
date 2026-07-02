@@ -70,7 +70,7 @@ export function ChatThread({
     loading && !streamingMessageId && !errorText;
 
   return (
-    <div className="max-h-[58vh] min-h-[460px] space-y-5 overflow-y-auto bg-secondary/40 p-4 md:p-6">
+    <div className="flex-1 min-h-0 space-y-5 overflow-y-auto bg-secondary/40 p-4 md:p-6">
       {visibleMessages.map((message) => (
         <ChatMessage
           key={message.message_id}

@@ -7,82 +7,22 @@ import {
   ArrowRight,
   BarChart3,
   FileSearch,
-  FileUp,
   Factory,
-  Flame,
-  GitCompare,
-  HelpCircle,
-  Mail,
   MessageSquare,
-  Search,
-  Send,
   UploadCloud,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
+import { ChatInput } from "@/components/chat/ChatInput";
 import {
-  ModuleFlipCard,
-  type ModuleFlipCardData,
-} from "@/components/dashboard/ModuleFlipCard";
+  ModuleShowcaseCard,
+  type ModuleShowcaseData,
+} from "@/components/dashboard/ModuleShowcaseCard";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { chatApi, type ChatThread } from "@/lib/chat-api";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
-interface PromptSuggestion {
-  title: string;
-  subtitle: string;
-  icon: LucideIcon;
-  message: string;
-}
-
-const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
-  {
-    title: "Analyze a bill of materials",
-    subtitle: "Upload a BOM and estimate product emissions",
-    icon: FileUp,
-    message: "Analyze a bill of materials",
-  },
-  {
-    title: "Check my Scope 3 gaps",
-    subtitle: "Find missing data and coverage gaps",
-    icon: Search,
-    message: "Check my Scope 3 gaps",
-  },
-  {
-    title: "Draft a supplier email",
-    subtitle: "Start supplier engagement outreach",
-    icon: Mail,
-    message: "Draft a supplier email",
-  },
-  {
-    title: "What is Scope 3?",
-    subtitle: "Learn GHG Protocol fundamentals",
-    icon: HelpCircle,
-    message: "What is Scope 3?",
-  },
-  {
-    title: "Compare my product footprints",
-    subtitle: "See emissions across saved analyses",
-    icon: GitCompare,
-    message: "Compare my product footprints",
-  },
-  {
-    title: "Show my highest hotspots",
-    subtitle: "Identify the most emitting materials",
-    icon: Flame,
-    message: "Show my highest hotspots",
-  },
-];
-
-const MODULE_FLIP_CARDS: ModuleFlipCardData[] = [
+const MODULES: ModuleShowcaseData[] = [
   {
     name: "Analyzer",
     icon: UploadCloud,
@@ -149,8 +89,6 @@ function sortThreadsByUpdatedAt(threads: ChatThread[]): ChatThread[] {
 }
 
 export default function Home() {
-  const router = useRouter();
-  const [input, setInput] = useState("");
   const [recentThreads, setRecentThreads] = useState<ChatThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
 
@@ -162,95 +100,37 @@ export default function Home() {
       .finally(() => setLoadingThreads(false));
   }, []);
 
-  const navigateToChat = useCallback(
+  const router = useRouter();
+
+  const handleSend = useCallback(
     (message: string) => {
       router.push(`/chat?message=${encodeURIComponent(message)}`);
     },
     [router],
   );
 
-  const handleSubmit = useCallback(() => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    navigateToChat(trimmed);
-  }, [input, navigateToChat]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
-
   return (
     <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-10">
-      <section className="space-y-3 text-center">
+      <section className="w-full space-y-4 text-center">
         <h1 className="text-h1 font-medium text-balance md:text-display">
           Carbon footprint assistant
         </h1>
         <p className="mx-auto max-w-xl text-body-lg text-muted-foreground text-pretty">
-          Ask questions, analyze bills of materials, and explore Scope 3 hotspots
-          — all from one conversation.
+          Analyze bills of materials, close Scope 3 data gaps, and engage
+          suppliers — all from one conversation with your platform agent.
         </p>
-      </section>
-
-      <section className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-2 shadow-xs transition-shadow duration-micro focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
-          <Input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything about your product footprints…"
-            className="border-0 bg-transparent text-body shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-          <Button
-            type="button"
-            size="icon"
-            className="shrink-0 rounded-xl"
-            disabled={!input.trim()}
-            onClick={handleSubmit}
-            aria-label="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </section>
-
-      <section className="w-full">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {PROMPT_SUGGESTIONS.map(({ title, subtitle, icon: Icon, message }) => (
-            <button
-              key={title}
-              type="button"
-              onClick={() => navigateToChat(message)}
-              className="group text-left"
-            >
-              <Card className="h-full transition-[border-color,box-shadow,transform] duration-micro ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-xs">
-                <CardHeader className="pb-2">
-                  <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <CardTitle className="text-sm font-medium leading-snug">
-                    {title}
-                  </CardTitle>
-                  <CardDescription className="text-xs">{subtitle}</CardDescription>
-                </CardHeader>
-              </Card>
-            </button>
-          ))}
+        <div className="mx-auto w-full max-w-2xl text-left">
+          <ChatInput variant="hero" onSend={handleSend} showModuleButtons={false} />
         </div>
       </section>
 
       <section className="w-full">
         <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">
-          Or start with a module
+          Explore the modules
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {MODULE_FLIP_CARDS.map((module) => (
-            <ModuleFlipCard key={module.name} {...module} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          {MODULES.map((module) => (
+            <ModuleShowcaseCard key={module.name} {...module} />
           ))}
         </div>
       </section>

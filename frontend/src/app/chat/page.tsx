@@ -13,15 +13,7 @@ import {
   usePanels,
 } from "@/components/panels/PanelContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   chatApi,
   formatIntakeSubmitMessage,
@@ -382,27 +374,17 @@ function ChatWorkspace() {
   }, [pendingMessage, thread, initializing, handleSend]);
 
   const chatDisabled = loading || switchingThread;
+  const hasMessages = messages.length > 0;
 
   return (
-    <div className="space-y-8">
-      <section>
-        <Badge variant="secondary">Platform chat</Badge>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-          Carbon footprint assistant
-        </h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          Ask questions, explore your product data, and get guidance from the
-          platform agent.
-        </p>
-      </section>
-
+    <div className="flex h-full min-h-0 flex-col">
       {error ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="m-4 mb-0">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      <div className="flex overflow-hidden rounded-xl border bg-card shadow-xs">
+      <div className="flex min-h-0 flex-1">
         <ThreadList
           threads={threads}
           activeThreadId={thread?.thread_id ?? null}
@@ -411,61 +393,68 @@ function ChatWorkspace() {
           onDelete={(threadId) => void handleDeleteThread(threadId)}
         />
 
-        <Card className="min-w-0 flex-1 rounded-none border-0 shadow-none">
-          <CardHeader className="border-b bg-card">
-            <CardTitle>Chat</CardTitle>
-            <CardDescription>
-              {initializing
-                ? "Starting a new conversation..."
-                : thread?.title ?? "New conversation"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {initializing ? (
-              <div className="flex min-h-[460px] items-center justify-center bg-secondary/40 p-6">
-                <p className="text-sm text-muted-foreground">
-                  Preparing your chat thread...
-                </p>
+        <div className="flex min-w-0 flex-1 flex-col">
+          {initializing ? (
+            <div className="flex flex-1 items-center justify-center bg-secondary/40 p-6">
+              <p className="text-sm text-muted-foreground">
+                Preparing your chat thread...
+              </p>
+            </div>
+          ) : !thread ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-secondary/40 p-6 text-center">
+              <p className="max-w-md text-sm text-muted-foreground">
+                Could not start a chat thread. Check that the backend is
+                running and your environment variables are set, then try
+                again.
+              </p>
+              <Button onClick={() => void initializeWorkspace()} type="button">
+                Retry
+              </Button>
+            </div>
+          ) : switchingThread ? (
+            <div className="flex flex-1 items-center justify-center bg-secondary/40 p-6">
+              <p className="text-sm text-muted-foreground">
+                Loading conversation...
+              </p>
+            </div>
+          ) : !hasMessages ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
+              <h1 className="text-h1 font-medium md:text-display">
+                How can I help you?
+              </h1>
+              <div className="w-full max-w-2xl">
+                <ChatInput
+                  variant="hero"
+                  onSend={handleSend}
+                  disabled={chatDisabled}
+                />
               </div>
-            ) : !thread ? (
-              <div className="flex min-h-[460px] flex-col items-center justify-center gap-4 bg-secondary/40 p-6 text-center">
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Could not start a chat thread. Check that the backend is
-                  running and your environment variables are set, then try
-                  again.
-                </p>
-                <Button onClick={() => void initializeWorkspace()} type="button">
-                  Retry
-                </Button>
-              </div>
-            ) : switchingThread ? (
-              <div className="flex min-h-[460px] items-center justify-center bg-secondary/40 p-6">
-                <p className="text-sm text-muted-foreground">
-                  Loading conversation...
-                </p>
-              </div>
-            ) : (
-              <SplitLayout
-                chat={
-                  <>
-                    <ChatThread
-                      messages={messages}
-                      loading={loading}
-                      streamingMessageId={streamingMessageId}
-                      errorText={streamErrorText}
-                      submittedIntakeMessageIds={submittedIntakeMessageIds}
-                      onSuggestionSelect={handleSend}
-                      onIntakeSubmit={handleIntakeSubmit}
-                      onRetry={handleRetry}
-                    />
-                    <ChatInput onSend={handleSend} disabled={chatDisabled} />
-                  </>
-                }
-                panel={<PanelContainer />}
-              />
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          ) : (
+            <SplitLayout
+              chat={
+                <>
+                  <ChatThread
+                    messages={messages}
+                    loading={loading}
+                    streamingMessageId={streamingMessageId}
+                    errorText={streamErrorText}
+                    submittedIntakeMessageIds={submittedIntakeMessageIds}
+                    onSuggestionSelect={handleSend}
+                    onIntakeSubmit={handleIntakeSubmit}
+                    onRetry={handleRetry}
+                  />
+                  <ChatInput
+                    variant="docked"
+                    onSend={handleSend}
+                    disabled={chatDisabled}
+                  />
+                </>
+              }
+              panel={<PanelContainer />}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
