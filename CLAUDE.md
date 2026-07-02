@@ -114,7 +114,7 @@ See `IMPLEMENTATION_PLAN.md` for the phased build sequence (stack migration).
 See `PCF_PLATFORM_DESIGN.md` for the product design and the current 4-phase feature roadmap.
 
 **Dependency rules (unchanged):**
-- `calc/`, `factors/`, `parsing/`, `llm/`, `rag/`, `gap_analyzer/`, `copilot/`, `db/` are business logic — no UI imports
+- `calc/`, `factors/`, `parsing/`, `llm/`, `rag/`, `gap_analyzer/`, `copilot/`, `db/`, `exchange/` are business logic — no UI imports
 - `api/routes/` imports from business logic modules
 - `frontend/` communicates with backend only via HTTP (FastAPI endpoints or Supabase client)
 - No Streamlit calls outside `app.py` and `pages/`
