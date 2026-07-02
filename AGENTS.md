@@ -1,6 +1,6 @@
 # Agent Instructions
 
-All project rules live in **`Claude.md`** (project purpose, architecture and dependency rules, decision rules, eval invariants, coding conventions, and rules for AI-assisted implementation). Read it in full before making changes.
+All project rules live in **`CLAUDE.md`** (project purpose, architecture and dependency rules, decision rules, eval invariants, coding conventions, and rules for AI-assisted implementation). Read it in full before making changes.
 
 Product direction and the current feature roadmap live in **`PCF_PLATFORM_DESIGN.md`**.
 
