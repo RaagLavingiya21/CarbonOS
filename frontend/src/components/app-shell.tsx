@@ -52,6 +52,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Logged-out visitors see the marketing landing page at "/"; logged-in
   // visitors see the dashboard there.
   const isLandingRoute = pathname === "/";
+  // Chat is a full-height app, not a scrolling document — it gets the
+  // whole space below the header instead of the standard container.
+  const isChatRoute = pathname === "/chat";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -164,8 +167,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-sm">
+      <div
+        className={cn(
+          "lg:pl-64",
+          isChatRoute && "flex h-screen flex-col overflow-hidden",
+        )}
+      >
+        <header className="sticky top-0 z-30 shrink-0 border-b bg-background/90 backdrop-blur-sm">
           <div className="hidden items-center justify-between gap-2 px-6 py-2.5 lg:flex">
             <button
               type="button"
@@ -225,7 +233,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
         </header>
-        <main className="container py-8 lg:py-10">{children}</main>
+        <main
+          className={
+            isChatRoute
+              ? "flex-1 min-h-0 overflow-hidden"
+              : "container py-8 lg:py-10"
+          }
+        >
+          {children}
+        </main>
       </div>
       {pathname !== "/chat" ? <GlobalChatIcon /> : null}
       <CommandMenu open={cmdkOpen} onOpenChange={setCmdkOpen} toggleTheme={toggleTheme} />

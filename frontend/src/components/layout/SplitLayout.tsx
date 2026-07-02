@@ -80,7 +80,7 @@ export function SplitLayout({ chat, panel }: SplitLayoutProps) {
     <div
       ref={containerRef}
       className={cn(
-        "flex min-h-[460px] w-full",
+        "flex min-h-0 flex-1 w-full",
         isDragging && "select-none",
       )}
     >
