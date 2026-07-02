@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Download, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -16,23 +16,54 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
 import { AnalyzeResponse, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
 
+function reportingDatesFromYear(year: number | ""): { start?: string; end?: string } {
+  if (!year) return {};
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`,
+  };
+}
+
 export default function AnalyzerPage() {
   const [file, setFile] = useState<File | null>(null);
   const [productName, setProductName] = useState("");
+  const [productDescription, setProductDescription] = useState("");
+  const [reportingYear, setReportingYear] = useState<number | "">(new Date().getFullYear());
+  const [geographyCountry, setGeographyCountry] = useState("");
   const [status, setStatus] = useState<"approved" | "flagged">("approved");
   const [flaggedComment, setFlaggedComment] = useState("");
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
   const [savedProductId, setSavedProductId] = useState<number | null>(null);
+  const [savedAsApproved, setSavedAsApproved] = useState(false);
+  const [pactPayload, setPactPayload] = useState<Record<string, unknown> | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const topHotspot = useMemo(() => analysis?.result.hotspots[0], [analysis]);
+  const intakeOptions = useMemo(() => {
+    const dates = reportingDatesFromYear(reportingYear);
+    return {
+      productDescription: productDescription.trim() || undefined,
+      reportingPeriodStart: dates.start,
+      reportingPeriodEnd: dates.end,
+      geographyCountry: geographyCountry.trim().toUpperCase() || undefined,
+    };
+  }, [productDescription, reportingYear, geographyCountry]);
 
   async function runAnalysis(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,8 +71,10 @@ export default function AnalyzerPage() {
     setLoading(true);
     setError(null);
     setSavedProductId(null);
+    setSavedAsApproved(false);
+    setPactPayload(null);
     try {
-      const response = await api.analyzeBom(file, productName || undefined);
+      const response = await api.analyzeBom(file, productName || undefined, intakeOptions);
       setAnalysis(response);
       setProductName(response.result.product_name);
     } catch (err) {
@@ -61,13 +94,49 @@ export default function AnalyzerPage() {
         productName || analysis.result.product_name,
         status,
         status === "flagged" ? flaggedComment : undefined,
+        intakeOptions,
       );
       setSavedProductId(response.product_id);
+      setSavedAsApproved(status === "approved");
+      setPactPayload(null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function exportPactPayload() {
+    if (!savedProductId) return;
+    setExportLoading(true);
+    setError(null);
+    try {
+      const payload = await api.fetchPactPayload(savedProductId);
+      setPactPayload(payload);
+      setExportOpen(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  const pactJson = pactPayload ? JSON.stringify(pactPayload, null, 2) : "";
+
+  async function copyPactJson() {
+    if (!pactJson) return;
+    await navigator.clipboard.writeText(pactJson);
+  }
+
+  function downloadPactJson() {
+    if (!pactJson || !savedProductId) return;
+    const blob = new Blob([pactJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `footprint-${savedProductId}-pact.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -109,6 +178,41 @@ export default function AnalyzerPage() {
                   value={productName}
                   onChange={(event) => setProductName(event.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-description">Product description (optional)</Label>
+                <Textarea
+                  id="product-description"
+                  placeholder="Brief description for PACT export metadata"
+                  value={productDescription}
+                  onChange={(event) => setProductDescription(event.target.value)}
+                  rows={2}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="reporting-year">Reporting year (optional)</Label>
+                  <Input
+                    id="reporting-year"
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={reportingYear}
+                    onChange={(event) =>
+                      setReportingYear(event.target.value ? Number(event.target.value) : "")
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="geography-country">Country code (optional)</Label>
+                  <Input
+                    id="geography-country"
+                    placeholder="US"
+                    maxLength={2}
+                    value={geographyCountry}
+                    onChange={(event) => setGeographyCountry(event.target.value.toUpperCase())}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bom-file">BOM CSV</Label>
@@ -169,9 +273,52 @@ export default function AnalyzerPage() {
                 <Alert variant="success">
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertTitle>Analysis saved</AlertTitle>
-                  <AlertDescription>Product ID {savedProductId} is now available on the dashboard.</AlertDescription>
+                  <AlertDescription>
+                    Product ID {savedProductId} is now available on the dashboard.
+                    {savedAsApproved ? (
+                      <span className="mt-2 block">
+                        <Button
+                          className="mt-2"
+                          disabled={exportLoading}
+                          onClick={exportPactPayload}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Download className="h-4 w-4" />
+                          {exportLoading ? "Loading PACT payload..." : "Export PACT payload"}
+                        </Button>
+                      </span>
+                    ) : null}
+                  </AlertDescription>
                 </Alert>
               ) : null}
+
+              <Sheet open={exportOpen} onOpenChange={setExportOpen}>
+                <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+                  <SheetHeader>
+                    <SheetTitle>PACT v3 ProductFootprint</SheetTitle>
+                    <SheetDescription>
+                      Preview and download the exported payload for product {savedProductId}.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-4 space-y-3">
+                    <div className="flex gap-2">
+                      <Button onClick={copyPactJson} size="sm" type="button" variant="outline">
+                        <Copy className="h-4 w-4" />
+                        Copy JSON
+                      </Button>
+                      <Button onClick={downloadPactJson} size="sm" type="button" variant="outline">
+                        <Download className="h-4 w-4" />
+                        Download .json
+                      </Button>
+                    </div>
+                    <pre className="max-h-[70vh] overflow-auto rounded-xl border bg-secondary p-4 text-xs">
+                      {pactJson}
+                    </pre>
+                  </div>
+                </SheetContent>
+              </Sheet>
 
               {analysis.warnings.length || analysis.critic_report.has_findings ? (
                 <Alert>

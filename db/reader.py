@@ -9,12 +9,15 @@ from db.client import get_user_client
 
 _PRODUCT_COLUMNS = (
     "product_id, user_id, product_name, analysis_date, total_kg_co2e, "
-    "matched_items, flagged_items, status, flagged_comment"
+    "matched_items, flagged_items, status, flagged_comment, footprint_uuid, "
+    "product_description, declared_unit, unitary_product_amount, system_boundary, "
+    "reporting_period_start, reporting_period_end, geography_country, "
+    "primary_data_share, spec_version, version, created_at, updated_at"
 )
 
 _LINE_ITEM_COLUMNS = (
     "component, material, spend_usd, matched_sector, emission_factor, "
-    "ef_source, kg_co2e, share_pct, flag_status"
+    "ef_source, kg_co2e, share_pct, flag_status, data_source"
 )
 
 
