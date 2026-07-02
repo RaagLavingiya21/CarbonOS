@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -11,6 +12,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 
+import { ChatInput } from "@/components/chat/ChatInput";
 import {
   ModuleShowcaseCard,
   type ModuleShowcaseData,
@@ -98,9 +100,18 @@ export default function Home() {
       .finally(() => setLoadingThreads(false));
   }, []);
 
+  const router = useRouter();
+
+  const handleSend = useCallback(
+    (message: string) => {
+      router.push(`/chat?message=${encodeURIComponent(message)}`);
+    },
+    [router],
+  );
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-10">
-      <section className="space-y-4 text-center">
+      <section className="w-full space-y-4 text-center">
         <h1 className="text-h1 font-medium text-balance md:text-display">
           Carbon footprint assistant
         </h1>
@@ -108,12 +119,9 @@ export default function Home() {
           Analyze bills of materials, close Scope 3 data gaps, and engage
           suppliers — all from one conversation with your platform agent.
         </p>
-        <Button asChild size="lg">
-          <Link href="/chat">
-            Start a conversation
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </Button>
+        <div className="mx-auto w-full max-w-2xl text-left">
+          <ChatInput variant="hero" onSend={handleSend} showModuleButtons={false} />
+        </div>
       </section>
 
       <section className="w-full">
