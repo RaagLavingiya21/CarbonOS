@@ -1,6 +1,6 @@
 # Architecture Decisions: Why We Chose What We Chose
 
-This document explains every architectural decision in the Product Carbon Footprint Analyzer's production stack, the alternatives we rejected, and the trade-offs we accepted. Written so you can articulate any decision in an interview.
+This document explains every architectural decision in the Product Carbon Footprint Analyzer's production stack, the alternatives we rejected, and the trade-offs we accepted. Written so any decision here can be explained and defended from first principles.
 
 ---
 
@@ -20,7 +20,7 @@ The third reason is **replaceability**. If you later want a mobile app, a Slack 
 
 **The trade-off you're accepting:** More complexity in development. Two repos (or two directories), two deployment pipelines, CORS configuration, API contracts to maintain. For a solo builder, this is more overhead. You're accepting that overhead because the signal it sends and the architectural correctness outweigh the convenience of a monolith.
 
-**When you'd choose differently:** If this were a pure internal tool for 3 people and would never be shown externally, Streamlit is fine. The separation matters because this is a portfolio piece that needs to demonstrate production thinking.
+**When you'd choose differently:** If this were a pure internal tool for 3 people and would never be shown externally, Streamlit is fine. The separation matters here because production-grade architecture is the standard worth holding this project to, even solo.
 
 ---
 
@@ -73,7 +73,7 @@ A plain React app is a Single Page Application (SPA) — it's purely client-side
 
 ### Why Not Vue or Svelte
 
-Both are good frameworks. Vue is popular in Asia and in some enterprise contexts. Svelte is elegant and has less boilerplate. But: React has the largest ecosystem, the most component libraries, and the most community support. Claude Code has trained on far more React code than Vue or Svelte, so the code it generates will be better. And if a GridCARE engineer looks at your frontend, React is what they expect. It's the default for a reason.
+Both are good frameworks. Vue is popular in Asia and in some enterprise contexts. Svelte is elegant and has less boilerplate. But: React has the largest ecosystem, the most component libraries, and the most community support. Claude Code has trained on far more React code than Vue or Svelte, so the code it generates will be better. And any engineer looking at this frontend will expect React. It's the default for a reason.
 
 **The trade-off:** Next.js has a learning curve. The app router (introduced in Next.js 13) has concepts like Server Components vs. Client Components that can be confusing. React's state management (useState, useEffect, context) is more complex than Streamlit's `st.session_state`. You're accepting that complexity because the result looks and behaves like a real product.
 
@@ -125,7 +125,7 @@ Vercel is optimized for frontend frameworks. It runs serverless functions (Lambd
 
 AWS (EC2, ECS, Lambda) and GCP (Cloud Run, GCE) give you maximum control and scalability. But they also require you to manage: Docker images, container registries, load balancers, VPCs, IAM roles, SSL certificates, auto-scaling policies, and CloudWatch/Cloud Monitoring dashboards. For a startup PM's portfolio project, this is operational overhead that adds zero product value. You'd spend more time on infrastructure than on your actual AI product.
 
-A GridCARE interviewer won't be more impressed by "I managed an ECS cluster" than "I deployed on Railway." They will be impressed by your agent architecture, evals, and observability.
+Nobody evaluating this project will be more impressed by "I managed an ECS cluster" than "I deployed on Railway." What stands out is the agent architecture, evals, and observability — not infrastructure trivia.
 
 ### Why Railway or Render
 
@@ -214,7 +214,7 @@ More importantly: shadcn/ui is the current industry default for Next.js applicat
 
 The architecture follows a principle: **every choice should have a clear, defensible answer.**
 
-| Decision | Interview Answer |
+| Decision | Rationale |
 |----------|-----------------|
 | "Why separate frontend/backend?" | "Independent scaling — LLM calls are slow and expensive, UI serving is cheap. Also enables mobile/API clients later." |
 | "Why FastAPI?" | "Async-native for I/O-bound LLM workloads. Auto-generated API docs. The Python AI ecosystem lives here." |

@@ -1,8 +1,8 @@
-# Demo Script — 5-Minute Interview Walkthrough
+# Demo Script — 5-Minute Product Walkthrough
 
-This is a presenter's script for walking someone through the live product — not the static `/demo` showcase page (which tells a pre-seeded water bottle story). Rehearse from this; don't read it aloud.
+A guided script for showing the live product end-to-end — not the static `/demo` showcase page (which tells a pre-seeded water bottle story). Rehearse from this; don't read it verbatim.
 
-**Before you start:** reset demo data to a clean state (once `scripts/seed_demo.py` exists, run it) and have `sample_boms/messy_tshirt.csv` ready to upload fresh, live, in front of your audience — the messiness has to be real, not narrated.
+**Before you start:** reset demo data to a clean state (once `scripts/seed_demo.py` exists, run it) and have `sample_boms/messy_tshirt.csv` ready to upload fresh, live — the messiness has to be real, not narrated.
 
 ---
 
@@ -27,7 +27,7 @@ Four distinct flag types in one small file — enough to demonstrate the parser 
 Upload the CSV. Say: *"Nothing here gets silently guessed — anything questionable gets surfaced to the analyst."* Point out as they appear: the missing material, the missing spend, and the flagged duplicate packaging rows.
 
 ### 2. Review flags, see matched factors — ✅ live today
-Walk the reviewer through the emission-factor matches: confidence scores per row, source citation (Open CEDA 2025), and the low-confidence flag on "reactive dye" with suggested alternatives. Say: *"Every number traces back to a source — this is what makes it audit-ready, not just a spreadsheet formula."*
+Walk through the emission-factor matches: confidence scores per row, source citation (Open CEDA 2025), and the low-confidence flag on "reactive dye" with suggested alternatives. Say: *"Every number traces back to a source — this is what makes it audit-ready, not just a spreadsheet formula."*
 
 ### 3. Calculate → footprint + hotspots — ✅ live today
 Show the total kg CO₂e, the hotspot ranking, and the critic's validation (total equals the sum of line items, flagged automatically if not). Say: *"This is deterministic and checked — not an LLM guessing the math."*
