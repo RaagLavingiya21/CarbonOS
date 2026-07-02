@@ -432,3 +432,27 @@ def test_panel_crud(monkeypatch) -> None:
     delete_response = client.delete(f"/api/panels/{panel_id}", headers=AUTH_HEADERS)
     assert delete_response.status_code == 200
     assert delete_response.json() == {"deleted": True}
+
+
+def test_export_pact_returns_404_for_missing_product(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "api.routes.analyzer.get_product_by_id",
+        lambda product_id, access_token: None,
+    )
+
+    response = client.get("/api/footprints/999/pact", headers=AUTH_HEADERS)
+    assert response.status_code == 404
+
+
+def test_export_pact_returns_409_for_flagged_product(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "api.routes.analyzer.get_product_by_id",
+        lambda product_id, access_token: {
+            "product_id": product_id,
+            "status": "flagged",
+        },
+    )
+
+    response = client.get("/api/footprints/1/pact", headers=AUTH_HEADERS)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Only approved footprints can be exported."
