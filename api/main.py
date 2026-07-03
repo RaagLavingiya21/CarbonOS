@@ -9,6 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -49,6 +50,17 @@ def _origin_allowed(origin: str) -> bool:
     return origin in _cors_origins() or bool(_CORS_ORIGIN_REGEX.fullmatch(origin))
 
 
+def _cors_headers(request: Request) -> dict[str, str]:
+    """Manual CORS headers for error responses (see unhandled_exception_handler)."""
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    if origin and _origin_allowed(origin):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return headers
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
@@ -86,17 +98,28 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     the real error as an "Access-Control-Allow-Origin" failure. We attach
     the CORS headers manually here, mirroring the configured allow rules.
     """
-    logger.exception(
-        "Unhandled error on %s %s", request.method, request.url.path
-    )
+    headers = _cors_headers(request)
 
-    headers: dict[str, str] = {}
-    origin = request.headers.get("origin")
-    if origin and _origin_allowed(origin):
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-        headers["Vary"] = "Origin"
+    # Transient network failures reaching Supabase (auth verification or a
+    # database call, both over httpx) are retryable infrastructure blips, not
+    # server bugs. Surface them as 503 so the client can show a "retry" prompt
+    # instead of a generic "internal server error".
+    if isinstance(exc, httpx.TransportError):
+        logger.warning(
+            "Upstream connection error on %s %s: %s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "A required service is temporarily unreachable. Please retry in a moment."
+            },
+            headers=headers,
+        )
 
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": f"Internal server error: {type(exc).__name__}: {exc}"},
