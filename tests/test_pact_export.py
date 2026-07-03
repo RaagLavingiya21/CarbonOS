@@ -108,6 +108,13 @@ def test_primary_data_share_zero_serializes_as_string_zero() -> None:
     assert payload["pcf"]["primaryDataShare"] == "0"
 
 
+def test_primary_data_share_non_zero_serializes_and_validates(pact_schema: dict) -> None:
+    product = _sample_product(primary_data_share=0.35)
+    payload = build_product_footprint(product, org_name="Acme Corp", org_id="org-123")
+    assert payload["pcf"]["primaryDataShare"] == "0.35"
+    jsonschema.validate(instance=payload, schema=pact_schema)
+
+
 def test_validate_product_footprint_catches_missing_mandatory_field() -> None:
     product = _sample_product()
     payload = build_product_footprint(product, org_name="Acme Corp", org_id="org-123")

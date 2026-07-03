@@ -268,3 +268,142 @@ def test_portfolio_summary_aggregates_counts(monkeypatch: pytest.MonkeyPatch) ->
     assert payload["open_flags_count"] == 2
     assert payload["counts_by_status"] == {"approved": 1, "published": 1, "flagged": 1}
     assert payload["product_count"] == 3
+
+
+def _source_product_with_line_items() -> dict:
+    return {
+        "product_id": 5,
+        "product_name": "Test Product",
+        "analysis_date": "2025-06-15",
+        "total_kg_co2e": 30.0,
+        "matched_items": 2,
+        "flagged_items": 0,
+        "status": "approved",
+        "flagged_comment": None,
+        "product_description": "Desc",
+        "declared_unit": "piece",
+        "unitary_product_amount": 1.0,
+        "system_boundary": "cradle-to-gate",
+        "reporting_period_start": "2025-01-01",
+        "reporting_period_end": "2025-12-31",
+        "geography_country": None,
+        "primary_data_share": 0.0,
+        "spec_version": "3.0.0",
+        "product_lineage_id": LINEAGE_A,
+        "version": 1,
+        "line_items": [
+            {
+                "item_id": 10,
+                "component": "body",
+                "material": "cotton",
+                "spend_usd": 10.0,
+                "matched_sector": "Cotton farming",
+                "emission_factor": 2.0,
+                "ef_source": "CEDA",
+                "kg_co2e": 20.0,
+                "share_pct": 66.6667,
+                "flag_status": "ok",
+                "data_source": "secondary",
+            },
+            {
+                "item_id": 11,
+                "component": "trim",
+                "material": "polyester",
+                "spend_usd": 5.0,
+                "matched_sector": "Plastics",
+                "emission_factor": 2.0,
+                "ef_source": "CEDA",
+                "kg_co2e": 10.0,
+                "share_pct": 33.3333,
+                "flag_status": "ok",
+                "data_source": "secondary",
+            },
+        ],
+    }
+
+
+def test_apply_primary_data_creates_new_version_without_mutating_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _source_product_with_line_items()
+    source_snapshot = {
+        "product": dict(source),
+        "line_items": [dict(li) for li in source["line_items"]],
+    }
+    product_inserts: list[dict] = []
+    line_item_inserts: list[list[dict]] = []
+
+    def fake_table(name: str) -> MagicMock:
+        mock_table = MagicMock()
+        if name == "products":
+            mock_insert = MagicMock()
+            mock_execute = MagicMock()
+
+            def capture_insert(data: dict) -> MagicMock:
+                product_inserts.append(data)
+                mock_execute.data = [{"product_id": 101}]
+                mock_insert.execute = MagicMock(return_value=mock_execute)
+                return mock_insert
+
+            mock_table.insert = capture_insert
+        elif name == "line_items":
+            mock_insert = MagicMock()
+            mock_execute = MagicMock()
+
+            def capture_insert(rows: list[dict]) -> MagicMock:
+                line_item_inserts.append(rows)
+                mock_insert.execute = MagicMock(return_value=mock_execute)
+                return mock_insert
+
+            mock_table.insert = capture_insert
+        return mock_table
+
+    mock_client = MagicMock()
+    mock_client.table.side_effect = fake_table
+    monkeypatch.setattr(store_module, "get_user_client", lambda _token: mock_client)
+    monkeypatch.setattr(store_module, "get_product_by_id", lambda pid, token: source if pid == 5 else None)
+    engagement_updates: list[dict] = []
+    monkeypatch.setattr(
+        store_module,
+        "update_engagement",
+        lambda engagement_id, *, access_token, **fields: engagement_updates.append(fields),
+    )
+
+    result = store_module.apply_primary_data(
+        5,
+        10,
+        8.0,
+        "FiberTex email 2025-06-01",
+        user_id=TEST_USER_ID,
+        access_token=TEST_ACCESS_TOKEN,
+        engagement_id=7,
+    )
+
+    assert result["new_product_id"] == 101
+    assert result["version"] == 2
+    assert result["pds_before"] == 0.0
+    assert result["pds_after"] == pytest.approx(8.0 / 18.0)
+
+    assert product_inserts[0]["product_lineage_id"] == LINEAGE_A
+    assert product_inserts[0]["version"] == 2
+    assert product_inserts[0]["status"] == "approved"
+    assert product_inserts[0]["total_kg_co2e"] == pytest.approx(18.0)
+    assert product_inserts[0]["primary_data_share"] == pytest.approx(8.0 / 18.0)
+
+    primary_row = next(li for li in line_item_inserts[0] if li["component"] == "body")
+    assert primary_row["data_source"] == "primary"
+    assert primary_row["kg_co2e"] == 8.0
+    assert primary_row["emission_factor"] is None
+    assert "Supplier primary data" in (primary_row["ef_source"] or "")
+
+    secondary_row = next(li for li in line_item_inserts[0] if li["component"] == "trim")
+    assert secondary_row["data_source"] == "secondary"
+    assert secondary_row["kg_co2e"] == 10.0
+
+    assert engagement_updates[0]["primary_kg_co2e"] == 8.0
+    assert engagement_updates[0]["applied_to_product_id"] == 101
+
+    # Source version remains unchanged (immutability)
+    assert source_snapshot["product"]["version"] == 1
+    assert source_snapshot["product"]["total_kg_co2e"] == 30.0
+    assert source_snapshot["line_items"][0]["data_source"] == "secondary"

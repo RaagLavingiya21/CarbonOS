@@ -15,6 +15,8 @@ from api.models.schemas import (
     AnalysisDetailDTO,
     AnalysisSummaryDTO,
     AnalyzeResponse,
+    ApplyPrimaryDataRequest,
+    ApplyPrimaryDataResponse,
     CalculateFootprintRequest,
     CalculateFootprintResponse,
     CriticReportDTO,
@@ -28,8 +30,6 @@ from api.models.schemas import (
     PublishAnalysisResponse,
     SaveAnalysisRequest,
     SaveAnalysisResponse,
-    ApplyPrimaryDataRequest,
-    ApplyPrimaryDataResponse,
 )
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
