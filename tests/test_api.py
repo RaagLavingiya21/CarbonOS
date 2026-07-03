@@ -25,7 +25,7 @@ def test_health_check() -> None:
 
 
 def test_analyzer_checkpoint_flow(monkeypatch) -> None:
-    def fake_lookup(material: str, country: str | None = None) -> EFMatch:
+    def fake_lookup(material: str, country: str | None = None, overrides=None) -> EFMatch:
         return EFMatch(
             material_input=material,
             sector_name="Cotton farming",
@@ -544,7 +544,7 @@ def test_apply_primary_data_returns_422_for_non_positive_value(monkeypatch) -> N
 
 
 def test_analyze_bulk_creates_products_and_isolates_errors(monkeypatch) -> None:
-    def fake_lookup(material: str, country: str | None = None) -> EFMatch:
+    def fake_lookup(material: str, country: str | None = None, overrides=None) -> EFMatch:
         return EFMatch(
             material_input=material,
             sector_name="Cotton farming",

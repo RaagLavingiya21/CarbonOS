@@ -18,6 +18,15 @@ def bypass_supabase_auth(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def mock_empty_ef_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid live Supabase calls when analyzer routes load org EF overrides."""
+    monkeypatch.setattr(
+        "api.routes.analyzer.get_active_overrides",
+        lambda access_token, *, user_id: {},
+    )
+
+
+@pytest.fixture(autouse=True)
 def use_memory_checkpointer(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use in-memory LangGraph checkpointer in tests — no Postgres required."""
     from langgraph.checkpoint.memory import MemorySaver
