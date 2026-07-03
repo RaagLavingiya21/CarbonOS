@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
+  BarChart3,
   Boxes,
   Factory,
   FileSearch,
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/analyzer", label: "Analyzer", icon: UploadCloud },
   { href: "/products", label: "Portfolio", icon: Boxes },
   { href: "/requests", label: "Requests", icon: Inbox },
+  { href: "/rollup", label: "Corporate footprint", icon: BarChart3 },
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch },
   { href: "/advisor", label: "Advisor", icon: Bot },
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory },

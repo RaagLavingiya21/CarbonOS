@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
+  BarChart3,
   Bot,
   Boxes,
   Factory,
@@ -42,6 +43,7 @@ const NAV: Array<Omit<CommandItem, "run"> & { href: string }> = [
   { id: "nav-analyzer", label: "Open Analyzer", hint: "BOM footprint", icon: UploadCloud, href: "/analyzer" },
   { id: "nav-portfolio", label: "Open Portfolio", hint: "All footprints", icon: Boxes, href: "/products" },
   { id: "nav-requests", label: "Open Requests", hint: "PCF request inbox", icon: Inbox, href: "/requests" },
+  { id: "nav-rollup", label: "Open Corporate footprint", hint: "Scope 3 Cat 1 roll-up", icon: BarChart3, href: "/rollup" },
   { id: "nav-gap", label: "Open Gap Analysis", hint: "Scope 3 readiness", icon: FileSearch, href: "/gap-analysis" },
   { id: "nav-advisor", label: "Open Advisor", hint: "Ask questions", icon: Bot, href: "/advisor" },
   { id: "nav-suppliers", label: "Open Supplier Copilot", hint: "Engagement", icon: Factory, href: "/suppliers" },

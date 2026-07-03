@@ -41,6 +41,34 @@ export type PortfolioSummary = {
   product_count: number;
 };
 
+export type RollupBreakdownRow = {
+  product_id: number;
+  product_name: string;
+  per_unit_kg_co2e: number;
+  annual_volume: number;
+  contribution_kg_co2e: number;
+  share_pct: number;
+};
+
+export type RollupSummary = {
+  scope3_cat1_total_kg_co2e: number;
+  product_count: number;
+  breakdown: RollupBreakdownRow[];
+  year: number;
+  products_missing_volume: Array<{ product_id: number; product_name: string }>;
+};
+
+export type ProductVolume = {
+  volume_id: number;
+  product_lineage_id: string;
+  user_id: string;
+  year: number;
+  annual_volume: number;
+  unit: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type AnalysisLineItem = {
   item_id?: number | null;
   component: string | null;
@@ -484,6 +512,32 @@ export const api = {
     return request<AnalysisSummary[]>(`/api/analyses${query ? `?${query}` : ""}`);
   },
   getPortfolioSummary: () => request<PortfolioSummary>("/api/analyses/summary"),
+  fetchRollup: (year?: number) => {
+    const params = new URLSearchParams();
+    if (year != null) params.set("year", String(year));
+    const query = params.toString();
+    return request<RollupSummary>(`/api/rollup${query ? `?${query}` : ""}`);
+  },
+  getProductVolume: (productId: number, year?: number) => {
+    const params = new URLSearchParams();
+    if (year != null) params.set("year", String(year));
+    const query = params.toString();
+    return request<ProductVolume | null>(
+      `/api/analyses/${productId}/volume${query ? `?${query}` : ""}`,
+    );
+  },
+  setProductVolume: (
+    productId: number,
+    payload: { year: number; annualVolume: number; unit?: string },
+  ) =>
+    request<ProductVolume>(`/api/analyses/${productId}/volume`, {
+      method: "PUT",
+      body: JSON.stringify({
+        year: payload.year,
+        annual_volume: payload.annualVolume,
+        unit: payload.unit ?? "units",
+      }),
+    }),
   submitForReview: (productId: number) =>
     request<{
       product_id: number;
