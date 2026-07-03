@@ -933,3 +933,46 @@ class ShareSummaryDTO(BaseModel):
 class RevokeShareResponse(BaseModel):
     share_id: int
     revoked_at: str
+
+
+class CreatePcfRequestRequest(BaseModel):
+    org_id: str
+    requester_name: str | None = None
+    requester_email: str | None = None
+    requester_company: str | None = None
+    product_name: str | None = None
+    message: str | None = None
+
+
+class CreatePcfRequestResponse(BaseModel):
+    request_id: int
+
+
+class PcfRequestDTO(BaseModel):
+    request_id: int
+    org_id: str
+    requester_name: str | None = None
+    requester_email: str | None = None
+    requester_company: str | None = None
+    product_name: str | None = None
+    message: str | None = None
+    status: str
+    fulfilled_share_id: int | None = None
+    share_token: str | None = None
+    created_at: str
+
+
+class FulfilPcfRequestRequest(BaseModel):
+    product_id: int
+
+
+class FulfilPcfRequestResponse(BaseModel):
+    request_id: int
+    status: str
+    share_id: int
+    share_token: str
+
+
+class DeclinePcfRequestResponse(BaseModel):
+    request_id: int
+    status: str
