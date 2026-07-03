@@ -32,6 +32,7 @@ import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, api } from "@/lib/api";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -63,6 +64,9 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
   const [pactPayload, setPactPayload] = useState<Record<string, unknown> | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
@@ -77,6 +81,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [creatingScenario, setCreatingScenario] = useState(false);
   const [provenance, setProvenance] = useState<FootprintProvenance | null>(null);
   const [provenanceLoading, setProvenanceLoading] = useState(false);
+
+  useEffect(() => {
+    createSupabaseBrowserClient()
+      .auth.getSession()
+      .then(({ data }) => setCurrentUserId(data.session?.user.id ?? null));
+  }, []);
 
   useEffect(() => {
     getAnalysisFromSupabase(params.id)
@@ -142,16 +152,17 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     }
   }
 
-  async function publishFootprint() {
+  async function submitForReview() {
     if (!analysis) return;
     setPublishing(true);
     setError(null);
     try {
-      const response = await api.publishAnalysis(analysis.product_id);
+      const response = await api.submitForReview(analysis.product_id);
       setAnalysis({
         ...analysis,
         status: response.status,
-        published_at: response.published_at,
+        submitted_for_review_by: response.submitted_for_review_by,
+        submitted_at: response.submitted_at,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -159,6 +170,50 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       setPublishing(false);
     }
   }
+
+  async function approveReview() {
+    if (!analysis) return;
+    setReviewActionLoading(true);
+    setError(null);
+    try {
+      const response = await api.approveReview(analysis.product_id);
+      setAnalysis({
+        ...analysis,
+        status: response.status,
+        reviewed_by: response.reviewed_by,
+        reviewed_at: response.reviewed_at,
+        published_at: response.published_at,
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewActionLoading(false);
+    }
+  }
+
+  async function rejectReview() {
+    if (!analysis || !rejectComment.trim()) return;
+    setReviewActionLoading(true);
+    setError(null);
+    try {
+      const response = await api.rejectReview(analysis.product_id, rejectComment.trim());
+      setAnalysis({
+        ...analysis,
+        status: response.status,
+        review_comment: response.review_comment,
+      });
+      setRejectComment("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewActionLoading(false);
+    }
+  }
+
+  const isSubmitter =
+    analysis?.submitted_for_review_by != null &&
+    currentUserId != null &&
+    analysis.submitted_for_review_by === currentUserId;
 
   async function createScenario() {
     if (!analysis) return;
@@ -299,10 +354,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                     <Download className="h-4 w-4" />
                     {exportLoading ? "Loading..." : "Export PACT payload"}
                   </Button>
-                  <Button disabled={publishing} onClick={publishFootprint} type="button">
-                    {publishing ? "Publishing..." : "Publish"}
+                  <Button disabled={publishing} onClick={submitForReview} type="button">
+                    {publishing ? "Submitting..." : "Submit for review"}
                   </Button>
                 </>
+              ) : analysis.status === "under_review" ? (
+                <Badge variant="outline">Awaiting review</Badge>
               ) : analysis.status === "published" ? (
                 <Button disabled type="button" variant="outline">
                   Published — read-only
@@ -459,6 +516,83 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               <FileWarning className="h-4 w-4" />
               <AlertDescription>{analysis.flagged_comment}</AlertDescription>
             </Alert>
+          ) : null}
+
+          {analysis.status === "under_review" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Review panel</CardTitle>
+                <CardDescription>
+                  A different org member must approve before this footprint is published.
+                  {analysis.submitted_at
+                    ? ` Submitted ${new Date(analysis.submitted_at).toLocaleString()}.`
+                    : null}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isSubmitter ? (
+                  <p className="text-small text-muted-foreground">
+                    You submitted this footprint for review and cannot approve or reject it.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={reviewActionLoading}
+                        onClick={approveReview}
+                        type="button"
+                      >
+                        {reviewActionLoading ? "Working..." : "Approve & publish"}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reject-comment">Rejection comment</Label>
+                      <Textarea
+                        id="reject-comment"
+                        placeholder="Explain what needs to change before approval"
+                        value={rejectComment}
+                        onChange={(event) => setRejectComment(event.target.value)}
+                      />
+                      <Button
+                        disabled={reviewActionLoading || !rejectComment.trim()}
+                        onClick={rejectReview}
+                        type="button"
+                        variant="outline"
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {analysis.review_comment ? (
+                  <p className="text-small text-muted-foreground">
+                    Last review comment: {analysis.review_comment}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {analysis.reviewed_by || analysis.submitted_for_review_by ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lifecycle</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-small text-muted-foreground">
+                {analysis.submitted_for_review_by ? (
+                  <p>Submitted by: {analysis.submitted_for_review_by.slice(0, 8)}…</p>
+                ) : null}
+                {analysis.submitted_at ? (
+                  <p>Submitted at: {new Date(analysis.submitted_at).toLocaleString()}</p>
+                ) : null}
+                {analysis.reviewed_by ? (
+                  <p>Reviewed by: {analysis.reviewed_by.slice(0, 8)}…</p>
+                ) : null}
+                {analysis.reviewed_at ? (
+                  <p>Reviewed at: {new Date(analysis.reviewed_at).toLocaleString()}</p>
+                ) : null}
+              </CardContent>
+            </Card>
           ) : null}
 
           <section className="grid gap-4 md:grid-cols-4">

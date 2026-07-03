@@ -257,6 +257,21 @@ class PublishAnalysisResponse(BaseModel):
     published_at: str
 
 
+class RejectReviewRequest(BaseModel):
+    comment: str
+
+
+class ReviewActionResponse(BaseModel):
+    product_id: int
+    status: str
+    submitted_for_review_by: str | None = None
+    submitted_at: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    published_at: str | None = None
+    review_comment: str | None = None
+
+
 class ApplyPrimaryDataRequest(BaseModel):
     item_id: int
     primary_kg_co2e: float
@@ -383,6 +398,11 @@ class AnalysisSummaryDTO(BaseModel):
     dqr_computed_at: str | None = None
     health_status: str | None = None
     health_reasons: list[str] = Field(default_factory=list)
+    submitted_for_review_by: str | None = None
+    submitted_at: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    review_comment: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisSummaryDTO":

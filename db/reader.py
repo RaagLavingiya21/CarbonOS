@@ -14,6 +14,7 @@ _PRODUCT_COLUMNS = (
     "reporting_period_start, reporting_period_end, geography_country, "
     "primary_data_share, spec_version, version, product_lineage_id, published_at, "
     "technological_dqr, geographical_dqr, temporal_dqr, dqr_computed_at, "
+    "submitted_for_review_by, submitted_at, reviewed_by, reviewed_at, review_comment, "
     "created_at, updated_at"
 )
 

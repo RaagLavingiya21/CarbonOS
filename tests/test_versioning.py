@@ -119,57 +119,8 @@ def test_save_with_recalculate_reuses_lineage_and_increments_version(
     assert captured["insert"]["version"] == 3
 
 
-def test_publish_analysis_succeeds_from_approved(monkeypatch: pytest.MonkeyPatch) -> None:
-    updates: list[dict] = []
-    mock_table = MagicMock()
-    mock_update = MagicMock()
-    mock_eq = MagicMock()
-    mock_eq.execute = MagicMock()
-    mock_update.eq.return_value = mock_eq
-    mock_table.update = lambda data: (updates.append(data), mock_update)[1]
-    mock_client = MagicMock()
-    mock_client.table.return_value = mock_table
-    monkeypatch.setattr(store_module, "get_user_client", lambda _token: mock_client)
-    monkeypatch.setattr(
-        store_module,
-        "get_product_by_id",
-        lambda product_id, access_token: {
-            "product_id": product_id,
-            "product_name": "Approved Product",
-            "status": "approved",
-        },
-    )
-    audit_calls: list[dict] = []
-    monkeypatch.setattr(
-        store_module,
-        "append_audit_log",
-        lambda **kwargs: audit_calls.append(kwargs),
-    )
-
-    store_module.publish_analysis(1, user_id=TEST_USER_ID, access_token=TEST_ACCESS_TOKEN)
-
-    assert updates[0]["status"] == "published"
-    assert updates[0]["published_at"]
-    assert audit_calls[0]["event"] == "published"
-    assert audit_calls[0]["workflow"] == "footprint_lifecycle"
-
-
-@pytest.mark.parametrize(
-    "status",
-    ["flagged", "published"],
-)
-def test_publish_analysis_rejects_non_approved(status: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        store_module,
-        "get_product_by_id",
-        lambda product_id, access_token: {
-            "product_id": product_id,
-            "product_name": "Product",
-            "status": status,
-        },
-    )
-
-    with pytest.raises(ValueError, match="Only approved footprints can be published"):
+def test_publish_analysis_is_disabled() -> None:
+    with pytest.raises(ValueError, match="Direct publish is not permitted"):
         store_module.publish_analysis(1, user_id=TEST_USER_ID, access_token=TEST_ACCESS_TOKEN)
 
 
@@ -202,33 +153,10 @@ def test_list_analyses_filters_by_status(monkeypatch: pytest.MonkeyPatch) -> Non
     assert response.json()[0]["status"] == "published"
 
 
-def test_publish_route_returns_404_for_missing_product(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "api.routes.analyzer.get_product_by_id",
-        lambda product_id, access_token: None,
-    )
-
-    response = client.post("/api/analyses/999/publish", headers=AUTH_HEADERS)
-
-    assert response.status_code == 404
-
-
-def test_publish_route_returns_409_for_non_approved(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_publish(product_id: int, *, user_id: str, access_token: str) -> None:
-        raise ValueError("Only approved footprints can be published.")
-
-    monkeypatch.setattr(
-        "api.routes.analyzer.get_product_by_id",
-        lambda product_id, access_token: {
-            "product_id": product_id,
-            "status": "flagged",
-        },
-    )
-    monkeypatch.setattr("api.routes.analyzer.publish_analysis", fake_publish)
-
+def test_publish_route_returns_409_for_disabled_publish() -> None:
     response = client.post("/api/analyses/1/publish", headers=AUTH_HEADERS)
-
     assert response.status_code == 409
+    assert "Direct publish is not permitted" in response.json()["detail"]
 
 
 def test_portfolio_summary_aggregates_counts(monkeypatch: pytest.MonkeyPatch) -> None:

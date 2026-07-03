@@ -28,6 +28,8 @@ from api.models.schemas import (
     ParseBOMResponse,
     ParsedBOMDTO,
     PublishAnalysisResponse,
+    RejectReviewRequest,
+    ReviewActionResponse,
     SaveAnalysisRequest,
     SaveAnalysisResponse,
 )
@@ -37,7 +39,13 @@ from calc.footprint import calculate_footprint
 from calc.health import footprint_health
 from db.org_store import get_active_org
 from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
-from db.store import apply_primary_data, publish_analysis, save_analysis
+from db.store import (
+    apply_primary_data,
+    approve_review,
+    reject_review,
+    save_analysis,
+    submit_for_review,
+)
 from exchange.pact import build_product_footprint, validate_product_footprint
 from exchange.provenance import build_provenance_markdown
 from factors.ef_lookup import EFMatch, lookup_ef
@@ -370,30 +378,102 @@ def get_analysis(
     return AnalysisDetailDTO.from_row(product)
 
 
-@router.post("/api/analyses/{product_id}/publish", response_model=PublishAnalysisResponse)
-def publish_analysis_route(
+@router.post("/api/analyses/{product_id}/submit-review", response_model=ReviewActionResponse)
+def submit_review_route(
     product_id: int,
     current_user: CurrentUser = Depends(get_current_user),
-) -> PublishAnalysisResponse:
+) -> ReviewActionResponse:
     product = get_product_by_id(product_id, current_user.access_token)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
     try:
-        publish_analysis(
+        submit_for_review(
             product_id,
             user_id=current_user.user_id,
             access_token=current_user.access_token,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
     updated = get_product_by_id(product_id, current_user.access_token)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
-    return PublishAnalysisResponse(
+    return ReviewActionResponse(
         product_id=product_id,
         status=updated["status"],
-        published_at=updated["published_at"],
+        submitted_for_review_by=updated.get("submitted_for_review_by"),
+        submitted_at=updated.get("submitted_at"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/approve-review", response_model=ReviewActionResponse)
+def approve_review_route(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReviewActionResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        approve_review(
+            product_id,
+            reviewer_user_id=current_user.user_id,
+            access_token=current_user.access_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    updated = get_product_by_id(product_id, current_user.access_token)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    return ReviewActionResponse(
+        product_id=product_id,
+        status=updated["status"],
+        reviewed_by=updated.get("reviewed_by"),
+        reviewed_at=updated.get("reviewed_at"),
+        published_at=updated.get("published_at"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/reject-review", response_model=ReviewActionResponse)
+def reject_review_route(
+    product_id: int,
+    request: RejectReviewRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReviewActionResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        reject_review(
+            product_id,
+            request.comment,
+            reviewer_user_id=current_user.user_id,
+            access_token=current_user.access_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    updated = get_product_by_id(product_id, current_user.access_token)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    return ReviewActionResponse(
+        product_id=product_id,
+        status=updated["status"],
+        reviewed_by=updated.get("reviewed_by"),
+        reviewed_at=updated.get("reviewed_at"),
+        review_comment=updated.get("review_comment"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/publish", response_model=PublishAnalysisResponse)
+def publish_analysis_route(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PublishAnalysisResponse:
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "Direct publish is not permitted. Submit for review and have a different "
+            "org member approve the footprint."
+        ),
     )
 
 
@@ -454,7 +534,7 @@ def get_provenance(
     product_id: int,
     format: Literal["json", "markdown"] = Query("json"),
     current_user: CurrentUser = Depends(get_current_user),
-) -> dict | PlainTextResponse:
+):
     provenance = get_footprint_provenance(product_id, current_user.access_token)
     if provenance is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")

@@ -24,6 +24,11 @@ export type AnalysisSummary = {
   dqr_computed_at?: string | null;
   health_status?: string | null;
   health_reasons?: string[];
+  submitted_for_review_by?: string | null;
+  submitted_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_comment?: string | null;
 };
 
 export type PortfolioSummary = {
@@ -410,11 +415,30 @@ export const api = {
     return request<AnalysisSummary[]>(`/api/analyses${query ? `?${query}` : ""}`);
   },
   getPortfolioSummary: () => request<PortfolioSummary>("/api/analyses/summary"),
-  publishAnalysis: (productId: number) =>
-    request<{ product_id: number; status: string; published_at: string }>(
-      `/api/analyses/${productId}/publish`,
-      { method: "POST" },
-    ),
+  submitForReview: (productId: number) =>
+    request<{
+      product_id: number;
+      status: string;
+      submitted_for_review_by?: string | null;
+      submitted_at?: string | null;
+    }>(`/api/analyses/${productId}/submit-review`, { method: "POST" }),
+  approveReview: (productId: number) =>
+    request<{
+      product_id: number;
+      status: string;
+      reviewed_by?: string | null;
+      reviewed_at?: string | null;
+      published_at?: string | null;
+    }>(`/api/analyses/${productId}/approve-review`, { method: "POST" }),
+  rejectReview: (productId: number, comment: string) =>
+    request<{
+      product_id: number;
+      status: string;
+      review_comment?: string | null;
+    }>(`/api/analyses/${productId}/reject-review`, {
+      method: "POST",
+      body: JSON.stringify({ comment }),
+    }),
   applyPrimaryData: (
     productId: number,
     payload: {

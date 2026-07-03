@@ -2,7 +2,7 @@ import { AnalysisDetail, AnalysisLineItem, AnalysisSummary } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 const PRODUCT_COLUMNS =
-  "product_id, product_name, analysis_date, total_kg_co2e, matched_items, flagged_items, status, flagged_comment, product_lineage_id, published_at, version, primary_data_share, declared_unit, technological_dqr, geographical_dqr, temporal_dqr, dqr_computed_at";
+  "product_id, product_name, analysis_date, total_kg_co2e, matched_items, flagged_items, status, flagged_comment, product_lineage_id, published_at, version, primary_data_share, declared_unit, technological_dqr, geographical_dqr, temporal_dqr, dqr_computed_at, submitted_for_review_by, submitted_at, reviewed_by, reviewed_at, review_comment";
 
 const LINE_ITEM_COLUMNS =
   "item_id, component, material, spend_usd, matched_sector, emission_factor, ef_source, kg_co2e, share_pct, flag_status, data_source, ef_confidence, country_of_origin, technological_dqr, geographical_dqr, temporal_dqr";

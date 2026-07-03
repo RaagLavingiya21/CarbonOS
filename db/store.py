@@ -148,26 +148,128 @@ def publish_analysis(
     user_id: str,
     access_token: str,
 ) -> None:
-    """Publish an approved footprint. Raises ValueError if not approved."""
+    """Direct publish is disabled — footprints reach published only via approve_review."""
+    raise ValueError(
+        "Direct publish is not permitted. Submit for review and have a different "
+        "org member approve the footprint."
+    )
+
+
+def submit_for_review(
+    product_id: int,
+    *,
+    user_id: str,
+    access_token: str,
+) -> None:
+    """Move an approved footprint to under_review."""
     product = get_product_by_id(product_id, access_token)
     if product is None:
         raise ValueError(f"Product {product_id} not found.")
     if product.get("status") != "approved":
-        raise ValueError("Only approved footprints can be published.")
+        raise ValueError("Only approved footprints can be submitted for review.")
 
-    published_at = datetime.now(UTC).isoformat()
+    submitted_at = datetime.now(UTC).isoformat()
     client = get_user_client(access_token)
     client.table("products").update(
-        {"status": "published", "published_at": published_at}
+        {
+            "status": "under_review",
+            "submitted_for_review_by": user_id,
+            "submitted_at": submitted_at,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "review_comment": None,
+        }
+    ).eq("product_id", product_id).execute()
+
+    append_audit_log(
+        event="submitted_for_review",
+        workflow="footprint_lifecycle",
+        user_id=user_id,
+        access_token=access_token,
+        product_name=product.get("product_name"),
+        status="under_review",
+    )
+
+
+def approve_review(
+    product_id: int,
+    *,
+    reviewer_user_id: str,
+    access_token: str,
+) -> None:
+    """Publish a footprint after review by a different org member."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        raise ValueError(f"Product {product_id} not found.")
+    if product.get("status") != "under_review":
+        raise ValueError("Only footprints under review can be approved.")
+    submitter = product.get("submitted_for_review_by")
+    if submitter is not None and reviewer_user_id == submitter:
+        raise ValueError("review requires a different approver")
+
+    from db.org_store import get_active_org_member_ids
+
+    member_ids = get_active_org_member_ids(access_token, user_id=reviewer_user_id)
+    if member_ids and reviewer_user_id not in member_ids:
+        raise ValueError("Reviewer must be a member of the active organization.")
+
+    reviewed_at = datetime.now(UTC).isoformat()
+    published_at = reviewed_at
+    client = get_user_client(access_token)
+    client.table("products").update(
+        {
+            "status": "published",
+            "reviewed_by": reviewer_user_id,
+            "reviewed_at": reviewed_at,
+            "published_at": published_at,
+        }
     ).eq("product_id", product_id).execute()
 
     append_audit_log(
         event="published",
         workflow="footprint_lifecycle",
-        user_id=user_id,
+        user_id=reviewer_user_id,
         access_token=access_token,
         product_name=product.get("product_name"),
         status="published",
+    )
+
+
+def reject_review(
+    product_id: int,
+    comment: str,
+    *,
+    reviewer_user_id: str,
+    access_token: str,
+) -> None:
+    """Reject a footprint under review, returning it to flagged status."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        raise ValueError(f"Product {product_id} not found.")
+    if product.get("status") != "under_review":
+        raise ValueError("Only footprints under review can be rejected.")
+    submitter = product.get("submitted_for_review_by")
+    if submitter is not None and reviewer_user_id == submitter:
+        raise ValueError("review requires a different approver")
+
+    reviewed_at = datetime.now(UTC).isoformat()
+    client = get_user_client(access_token)
+    client.table("products").update(
+        {
+            "status": "flagged",
+            "reviewed_by": reviewer_user_id,
+            "reviewed_at": reviewed_at,
+            "review_comment": comment.strip(),
+        }
+    ).eq("product_id", product_id).execute()
+
+    append_audit_log(
+        event="review_rejected",
+        workflow="footprint_lifecycle",
+        user_id=reviewer_user_id,
+        access_token=access_token,
+        product_name=product.get("product_name"),
+        status="flagged",
     )
 
 
