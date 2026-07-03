@@ -23,7 +23,7 @@ export function SourceCitation({
     );
   }
   return (
-    <Tooltip content={source}>
+    <Tooltip content={source} className="min-w-0 max-w-full">
       <span
         className={cn(
           "inline-flex min-w-0 max-w-full items-center gap-1 font-mono text-caption text-muted-foreground",
