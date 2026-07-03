@@ -14,6 +14,7 @@ from calc.pds import compute_primary_data_share
 from db.client import get_user_client
 from db.copilot_store import append_audit_log, update_engagement
 from db.reader import get_product_by_id
+from factors.ef_lookup import lookup_ef_by_sector_code
 
 
 @dataclass
@@ -390,6 +391,161 @@ def apply_primary_data(
         "version": new_version,
         "pds_before": pds_before,
         "pds_after": pds_after,
+    }
+
+
+def _remapped_flag_status(existing_status: str | None, *, has_kg_co2e: bool) -> str:
+    parts = [
+        part
+        for part in (existing_status or "ok").split("|")
+        if part and part not in {"low_confidence", "unmatched"}
+    ]
+    if not has_kg_co2e:
+        parts.append("unmatched")
+    return "|".join(dict.fromkeys(parts)) if parts else "ok"
+
+
+def _count_flagged_line_items(items: list[dict]) -> int:
+    return sum(1 for li in items if (li.get("flag_status") or "ok") != "ok")
+
+
+def remap_line_item(
+    source_product_id: int,
+    item_id: int,
+    sector_code: str,
+    *,
+    user_id: str,
+    access_token: str,
+) -> dict:
+    """Re-map one line item to a chosen sector, creating a new footprint version."""
+    source = get_product_by_id(source_product_id, access_token)
+    if source is None:
+        raise ValueError(f"Source product {source_product_id} not found.")
+
+    source_items = source.get("line_items") or []
+    matched = next((li for li in source_items if li.get("item_id") == item_id), None)
+    if matched is None:
+        raise ValueError(f"Line item {item_id} not found on product {source_product_id}.")
+
+    total_before = float(source.get("total_kg_co2e") or 0.0)
+    ef_match = lookup_ef_by_sector_code(
+        sector_code,
+        matched.get("country_of_origin"),
+        material_input=str(matched.get("material") or ""),
+        source_citation="Analyst re-map (Open CEDA 2025)",
+    )
+
+    spend = matched.get("spend_usd")
+    kg_co2e = None
+    if spend is not None and spend > 0:
+        kg_co2e = round(float(spend) * ef_match.ef_kg_co2e_per_usd, 6)
+
+    cloned_items: list[dict] = []
+    for li in source_items:
+        row = dict(li)
+        if row.get("item_id") == item_id:
+            row["matched_sector"] = ef_match.sector_name
+            row["emission_factor"] = round(ef_match.ef_kg_co2e_per_usd, 6)
+            row["ef_source"] = ef_match.source_citation
+            row["ef_confidence"] = ef_match.confidence_score
+            row["kg_co2e"] = kg_co2e
+            row["data_source"] = "secondary"
+            row["flag_status"] = _remapped_flag_status(
+                row.get("flag_status"),
+                has_kg_co2e=kg_co2e is not None,
+            )
+        cloned_items.append(row)
+
+    total_kg_co2e = sum(li["kg_co2e"] for li in cloned_items if li.get("kg_co2e") is not None)
+    for li in cloned_items:
+        kg = li.get("kg_co2e")
+        if kg is not None and total_kg_co2e > 0:
+            li["share_pct"] = round(kg / total_kg_co2e * 100, 4)
+        else:
+            li["share_pct"] = None
+
+    flagged_items = _count_flagged_line_items(cloned_items)
+    matched_items = sum(1 for li in cloned_items if li.get("kg_co2e") is not None)
+    new_version = int(source.get("version") or 1) + 1
+
+    insert_data: dict = {
+        "user_id": user_id,
+        "product_name": source["product_name"],
+        "analysis_date": source["analysis_date"],
+        "total_kg_co2e": round(total_kg_co2e, 6),
+        "matched_items": matched_items,
+        "flagged_items": flagged_items,
+        "status": "approved",
+        "flagged_comment": source.get("flagged_comment"),
+        "product_description": source.get("product_description"),
+        "declared_unit": source.get("declared_unit") or "piece",
+        "unitary_product_amount": source.get("unitary_product_amount") or 1,
+        "system_boundary": source.get("system_boundary") or "cradle-to-gate",
+        "reporting_period_start": source.get("reporting_period_start"),
+        "reporting_period_end": source.get("reporting_period_end"),
+        "geography_country": source.get("geography_country"),
+        "primary_data_share": source.get("primary_data_share"),
+        "spec_version": source.get("spec_version") or "3.0.0",
+        "product_lineage_id": source["product_lineage_id"],
+        "version": new_version,
+    }
+
+    reporting_year = _reporting_year(source.get("reporting_period_start"))
+    line_item_rows = []
+    for li in cloned_items:
+        row = {
+            "product_id": 0,
+            "user_id": user_id,
+            "component": li.get("component"),
+            "material": li.get("material"),
+            "spend_usd": li.get("spend_usd"),
+            "matched_sector": li.get("matched_sector"),
+            "emission_factor": li.get("emission_factor"),
+            "ef_source": li.get("ef_source"),
+            "kg_co2e": li.get("kg_co2e"),
+            "share_pct": li.get("share_pct"),
+            "flag_status": li.get("flag_status") or "ok",
+            "data_source": li.get("data_source") or "secondary",
+            "ef_confidence": li.get("ef_confidence"),
+            "country_of_origin": li.get("country_of_origin"),
+        }
+        row.update(_dqr_fields_for_dict_row(row, reporting_year=reporting_year))
+        line_item_rows.append(row)
+
+    aggregate = aggregate_dqr(line_item_rows)
+    insert_data["technological_dqr"] = aggregate["technological"]
+    insert_data["geographical_dqr"] = aggregate["geographical"]
+    insert_data["temporal_dqr"] = aggregate["temporal"]
+    insert_data["dqr_computed_at"] = datetime.now(UTC).isoformat()
+
+    client = get_user_client(access_token)
+    product_response = client.table("products").insert(insert_data).execute()
+    new_product_id = int(product_response.data[0]["product_id"])
+
+    for row in line_item_rows:
+        row["product_id"] = new_product_id
+    if line_item_rows:
+        client.table("line_items").insert(line_item_rows).execute()
+
+    append_audit_log(
+        event="line_item_remapped",
+        workflow="footprint_lifecycle",
+        user_id=user_id,
+        access_token=access_token,
+        product_name=source.get("product_name"),
+        component_name=str(matched.get("material") or ""),
+        status=sector_code,
+    )
+
+    return {
+        "new_product_id": new_product_id,
+        "version": new_version,
+        "total_kg_co2e_before": round(total_before, 6),
+        "total_kg_co2e_after": round(total_kg_co2e, 6),
+        "delta_kg_co2e": round(total_kg_co2e - total_before, 6),
+        "remapped_item_id": item_id,
+        "sector_code": sector_code,
+        "sector_name": ef_match.sector_name,
     }
 
 
