@@ -233,6 +233,7 @@ class SaveAnalysisRequest(BaseModel):
     reporting_period_start: date | None = None
     reporting_period_end: date | None = None
     geography_country: str | None = None
+    recalculate_of_product_id: int | None = None
 
     @field_validator("geography_country")
     @classmethod
@@ -248,6 +249,12 @@ class SaveAnalysisRequest(BaseModel):
 class SaveAnalysisResponse(BaseModel):
     product_id: int
     phase: Literal["saved"]
+
+
+class PublishAnalysisResponse(BaseModel):
+    product_id: int
+    status: str
+    published_at: str
 
 
 class AnalyzeResponse(BaseModel):
@@ -270,6 +277,11 @@ class AnalysisSummaryDTO(BaseModel):
     flagged_items: int
     status: str | None = None
     flagged_comment: str | None = None
+    product_lineage_id: str | None = None
+    published_at: str | None = None
+    version: int | None = None
+    primary_data_share: float | None = None
+    declared_unit: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisSummaryDTO":

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { ChatInput } from "@/components/chat/ChatInput";
+import { MetricCard } from "@/components/data/MetricCard";
 import {
   ModuleShowcaseCard,
   type ModuleShowcaseData,
@@ -20,7 +21,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { chatApi, type ChatThread } from "@/lib/chat-api";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { api, type PortfolioSummary } from "@/lib/api";
+import { cn, formatKg, formatPct, formatRelativeTime } from "@/lib/utils";
 
 const MODULES: ModuleShowcaseData[] = [
   {
@@ -91,6 +93,9 @@ function sortThreadsByUpdatedAt(threads: ChatThread[]): ChatThread[] {
 export default function Home() {
   const [recentThreads, setRecentThreads] = useState<ChatThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
+  const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummary | null>(null);
+  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
+  const [portfolioError, setPortfolioError] = useState(false);
 
   useEffect(() => {
     chatApi
@@ -99,6 +104,30 @@ export default function Home() {
       .catch(() => setRecentThreads([]))
       .finally(() => setLoadingThreads(false));
   }, []);
+
+  const loadPortfolio = useCallback(async () => {
+    setLoadingPortfolio(true);
+    setPortfolioError(false);
+    try {
+      setPortfolioSummary(await api.getPortfolioSummary());
+    } catch {
+      // Safari aborts in-flight fetches on back-navigation ("TypeError: Load failed").
+      // Retry once so a transient blip doesn't blank the dashboard; surface a retry
+      // affordance only if it genuinely fails, rather than silently rendering nothing.
+      try {
+        setPortfolioSummary(await api.getPortfolioSummary());
+      } catch (retryError) {
+        console.error("Failed to load portfolio summary:", retryError);
+        setPortfolioError(true);
+      }
+    } finally {
+      setLoadingPortfolio(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPortfolio();
+  }, [loadPortfolio]);
 
   const router = useRouter();
 
@@ -123,6 +152,72 @@ export default function Home() {
           <ChatInput variant="hero" onSend={handleSend} showModuleButtons={false} />
         </div>
       </section>
+
+      {!loadingPortfolio && portfolioError ? (
+        <section className="w-full text-center">
+          <p className="text-sm text-muted-foreground">
+            Couldn&apos;t load your portfolio overview.{" "}
+            <button
+              type="button"
+              onClick={() => void loadPortfolio()}
+              className="underline underline-offset-4"
+            >
+              Retry
+            </button>
+          </p>
+        </section>
+      ) : !loadingPortfolio && portfolioSummary && portfolioSummary.product_count > 0 ? (
+        <section className="w-full">
+          <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">
+            Portfolio overview
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Link href="/products">
+              <MetricCard
+                className="transition hover:border-primary/40"
+                label="Total portfolio"
+                value={formatKg(portfolioSummary.total_kg_co2e)}
+                unit="kg CO₂e"
+              />
+            </Link>
+            <Link href="/products">
+              <MetricCard
+                className="transition hover:border-primary/40"
+                label="Avg primary data share"
+                value={formatPct(portfolioSummary.avg_primary_data_share * 100)}
+              />
+            </Link>
+            <Link href="/products">
+              <MetricCard
+                className="transition hover:border-primary/40"
+                label="Open flags"
+                value={portfolioSummary.open_flags_count}
+                hint="Products with flagged line items"
+              />
+            </Link>
+            {Object.entries(portfolioSummary.counts_by_status).map(([status, count]) => (
+              <Link key={status} href={`/products?status=${encodeURIComponent(status)}`}>
+                <MetricCard
+                  className="transition hover:border-primary/40"
+                  label={status.charAt(0).toUpperCase() + status.slice(1)}
+                  value={count}
+                  hint="Saved footprints"
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : !loadingPortfolio && portfolioSummary?.product_count === 0 ? (
+        <section className="w-full text-center">
+          <p className="text-sm text-muted-foreground">
+            No saved product footprints yet.{" "}
+            <Link href="/analyzer" className="underline underline-offset-4">
+              Analyze a BOM
+            </Link>{" "}
+            to build your portfolio.
+          </p>
+        </section>
+      ) : null}
 
       <section className="w-full">
         <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">

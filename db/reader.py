@@ -12,7 +12,8 @@ _PRODUCT_COLUMNS = (
     "matched_items, flagged_items, status, flagged_comment, footprint_uuid, "
     "product_description, declared_unit, unitary_product_amount, system_boundary, "
     "reporting_period_start, reporting_period_end, geography_country, "
-    "primary_data_share, spec_version, version, created_at, updated_at"
+    "primary_data_share, spec_version, version, product_lineage_id, published_at, "
+    "created_at, updated_at"
 )
 
 _LINE_ITEM_COLUMNS = (
@@ -26,6 +27,7 @@ def get_all_products(
     *,
     user_id: str | None = None,
     member_user_ids: list[str] | None = None,
+    status: str | None = None,
 ) -> list[dict]:
     """Return product rows for the authenticated user (RLS-scoped).
 
@@ -38,18 +40,25 @@ def get_all_products(
         query = query.eq("user_id", user_id)
     elif member_user_ids:
         query = query.in_("user_id", member_user_ids)
+    if status is not None:
+        query = query.eq("status", status)
     response = query.order("analysis_date", desc=True).execute()
     return [_normalize_product_row(row) for row in response.data]
 
 
-def get_products_for_active_org(access_token: str, *, user_id: str | None = None) -> list[dict]:
+def get_products_for_active_org(
+    access_token: str,
+    *,
+    user_id: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
     """Return products visible in the user's active workspace org."""
     from db.org_store import get_active_org_member_ids
 
     member_ids = get_active_org_member_ids(access_token, user_id=user_id)
     if not member_ids:
-        return get_all_products(access_token, user_id=user_id)
-    return get_all_products(access_token, member_user_ids=member_ids)
+        return get_all_products(access_token, user_id=user_id, status=status)
+    return get_all_products(access_token, member_user_ids=member_ids, status=status)
 
 
 def get_product_by_name(name: str, access_token: str) -> dict | None:

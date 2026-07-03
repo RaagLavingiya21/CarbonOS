@@ -6,10 +6,12 @@ No Streamlit imports — callable from any Python context.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 
 from calc.footprint import FootprintResult, LineItem
 from db.client import get_user_client
+from db.copilot_store import append_audit_log
+from db.reader import get_product_by_id
 
 
 @dataclass
@@ -39,6 +41,7 @@ def save_analysis(
     reporting_period_start: date | None = None,
     reporting_period_end: date | None = None,
     geography_country: str | None = None,
+    recalculate_of_product_id: int | None = None,
 ) -> int:
     """Persist a footprint result. Returns the new product_id."""
     if analysis_date is None:
@@ -48,25 +51,33 @@ def save_analysis(
         reporting_period_start = date(analysis_date.year, 1, 1)
         reporting_period_end = date(analysis_date.year, 12, 31)
 
+    insert_data: dict = {
+        "user_id": user_id,
+        "product_name": product_name.strip(),
+        "analysis_date": analysis_date.isoformat(),
+        "total_kg_co2e": round(result.total_kg_co2e, 6),
+        "matched_items": result.matched_count,
+        "flagged_items": result.flagged_count,
+        "status": status,
+        "flagged_comment": flagged_comment.strip() if flagged_comment else None,
+        "product_description": product_description.strip() if product_description else None,
+        "reporting_period_start": reporting_period_start.isoformat(),
+        "reporting_period_end": reporting_period_end.isoformat(),
+        "geography_country": geography_country,
+        "version": 1,
+    }
+
+    if recalculate_of_product_id is not None:
+        source = get_product_by_id(recalculate_of_product_id, access_token)
+        if source is None:
+            raise ValueError(f"Source product {recalculate_of_product_id} not found.")
+        insert_data["product_lineage_id"] = source["product_lineage_id"]
+        insert_data["version"] = source["version"] + 1
+
     client = get_user_client(access_token)
     product_response = (
         client.table("products")
-        .insert(
-            {
-                "user_id": user_id,
-                "product_name": product_name.strip(),
-                "analysis_date": analysis_date.isoformat(),
-                "total_kg_co2e": round(result.total_kg_co2e, 6),
-                "matched_items": result.matched_count,
-                "flagged_items": result.flagged_count,
-                "status": status,
-                "flagged_comment": flagged_comment.strip() if flagged_comment else None,
-                "product_description": product_description.strip() if product_description else None,
-                "reporting_period_start": reporting_period_start.isoformat(),
-                "reporting_period_end": reporting_period_end.isoformat(),
-                "geography_country": geography_country,
-            }
-        )
+        .insert(insert_data)
         .execute()
     )
     product_id = product_response.data[0]["product_id"]
@@ -76,6 +87,35 @@ def save_analysis(
         client.table("line_items").insert(line_item_rows).execute()
 
     return int(product_id)
+
+
+def publish_analysis(
+    product_id: int,
+    *,
+    user_id: str,
+    access_token: str,
+) -> None:
+    """Publish an approved footprint. Raises ValueError if not approved."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        raise ValueError(f"Product {product_id} not found.")
+    if product.get("status") != "approved":
+        raise ValueError("Only approved footprints can be published.")
+
+    published_at = datetime.now(UTC).isoformat()
+    client = get_user_client(access_token)
+    client.table("products").update(
+        {"status": "published", "published_at": published_at}
+    ).eq("product_id", product_id).execute()
+
+    append_audit_log(
+        event="published",
+        workflow="footprint_lifecycle",
+        user_id=user_id,
+        access_token=access_token,
+        product_name=product.get("product_name"),
+        status="published",
+    )
 
 
 def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:

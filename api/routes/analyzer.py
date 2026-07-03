@@ -7,7 +7,7 @@ import io
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from api.middleware.auth import CurrentUser, get_current_user
@@ -25,6 +25,7 @@ from api.models.schemas import (
     MatchFactorsResponse,
     ParseBOMResponse,
     ParsedBOMDTO,
+    PublishAnalysisResponse,
     SaveAnalysisRequest,
     SaveAnalysisResponse,
 )
@@ -33,7 +34,7 @@ from calc.critic import run_critic
 from calc.footprint import calculate_footprint
 from db.org_store import get_active_org
 from db.reader import get_product_by_id, get_products_for_active_org
-from db.store import save_analysis
+from db.store import publish_analysis, save_analysis
 from exchange.pact import build_product_footprint, validate_product_footprint
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
@@ -192,6 +193,7 @@ async def analyze(
     reporting_period_start: str | None = Form(None),
     reporting_period_end: str | None = Form(None),
     geography_country: str | None = Form(None),
+    recalculate_of_product_id: int | None = Form(None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalyzeResponse:
     raw_bytes = await file.read()
@@ -227,6 +229,7 @@ async def analyze(
             reporting_period_start=period_start,
             reporting_period_end=period_end,
             geography_country=_normalize_geography_country(geography_country),
+            recalculate_of_product_id=recalculate_of_product_id,
         )
         phase = "saved"
 
@@ -284,6 +287,7 @@ def save_analysis_result(
         reporting_period_start=period_start,
         reporting_period_end=period_end,
         geography_country=request.geography_country,
+        recalculate_of_product_id=request.recalculate_of_product_id,
     )
     session_store.update(session.session_id, phase="saved", saved_product_id=product_id)
     return SaveAnalysisResponse(product_id=product_id, phase="saved")
@@ -291,6 +295,7 @@ def save_analysis_result(
 
 @router.get("/api/analyses", response_model=list[AnalysisSummaryDTO])
 def list_analyses(
+    status: str | None = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[AnalysisSummaryDTO]:
     return [
@@ -298,8 +303,34 @@ def list_analyses(
         for row in get_products_for_active_org(
             current_user.access_token,
             user_id=current_user.user_id,
+            status=status,
         )
     ]
+
+
+@router.get("/api/analyses/summary")
+def get_portfolio_summary(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    products = get_products_for_active_org(
+        current_user.access_token,
+        user_id=current_user.user_id,
+    )
+    total_kg_co2e = sum(p.get("total_kg_co2e") or 0 for p in products)
+    pds_values = [p.get("primary_data_share") or 0 for p in products]
+    avg_primary_data_share = sum(pds_values) / len(pds_values) if pds_values else 0.0
+    counts_by_status: dict[str, int] = {}
+    for product in products:
+        product_status = product.get("status") or "unknown"
+        counts_by_status[product_status] = counts_by_status.get(product_status, 0) + 1
+    open_flags_count = sum(1 for p in products if (p.get("flagged_items") or 0) > 0)
+    return {
+        "total_kg_co2e": total_kg_co2e,
+        "avg_primary_data_share": avg_primary_data_share,
+        "counts_by_status": counts_by_status,
+        "open_flags_count": open_flags_count,
+        "product_count": len(products),
+    }
 
 
 @router.get("/api/analyses/{product_id}", response_model=AnalysisDetailDTO)
@@ -311,6 +342,33 @@ def get_analysis(
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
     return AnalysisDetailDTO.from_row(product)
+
+
+@router.post("/api/analyses/{product_id}/publish", response_model=PublishAnalysisResponse)
+def publish_analysis_route(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PublishAnalysisResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        publish_analysis(
+            product_id,
+            user_id=current_user.user_id,
+            access_token=current_user.access_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    updated = get_product_by_id(product_id, current_user.access_token)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    return PublishAnalysisResponse(
+        product_id=product_id,
+        status=updated["status"],
+        published_at=updated["published_at"],
+    )
 
 
 @router.get("/api/footprints/{product_id}/pact")
