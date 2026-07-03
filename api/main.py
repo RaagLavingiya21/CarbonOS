@@ -16,7 +16,18 @@ from fastapi.responses import JSONResponse
 
 from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
-from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, org, panels, scenarios
+from api.routes import (
+    advisor,
+    analyzer,
+    chat,
+    copilot,
+    gap_analyzer,
+    org,
+    panels,
+    public,
+    scenarios,
+    shares,
+)
 
 logger = logging.getLogger("api.request")
 logging.basicConfig(level=logging.INFO)
@@ -143,6 +154,8 @@ async def log_requests(request: Request, call_next):
 
 
 app.include_router(analyzer.router)
+app.include_router(shares.router)
+app.include_router(public.router)
 app.include_router(advisor.router)
 app.include_router(gap_analyzer.router)
 app.include_router(copilot.router)
