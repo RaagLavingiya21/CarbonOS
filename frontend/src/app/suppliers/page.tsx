@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Factory, Mail, Route, Search } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ApplyPrimaryDataResponse,
+  AnalysisLineItem,
   DraftEmailResponse,
   EngagementCandidate,
   RouteResponseResponse,
@@ -36,6 +39,12 @@ export default function SuppliersPage() {
   const [routing, setRouting] = useState<RouteResponseResponse | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmPrimaryKg, setConfirmPrimaryKg] = useState("");
+  const [confirmSourceNote, setConfirmSourceNote] = useState("");
+  const [confirmItemId, setConfirmItemId] = useState<number | null>(null);
+  const [confirmProductId, setConfirmProductId] = useState<number | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyPrimaryDataResponse | null>(null);
+  const [applyingPrimary, setApplyingPrimary] = useState(false);
 
   async function loadSuppliers(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +53,7 @@ export default function SuppliersPage() {
     setDraft(null);
     setRouting(null);
     setEngagementId(null);
+    setApplyResult(null);
     try {
       const response = await api.listSuppliers(productName);
       setSuppliers(response);
@@ -90,21 +100,64 @@ export default function SuppliersPage() {
     if (!selected || !engagementId || !responseText.trim()) return;
     setLoading("routing");
     setError(null);
+    setApplyResult(null);
     try {
-      setRouting(
-        await api.routeSupplierResponse(
-          engagementId,
-          selected.supplier_name,
-          responseText,
-          selected.component,
-        ),
+      const response = await api.routeSupplierResponse(
+        engagementId,
+        selected.supplier_name,
+        responseText,
+        selected.component,
       );
+      setRouting(response);
+      const extracted = response.parsed.parsed?.primary_kg_co2e;
+      setConfirmPrimaryKg(extracted != null ? String(extracted) : "");
+      setConfirmSourceNote(
+        `Supplier response from ${selected.supplier_name} for ${selected.component ?? "component"}`,
+      );
+      const match = response.suggested_match;
+      setConfirmProductId(match?.product_id ?? null);
+      if (match?.item_id) {
+        setConfirmItemId(match.item_id);
+      } else if (match?.matches.length === 1 && match.matches[0].item_id) {
+        setConfirmItemId(match.matches[0].item_id);
+      } else {
+        setConfirmItemId(null);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(null);
     }
   }
+
+  async function confirmPrimaryData() {
+    if (!confirmProductId || !confirmItemId || !engagementId) return;
+    const value = Number(confirmPrimaryKg);
+    if (!Number.isFinite(value) || value <= 0 || !confirmSourceNote.trim()) return;
+    setApplyingPrimary(true);
+    setError(null);
+    try {
+      const result = await api.applyPrimaryData(confirmProductId, {
+        item_id: confirmItemId,
+        primary_kg_co2e: value,
+        source_note: confirmSourceNote.trim(),
+        engagement_id: engagementId,
+      });
+      setApplyResult(result);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setApplyingPrimary(false);
+    }
+  }
+
+  function selectMatchCandidate(item: AnalysisLineItem) {
+    if (item.item_id) setConfirmItemId(item.item_id);
+  }
+
+  const isStoreData =
+    routing?.routing?.decision?.action === "store_data" &&
+    routing.suggested_match?.product_id != null;
 
   return (
     <div className="space-y-8">
@@ -295,6 +348,100 @@ export default function SuppliersPage() {
                       </p>
                     </AlertDescription>
                   </Alert>
+                ) : null}
+                {isStoreData ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Confirm primary data</CardTitle>
+                      <CardDescription>
+                        Review the extracted supplier value and target line item before applying.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {applyResult ? (
+                        <Alert variant="success">
+                          <AlertTitle>Primary data applied</AlertTitle>
+                          <AlertDescription className="space-y-2">
+                            <p>
+                              Created v{applyResult.version}, PDS{" "}
+                              {formatPct(applyResult.pds_before * 100)} →{" "}
+                              {formatPct(applyResult.pds_after * 100)}
+                            </p>
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={`/analyzer/${applyResult.new_product_id}`}>
+                                View new version
+                              </Link>
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirm-primary-kg">Cradle-to-gate kg CO₂e</Label>
+                            <Input
+                              id="confirm-primary-kg"
+                              inputMode="decimal"
+                              min="0"
+                              type="number"
+                              value={confirmPrimaryKg}
+                              onChange={(event) => setConfirmPrimaryKg(event.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirm-source-note">Source note</Label>
+                            <Textarea
+                              id="confirm-source-note"
+                              value={confirmSourceNote}
+                              onChange={(event) => setConfirmSourceNote(event.target.value)}
+                            />
+                          </div>
+                          {(routing.suggested_match?.matches.length ?? 0) > 1 ? (
+                            <div className="space-y-2">
+                              <Label>Select line item</Label>
+                              <div className="grid gap-2">
+                                {routing.suggested_match?.matches.map((item) => (
+                                  <button
+                                    key={`${item.item_id}-${item.component}-${item.material}`}
+                                    className={`rounded-lg border p-3 text-left text-sm ${confirmItemId === item.item_id ? "border-primary ring-2 ring-primary/20" : ""}`}
+                                    onClick={() => selectMatchCandidate(item)}
+                                    type="button"
+                                  >
+                                    {item.component ?? "Component"} / {item.material ?? "Material"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : routing.suggested_match?.matches.length === 1 ? (
+                            <p className="text-sm text-muted-foreground">
+                              Target: {routing.suggested_match.matches[0].component} /{" "}
+                              {routing.suggested_match.matches[0].material}
+                            </p>
+                          ) : (
+                            <Alert>
+                              <AlertDescription>
+                                No exact line-item match found. Apply primary data manually from the
+                                product detail page.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          <Button
+                            disabled={
+                              applyingPrimary ||
+                              !confirmProductId ||
+                              !confirmItemId ||
+                              !confirmPrimaryKg ||
+                              Number(confirmPrimaryKg) <= 0 ||
+                              !confirmSourceNote.trim()
+                            }
+                            onClick={confirmPrimaryData}
+                            type="button"
+                          >
+                            {applyingPrimary ? "Applying..." : "Confirm and apply primary data"}
+                          </Button>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
                 ) : null}
               </CardContent>
             </Card>

@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Copy, Download, FileWarning, RefreshCw } from "lucide-react";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -23,11 +25,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
-import { AnalysisDetail, api } from "@/lib/api";
+import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -35,6 +38,11 @@ function statusBadgeVariant(status: string | null | undefined) {
   if (status === "flagged") return "destructive" as const;
   if (status === "published") return "default" as const;
   return "secondary" as const;
+}
+
+function dataSourceBadgeVariant(dataSource: string | null | undefined) {
+  if (dataSource === "primary") return "default" as const;
+  return "outline" as const;
 }
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
@@ -46,6 +54,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [primaryDataOpen, setPrimaryDataOpen] = useState(false);
+  const [selectedLineItem, setSelectedLineItem] = useState<AnalysisLineItem | null>(null);
+  const [primaryKgCo2e, setPrimaryKgCo2e] = useState("");
+  const [sourceNote, setSourceNote] = useState("");
+  const [applyingPrimary, setApplyingPrimary] = useState(false);
+  const [applyResult, setApplyResult] = useState<ApplyPrimaryDataResponse | null>(null);
 
   useEffect(() => {
     getAnalysisFromSupabase(params.id)
@@ -122,6 +136,34 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     anchor.download = `footprint-${analysis.product_id}-pact.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function openPrimaryDataSheet(item: AnalysisLineItem) {
+    setSelectedLineItem(item);
+    setPrimaryKgCo2e("");
+    setSourceNote("");
+    setApplyResult(null);
+    setPrimaryDataOpen(true);
+  }
+
+  async function submitPrimaryData() {
+    if (!analysis || !selectedLineItem?.item_id) return;
+    const value = Number(primaryKgCo2e);
+    if (!Number.isFinite(value) || value <= 0 || !sourceNote.trim()) return;
+    setApplyingPrimary(true);
+    setError(null);
+    try {
+      const result = await api.applyPrimaryData(analysis.product_id, {
+        item_id: selectedLineItem.item_id,
+        primary_kg_co2e: value,
+        source_note: sourceNote.trim(),
+      });
+      setApplyResult(result);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setApplyingPrimary(false);
+    }
   }
 
   const recalculateHref = analysis
@@ -233,6 +275,72 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </SheetContent>
           </Sheet>
 
+          <Sheet open={primaryDataOpen} onOpenChange={setPrimaryDataOpen}>
+            <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+              <SheetHeader>
+                <SheetTitle>Enter supplier value</SheetTitle>
+                <SheetDescription>
+                  Apply primary cradle-to-gate data for{" "}
+                  {selectedLineItem?.component ?? "this component"} /{" "}
+                  {selectedLineItem?.material ?? "material"}. This creates a new footprint version.
+                </SheetDescription>
+              </SheetHeader>
+              {applyResult ? (
+                <Alert className="mt-4" variant="success">
+                  <AlertTitle>Primary data applied</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p>
+                      Created v{applyResult.version}, PDS{" "}
+                      {formatPct(applyResult.pds_before * 100)} →{" "}
+                      {formatPct(applyResult.pds_after * 100)}
+                    </p>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/analyzer/${applyResult.new_product_id}`}>
+                        View new version
+                      </Link>
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="primary-kg">Cradle-to-gate kg CO₂e</Label>
+                    <Input
+                      id="primary-kg"
+                      inputMode="decimal"
+                      min="0"
+                      placeholder="e.g. 12.5"
+                      type="number"
+                      value={primaryKgCo2e}
+                      onChange={(event) => setPrimaryKgCo2e(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="source-note">Source note</Label>
+                    <Textarea
+                      id="source-note"
+                      placeholder="Supplier name, document reference, or method note"
+                      value={sourceNote}
+                      onChange={(event) => setSourceNote(event.target.value)}
+                    />
+                  </div>
+                  <Button
+                    disabled={
+                      applyingPrimary ||
+                      !primaryKgCo2e ||
+                      Number(primaryKgCo2e) <= 0 ||
+                      !sourceNote.trim()
+                    }
+                    onClick={submitPrimaryData}
+                    type="button"
+                  >
+                    {applyingPrimary ? "Applying..." : "Confirm and create new version"}
+                  </Button>
+                </div>
+              )}
+            </SheetContent>
+          </Sheet>
+
           {analysis.flagged_comment ? (
             <Alert>
               <FileWarning className="h-4 w-4" />
@@ -276,13 +384,28 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                 .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
                 .map((item, index) => (
                   <div key={`${item.component}-${item.material}-${index}`} className="space-y-1.5">
-                    <HotspotBar
-                      label={item.component ?? "Unnamed component"}
-                      sublabel={item.material ?? undefined}
-                      sharePct={item.share_pct ?? 0}
-                      value={`${formatKg(item.kg_co2e)} kg`}
-                      emphasized={index === 0}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <HotspotBar
+                        label={item.component ?? "Unnamed component"}
+                        sublabel={item.material ?? undefined}
+                        sharePct={item.share_pct ?? 0}
+                        value={`${formatKg(item.kg_co2e)} kg`}
+                        emphasized={index === 0}
+                      />
+                      <Badge variant={dataSourceBadgeVariant(item.data_source)}>
+                        {item.data_source === "primary" ? "Primary" : "Secondary"}
+                      </Badge>
+                      {item.data_source !== "primary" && item.item_id ? (
+                        <Button
+                          onClick={() => openPrimaryDataSheet(item)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Enter supplier value
+                        </Button>
+                      ) : null}
+                    </div>
                     <div className="flex items-center justify-between gap-2 pl-0.5">
                       <span className="truncate text-caption text-muted-foreground">
                         {item.matched_sector ?? "unmatched"}
