@@ -19,14 +19,6 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { RollupSummary, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -247,43 +239,45 @@ export default function RollupPage() {
                   footprints to include them here.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Per unit (kg CO₂e)</TableHead>
-                      <TableHead className="text-right">Annual volume</TableHead>
-                      <TableHead className="text-right">Contribution (kg CO₂e)</TableHead>
-                      <TableHead className="text-right">Share</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rollup.breakdown.map((row) => (
-                      <TableRow key={row.product_id}>
-                        <TableCell>
-                          <Link
-                            href={`/analyzer/${row.product_id}`}
-                            className="font-medium underline-offset-4 hover:underline"
-                          >
-                            {row.product_name}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatKg(row.per_unit_kg_co2e)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.annual_volume.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatKg(row.contribution_kg_co2e)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatPct(row.share_pct)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto rounded-xl border">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-secondary text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3">Product</th>
+                        <th className="px-4 py-3 text-right">Per unit (kg CO₂e)</th>
+                        <th className="px-4 py-3 text-right">Annual volume</th>
+                        <th className="px-4 py-3 text-right">Contribution (kg CO₂e)</th>
+                        <th className="px-4 py-3 text-right">Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rollup.breakdown.map((row) => (
+                        <tr key={row.product_id} className="border-t bg-card">
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/analyzer/${row.product_id}`}
+                              className="font-medium underline-offset-4 hover:underline"
+                            >
+                              {row.product_name}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatKg(row.per_unit_kg_co2e)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {row.annual_volume.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatKg(row.contribution_kg_co2e)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatPct(row.share_pct)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>
