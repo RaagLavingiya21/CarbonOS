@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from db import request_store as request_store_module
-from tests.conftest import AUTH_HEADERS, TEST_ACCESS_TOKEN, TEST_USER_ID
+from tests.conftest import TEST_ACCESS_TOKEN, TEST_USER_ID
 
 client = TestClient(app, raise_server_exceptions=False)
 
