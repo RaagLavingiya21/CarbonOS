@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
 import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
@@ -424,7 +423,7 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     : "/analyzer";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
         <Link href="/products">
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -863,82 +862,72 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
           ) : null}
 
           {analysis.technological_dqr != null ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Data quality</CardTitle>
-                <CardDescription>
-                  PACT Data Quality Rating (1 = best, 5 = worst): technological, geographical,
-                  temporal.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <MetricCard
-                  label="Technological DQR"
-                  value={analysis.technological_dqr}
-                  hint="Primary data = 1; secondary by EF confidence"
-                />
-                <MetricCard
-                  label="Geographical DQR"
-                  value={analysis.geographical_dqr ?? "—"}
-                  hint="Country-specific activity data vs global fallback"
-                />
-                <MetricCard
-                  label="Temporal DQR"
-                  value={analysis.temporal_dqr ?? "—"}
-                  hint="Reporting period vs Open CEDA 2025 vintage"
-                />
-              </CardContent>
-            </Card>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-border bg-surface px-4 py-2 text-small shadow-xs">
+              <span className="font-semibold text-foreground">Data quality</span>
+              <span className="text-caption text-muted-foreground">
+                PACT DQR · 1 = best, 5 = worst
+              </span>
+              <span className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-1">
+                {(
+                  [
+                    ["Technological", analysis.technological_dqr],
+                    ["Geographical", analysis.geographical_dqr],
+                    ["Temporal", analysis.temporal_dqr],
+                  ] as const
+                ).map(([label, value]) => (
+                  <span key={label} className="flex items-center gap-1.5">
+                    <span className="text-caption uppercase tracking-wide text-muted-foreground">
+                      {label}
+                    </span>
+                    <span className="num font-semibold text-foreground">{value ?? "—"}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
           ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Provenance / methodology</CardTitle>
-              <CardDescription>
-                Auditor-facing traceability: method statement, per-line citations, and version
-                lineage.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {provenanceLoading ? (
-                <Skeleton className="h-20 w-full" />
-              ) : provenance ? (
-                <>
-                  <p className="text-small text-muted-foreground">
-                    {provenance.method_statement.summary}
-                  </p>
-                  <p className="text-small">
-                    {provenance.version_lineage.length} version(s) in lineage · PDS{" "}
-                    {formatPct((provenance.primary_data_share ?? 0) * 100)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => void downloadProvenance("json")}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download methodology (.json)
-                    </Button>
-                    <Button
-                      onClick={() => void downloadProvenance("markdown")}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download methodology (.md)
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-small text-muted-foreground">
-                  Provenance unavailable for this footprint.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
+            {provenanceLoading ? (
+              <Skeleton className="h-6 w-full" />
+            ) : provenance ? (
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex min-w-0 items-center gap-2 text-small">
+                  <span className="shrink-0 font-semibold text-foreground">Provenance</span>
+                  <span className="text-border">·</span>
+                  <span className="truncate text-caption text-muted-foreground">
+                    {provenance.method_statement.summary} · {provenance.version_lineage.length}{" "}
+                    version(s) · PDS {formatPct((provenance.primary_data_share ?? 0) * 100)}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    onClick={() => void downloadProvenance("json")}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    className="h-6 px-2 text-caption"
+                  >
+                    <Download className="h-3 w-3" />
+                    .json
+                  </Button>
+                  <Button
+                    onClick={() => void downloadProvenance("markdown")}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    className="h-6 px-2 text-caption"
+                  >
+                    <Download className="h-3 w-3" />
+                    .md
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-small text-muted-foreground">
+                Provenance unavailable for this footprint.
+              </p>
+            )}
+          </div>
 
           <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
             <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-2 px-4 py-2.5">

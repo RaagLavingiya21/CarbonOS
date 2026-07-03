@@ -48,7 +48,7 @@ export function HeadCell({
   return (
     <div
       className={cn(
-        "flex items-center px-3 py-2",
+        "flex min-w-0 items-center px-3 py-2",
         align === "right" && "justify-end text-right",
         sticky
           ? "sticky left-0 z-10 border-r border-border/60 bg-surface-2"
@@ -74,7 +74,7 @@ export function Cell({
   return (
     <div
       className={cn(
-        "flex items-center px-3 py-2",
+        "flex min-w-0 items-center px-3 py-2",
         align === "right" && "justify-end text-right",
         sticky
           ? "sticky left-0 z-[5] border-r border-border/60 bg-surface group-hover:bg-muted/60"
