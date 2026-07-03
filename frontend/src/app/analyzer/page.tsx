@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
-import { AnalyzeResponse, BulkAnalyzeResponse, api } from "@/lib/api";
+import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
+import { AnalyzeResponse, AnalysisDetail, AnalysisLineItem, BulkAnalyzeResponse, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
 
 type ImportMode = "single" | "bulk";
@@ -65,6 +66,9 @@ function AnalyzerPageContent() {
   const [flaggedComment, setFlaggedComment] = useState("");
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
   const [savedProductId, setSavedProductId] = useState<number | null>(null);
+  const [savedAnalysisDetail, setSavedAnalysisDetail] = useState<AnalysisDetail | null>(null);
+  const [remapOpen, setRemapOpen] = useState(false);
+  const [remapLineItem, setRemapLineItem] = useState<AnalysisLineItem | null>(null);
   const [savedAsApproved, setSavedAsApproved] = useState(false);
   const [pactPayload, setPactPayload] = useState<Record<string, unknown> | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -120,6 +124,7 @@ function AnalyzerPageContent() {
     setLoading(true);
     setError(null);
     setSavedProductId(null);
+    setSavedAnalysisDetail(null);
     setSavedAsApproved(false);
     setSavedVersion(null);
     setPactPayload(null);
@@ -151,8 +156,9 @@ function AnalyzerPageContent() {
       );
       setSavedProductId(response.product_id);
       setSavedAsApproved(status === "approved");
+      const saved = await api.getAnalysis(String(response.product_id));
+      setSavedAnalysisDetail(saved);
       if (recalculateOfProductId) {
-        const saved = await api.getAnalysis(String(response.product_id));
         setSavedVersion(saved.version ?? null);
       } else {
         setSavedVersion(null);
@@ -608,10 +614,16 @@ function AnalyzerPageContent() {
                           <th className="px-4 py-3">Sector</th>
                           <th className="px-4 py-3">kg CO2e</th>
                           <th className="px-4 py-3">Confidence</th>
+                          {savedProductId ? <th className="px-4 py-3">Actions</th> : null}
                         </tr>
                       </thead>
                       <tbody>
-                        {analysis.result.line_items.map((item) => (
+                        {analysis.result.line_items.map((item) => {
+                          const savedItem = savedAnalysisDetail?.line_items.find(
+                            (row) =>
+                              row.material === item.material && row.component === item.component,
+                          );
+                          return (
                           <tr key={item.row_index} className="border-t bg-card">
                             <td className="px-4 py-3">{item.component ?? "-"}</td>
                             <td className="px-4 py-3">{item.material ?? "-"}</td>
@@ -623,8 +635,28 @@ function AnalyzerPageContent() {
                                 {Math.round(item.ef_confidence)}%
                               </Badge>
                             </td>
+                            {savedProductId ? (
+                              <td className="px-4 py-3">
+                                {savedItem?.item_id && lineItemNeedsRemap(item) ? (
+                                  <Button
+                                    onClick={() => {
+                                      setRemapLineItem(savedItem);
+                                      setRemapOpen(true);
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    Re-map
+                                  </Button>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            ) : null}
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -675,6 +707,21 @@ function AnalyzerPageContent() {
           )}
         </div>
       </div>
+
+      {savedProductId ? (
+        <RemapLineSheet
+          lineItem={remapLineItem}
+          onOpenChange={setRemapOpen}
+          open={remapOpen}
+          productId={savedProductId}
+          onRemapped={async (result) => {
+            const refreshed = await api.getAnalysis(String(result.new_product_id));
+            setSavedProductId(result.new_product_id);
+            setSavedAnalysisDetail(refreshed);
+            setSavedVersion(refreshed.version ?? null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

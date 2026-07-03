@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Copy, UserMinus, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { Building2, Copy, Map, UserMinus, UserPlus } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -306,6 +307,23 @@ export default function OrgSettingsPage() {
           ) : null}
         </>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Factor mappings</CardTitle>
+          <CardDescription>
+            View and delete org-wide material → sector overrides saved from Re-map actions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link href="/settings/factor-mappings">
+              <Map className="h-4 w-4" />
+              Manage factor mappings
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

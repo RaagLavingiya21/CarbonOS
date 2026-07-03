@@ -380,6 +380,33 @@ export type ApplyPrimaryDataResponse = {
   pds_after: number;
 };
 
+export type RemapLineResponse = {
+  new_product_id: number;
+  version: number;
+  total_kg_co2e_before: number;
+  total_kg_co2e_after: number;
+  delta_kg_co2e: number;
+  remapped_item_id: number;
+  sector_code: string;
+  sector_name: string;
+};
+
+export type SectorOption = {
+  sector_code: string;
+  sector_name: string;
+};
+
+export type EFOverride = {
+  override_id: number;
+  org_id?: string | null;
+  user_id: string;
+  material_normalized: string;
+  sector_code: string;
+  sector_name?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ShareSummary = {
   share_id: number;
   share_token: string;
@@ -594,6 +621,32 @@ export const api = {
     request<ApplyPrimaryDataResponse>(`/api/analyses/${productId}/primary-data`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  searchSectors: (q?: string) =>
+    request<SectorOption[]>(`/api/factors/sectors${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  listEFOverrides: () => request<EFOverride[]>("/api/ef-overrides"),
+  createEFOverride: (payload: { material: string; sector_code: string; sector_name?: string }) =>
+    request<EFOverride>("/api/ef-overrides", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deleteEFOverride: (overrideId: number) =>
+    request<{ deleted: boolean }>(`/api/ef-overrides/${overrideId}`, {
+      method: "DELETE",
+    }),
+  remapLine: (
+    productId: number,
+    itemId: number,
+    sectorCode: string,
+    saveOverride: boolean,
+  ) =>
+    request<RemapLineResponse>(`/api/analyses/${productId}/remap-line`, {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: itemId,
+        sector_code: sectorCode,
+        save_override: saveOverride,
+      }),
     }),
   getAnalysis: (id: string) => request<AnalysisDetail>(`/api/analyses/${id}`),
   createScenario: (productId: number, payload: { name: string }) =>
