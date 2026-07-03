@@ -381,6 +381,8 @@ class AnalysisSummaryDTO(BaseModel):
     geographical_dqr: int | None = None
     temporal_dqr: int | None = None
     dqr_computed_at: str | None = None
+    health_status: str | None = None
+    health_reasons: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisSummaryDTO":

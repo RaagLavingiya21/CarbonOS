@@ -22,12 +22,16 @@ export type AnalysisSummary = {
   geographical_dqr?: number | null;
   temporal_dqr?: number | null;
   dqr_computed_at?: string | null;
+  health_status?: string | null;
+  health_reasons?: string[];
 };
 
 export type PortfolioSummary = {
   total_kg_co2e: number;
   avg_primary_data_share: number;
   counts_by_status: Record<string, number>;
+  counts_by_health?: Record<string, number>;
+  needs_attention_count?: number;
   open_flags_count: number;
   product_count: number;
 };
@@ -398,9 +402,12 @@ async function request<T>(
 }
 
 export const api = {
-  listAnalyses: (options?: { status?: string }) => {
-    const params = options?.status ? `?status=${encodeURIComponent(options.status)}` : "";
-    return request<AnalysisSummary[]>(`/api/analyses${params}`);
+  listAnalyses: (options?: { status?: string; health?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.status) params.set("status", options.status);
+    if (options?.health) params.set("health", options.health);
+    const query = params.toString();
+    return request<AnalysisSummary[]>(`/api/analyses${query ? `?${query}` : ""}`);
   },
   getPortfolioSummary: () => request<PortfolioSummary>("/api/analyses/summary"),
   publishAnalysis: (productId: number) =>

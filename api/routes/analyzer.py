@@ -34,6 +34,7 @@ from api.models.schemas import (
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
+from calc.health import footprint_health
 from db.org_store import get_active_org
 from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
 from db.store import apply_primary_data, publish_analysis, save_analysis
@@ -296,29 +297,44 @@ def save_analysis_result(
     return SaveAnalysisResponse(product_id=product_id, phase="saved")
 
 
+def _enrich_product_row(row: dict) -> dict:
+    health = footprint_health(row)
+    enriched = dict(row)
+    enriched["health_status"] = health["status"]
+    enriched["health_reasons"] = health["reasons"]
+    return enriched
+
+
 @router.get("/api/analyses", response_model=list[AnalysisSummaryDTO])
 def list_analyses(
     status: str | None = Query(None),
+    health: str | None = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[AnalysisSummaryDTO]:
-    return [
-        AnalysisSummaryDTO.from_row(row)
+    rows = [
+        _enrich_product_row(row)
         for row in get_products_for_active_org(
             current_user.access_token,
             user_id=current_user.user_id,
             status=status,
         )
     ]
+    if health is not None:
+        rows = [row for row in rows if row.get("health_status") == health]
+    return [AnalysisSummaryDTO.from_row(row) for row in rows]
 
 
 @router.get("/api/analyses/summary")
 def get_portfolio_summary(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    products = get_products_for_active_org(
-        current_user.access_token,
-        user_id=current_user.user_id,
-    )
+    products = [
+        _enrich_product_row(row)
+        for row in get_products_for_active_org(
+            current_user.access_token,
+            user_id=current_user.user_id,
+        )
+    ]
     total_kg_co2e = sum(p.get("total_kg_co2e") or 0 for p in products)
     pds_values = [p.get("primary_data_share") or 0 for p in products]
     avg_primary_data_share = sum(pds_values) / len(pds_values) if pds_values else 0.0
@@ -327,12 +343,19 @@ def get_portfolio_summary(
         product_status = product.get("status") or "unknown"
         counts_by_status[product_status] = counts_by_status.get(product_status, 0) + 1
     open_flags_count = sum(1 for p in products if (p.get("flagged_items") or 0) > 0)
+    counts_by_health: dict[str, int] = {}
+    for product in products:
+        health_status = product.get("health_status") or "healthy"
+        counts_by_health[health_status] = counts_by_health.get(health_status, 0) + 1
     return {
         "total_kg_co2e": total_kg_co2e,
         "avg_primary_data_share": avg_primary_data_share,
         "counts_by_status": counts_by_status,
+        "counts_by_health": counts_by_health,
         "open_flags_count": open_flags_count,
         "product_count": len(products),
+        "needs_attention_count": counts_by_health.get("attention", 0)
+        + counts_by_health.get("stale", 0),
     }
 
 
@@ -426,7 +449,7 @@ def export_pact(
     return payload
 
 
-@router.get("/api/footprints/{product_id}/provenance")
+@router.get("/api/footprints/{product_id}/provenance", response_model=None)
 def get_provenance(
     product_id: int,
     format: Literal["json", "markdown"] = Query("json"),
