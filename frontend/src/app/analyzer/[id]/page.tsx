@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Copy, Download, FileWarning, RefreshCw } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileWarning, FlaskConical, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,7 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
-import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, api } from "@/lib/api";
+import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, ScenarioSummary, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ function dataSourceBadgeVariant(dataSource: string | null | undefined) {
 }
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -60,6 +62,8 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [sourceNote, setSourceNote] = useState("");
   const [applyingPrimary, setApplyingPrimary] = useState(false);
   const [applyResult, setApplyResult] = useState<ApplyPrimaryDataResponse | null>(null);
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
+  const [creatingScenario, setCreatingScenario] = useState(false);
 
   useEffect(() => {
     getAnalysisFromSupabase(params.id)
@@ -67,6 +71,14 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [params.id]);
+
+  useEffect(() => {
+    if (!analysis?.product_id) return;
+    api
+      .listScenarios(analysis.product_id)
+      .then(setScenarios)
+      .catch(() => setScenarios([]));
+  }, [analysis?.product_id]);
 
   async function exportCsv() {
     if (!analysis) return;
@@ -102,6 +114,23 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       setError((err as Error).message);
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function createScenario() {
+    if (!analysis) return;
+    const defaultName = `Scenario: ${analysis.product_name}`;
+    const name = window.prompt("Scenario name", defaultName);
+    if (!name?.trim()) return;
+    setCreatingScenario(true);
+    setError(null);
+    try {
+      const result = await api.createScenario(analysis.product_id, { name: name.trim() });
+      router.push(`/scenarios/${result.scenario_id}`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCreatingScenario(false);
     }
   }
 
@@ -236,6 +265,15 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                   Published — read-only
                 </Button>
               ) : null}
+              <Button
+                disabled={creatingScenario}
+                onClick={createScenario}
+                type="button"
+                variant="outline"
+              >
+                <FlaskConical className="h-4 w-4" />
+                {creatingScenario ? "Creating..." : "Model a scenario"}
+              </Button>
               <Button asChild variant="ghost">
                 <Link href={recalculateHref}>
                   <RefreshCw className="h-4 w-4" />
@@ -248,6 +286,38 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               </Button>
             </div>
           </section>
+
+          {scenarios.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Scenarios</CardTitle>
+                <CardDescription>
+                  What-if models for this product. Scenarios are not published footprints.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {scenarios.map((scenario) => (
+                  <div
+                    key={scenario.scenario_id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+                  >
+                    <div>
+                      <p className="font-medium">{scenario.name}</p>
+                      <p className="text-small text-muted-foreground">
+                        {formatKg(scenario.total_kg_co2e)}
+                        {scenario.delta_pct != null ? (
+                          <> · {formatPct(scenario.delta_pct)} vs baseline</>
+                        ) : null}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/scenarios/${scenario.scenario_id}`}>Compare</Link>
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Sheet open={exportOpen} onOpenChange={setExportOpen}>
             <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">

@@ -278,6 +278,80 @@ class ApplyPrimaryDataResponse(BaseModel):
     pds_after: float
 
 
+class CreateScenarioRequest(BaseModel):
+    name: str
+
+
+class CreateScenarioResponse(BaseModel):
+    scenario_id: int
+
+
+class ScenarioLineItemDTO(BaseModel):
+    scenario_item_id: int | None = None
+    component: str | None
+    material: str | None
+    spend_usd: float | None
+    matched_sector: str | None
+    emission_factor: float | None
+    ef_source: str | None
+    kg_co2e: float | None
+    share_pct: float | None
+    baseline_material: str | None = None
+    baseline_kg_co2e: float | None = None
+    is_edited: bool = False
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "ScenarioLineItemDTO":
+        return cls(**{k: v for k, v in row.items() if k in cls.model_fields})
+
+
+class ScenarioSummaryDTO(BaseModel):
+    scenario_id: int
+    baseline_product_id: int
+    name: str
+    baseline_total_kg_co2e: float
+    total_kg_co2e: float
+    delta_kg: float | None = None
+    delta_pct: float | None = None
+    created_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "ScenarioSummaryDTO":
+        return cls(**{k: v for k, v in row.items() if k in cls.model_fields})
+
+
+class ScenarioDetailDTO(ScenarioSummaryDTO):
+    line_items: list[ScenarioLineItemDTO] = Field(default_factory=list)
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "ScenarioDetailDTO":
+        data = {k: v for k, v in row.items() if k in cls.model_fields}
+        data["line_items"] = [
+            ScenarioLineItemDTO.from_row(item) for item in row.get("line_items", [])
+        ]
+        return cls(**data)
+
+
+class EditScenarioLineItemRequest(BaseModel):
+    material: str | None = None
+    spend_usd: float | None = None
+
+    @field_validator("spend_usd")
+    @classmethod
+    def validate_spend_usd(cls, value: float | None) -> float | None:
+        if value is not None and value < 0:
+            raise ValueError("spend_usd must be >= 0")
+        return value
+
+
+class EditScenarioLineItemResponse(BaseModel):
+    scenario_total: float
+    baseline_total: float
+    delta_kg: float
+    delta_pct: float
+    item: ScenarioLineItemDTO
+
+
 class AnalyzeResponse(BaseModel):
     session_id: str
     phase: Literal["calc_review", "saved"]

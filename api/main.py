@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from api.middleware.auth import SupabaseAuthMiddleware
 from api.models.schemas import HealthResponse
-from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, org, panels
+from api.routes import advisor, analyzer, chat, copilot, gap_analyzer, org, panels, scenarios
 
 logger = logging.getLogger("api.request")
 logging.basicConfig(level=logging.INFO)
@@ -149,6 +149,7 @@ app.include_router(copilot.router)
 app.include_router(chat.router)
 app.include_router(panels.router)
 app.include_router(org.router)
+app.include_router(scenarios.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

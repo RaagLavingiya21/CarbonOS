@@ -8,11 +8,17 @@ from api.agent.intake_forms import get_intake_form
 from api.skills.base import Skill
 from db.org_store import get_active_org
 from db.reader import (
+    find_line_item_for_engagement,
     get_all_products,
     get_product_by_id,
     get_product_by_name,
     get_product_line_items,
     get_products_for_active_org,
+)
+from db.scenario_store import (
+    create_scenario_from_product,
+    edit_scenario_line_item,
+    get_scenario,
 )
 
 _HOTSPOT_LIMIT = 5
@@ -22,8 +28,8 @@ class AnalysisSkill(Skill):
     name = "analysis"
     description = (
         "Query saved product footprint analyses: list products, get details, "
-        "identify emission hotspots, compare products, and launch the BOM Analyzer "
-        "or Gap Analyzer modules with intake forms."
+        "identify emission hotspots, compare products, model what-if scenarios, "
+        "and launch the BOM Analyzer or Gap Analyzer modules with intake forms."
     )
     parameters_schema = {
         "type": "object",
@@ -36,6 +42,7 @@ class AnalysisSkill(Skill):
                     "get_hotspots",
                     "rank_secondary_hotspots",
                     "compare_products",
+                    "create_scenario",
                     "launch_bom_analyzer",
                     "launch_gap_analyzer",
                 ],
@@ -83,6 +90,22 @@ class AnalysisSkill(Skill):
                 "type": "string",
                 "description": "Authenticated user ID (injected by the agent).",
             },
+            "scenario_name": {
+                "type": "string",
+                "description": "Name for the new scenario (for create_scenario).",
+            },
+            "new_material": {
+                "type": "string",
+                "description": "Replacement material to model (for create_scenario).",
+            },
+            "component": {
+                "type": "string",
+                "description": "Baseline line item component to edit (for create_scenario).",
+            },
+            "material": {
+                "type": "string",
+                "description": "Baseline line item material to edit (for create_scenario).",
+            },
         },
         "required": ["action", "access_token"],
     }
@@ -94,6 +117,7 @@ class AnalysisSkill(Skill):
             "get_hotspots": self._get_hotspots,
             "rank_secondary_hotspots": self._rank_secondary_hotspots,
             "compare_products": self._compare_products,
+            "create_scenario": self._create_scenario,
             "launch_bom_analyzer": self._launch_bom_analyzer,
             "launch_gap_analyzer": self._launch_gap_analyzer,
         }
@@ -290,6 +314,116 @@ class AnalysisSkill(Skill):
                     - (lowest.get("total_kg_co2e") or 0),
                     4,
                 ),
+            },
+        )
+
+    def _create_scenario(
+        self,
+        *,
+        access_token: str,
+        user_id: str | None = None,
+        product_id: int | None = None,
+        product_name: str | None = None,
+        scenario_name: str | None = None,
+        new_material: str | None = None,
+        component: str | None = None,
+        material: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        product = _resolve_product(access_token, product_id, product_name)
+        if product is None:
+            return _error(
+                "create_scenario",
+                "Product not found. Provide a valid product_id or product_name.",
+            )
+        if not new_material:
+            return _error(
+                "create_scenario",
+                "Provide new_material for the requested material swap.",
+            )
+        if not component and not material:
+            return _error(
+                "create_scenario",
+                "Provide component and material to identify the baseline line item.",
+            )
+
+        resolved_name = product["product_name"]
+        match_result = find_line_item_for_engagement(
+            resolved_name,
+            component,
+            material,
+            access_token,
+        )
+        if match_result.get("item_id") is None:
+            match_count = len(match_result.get("matches") or [])
+            if match_count == 0:
+                return _error(
+                    "create_scenario",
+                    "No matching line item found for the given component and material.",
+                )
+            return _error(
+                "create_scenario",
+                f"Ambiguous line item match ({match_count} candidates). "
+                "Provide a more specific component and material.",
+            )
+
+        baseline_item = match_result["matches"][0]
+        component_norm = (baseline_item.get("component") or "").strip().lower()
+        material_norm = (baseline_item.get("material") or "").strip().lower()
+
+        if user_id is None:
+            return _error("create_scenario", "user_id is required.")
+
+        name = scenario_name or f"Scenario: {resolved_name}"
+        try:
+            scenario_id = create_scenario_from_product(
+                int(product["product_id"]),
+                name,
+                user_id=user_id,
+                access_token=access_token,
+            )
+        except ValueError as exc:
+            return _error("create_scenario", str(exc))
+
+        scenario = get_scenario(scenario_id, access_token)
+        if scenario is None:
+            return _error("create_scenario", f"Scenario {scenario_id} not found after creation.")
+
+        scenario_item_id = None
+        for li in scenario.get("line_items") or []:
+            li_component = (li.get("component") or "").strip().lower()
+            li_material = (li.get("material") or "").strip().lower()
+            if li_component == component_norm and li_material == material_norm:
+                scenario_item_id = int(li["scenario_item_id"])
+                break
+
+        if scenario_item_id is None:
+            return _error(
+                "create_scenario",
+                "Could not map baseline line item to scenario line item.",
+            )
+
+        try:
+            edit_result = edit_scenario_line_item(
+                scenario_item_id,
+                material=new_material,
+                user_id=user_id,
+                access_token=access_token,
+            )
+        except ValueError as exc:
+            return _error("create_scenario", str(exc))
+
+        return _success(
+            "create_scenario",
+            {
+                "scenario_id": scenario_id,
+                "scenario_name": name,
+                "baseline_product_id": product["product_id"],
+                "baseline_total_kg_co2e": edit_result["baseline_total"],
+                "scenario_total_kg_co2e": edit_result["scenario_total"],
+                "delta_kg": edit_result["delta_kg"],
+                "delta_pct": edit_result["delta_pct"],
+                "edited_item": _line_item_summary(edit_result["item"]),
             },
         )
 
