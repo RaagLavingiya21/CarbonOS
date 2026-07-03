@@ -95,7 +95,16 @@ def _mapping_index() -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def lookup_ef(material: str, country: str | None = None) -> EFMatch:
+def normalize_material(material: str) -> str:
+    """Lowercase/trim a BOM material string for override key lookup."""
+    return material.strip().lower()
+
+
+def lookup_ef(
+    material: str,
+    country: str | None = None,
+    overrides: dict[str, str] | None = None,
+) -> EFMatch:
     """Look up an emission factor for a BOM material.
 
     Args:
@@ -106,6 +115,17 @@ def lookup_ef(material: str, country: str | None = None) -> EFMatch:
         EFMatch with ef_kg_co2e_per_usd populated if a match is found,
         or is_no_match=True if no suitable sector was identified.
     """
+    if overrides:
+        material_normalized = normalize_material(material)
+        override_code = overrides.get(material_normalized)
+        if override_code:
+            return lookup_ef_by_sector_code(
+                override_code,
+                country,
+                material_input=material,
+                source_citation="Analyst override (Open CEDA 2025)",
+            )
+
     sector_names, sector_codes, ef_index = _load_ceda()
     country_code = _resolve_country(country)
 
@@ -146,6 +166,57 @@ def get_all_sector_names() -> list[str]:
     """Return all CEDA sector names (useful for UI suggestions)."""
     sector_names, _, _ = _load_ceda()
     return sector_names
+
+
+def get_all_sectors() -> list[tuple[str, str]]:
+    """Return all CEDA sectors as (sector_code, sector_name) pairs."""
+    sector_names, sector_codes, _ = _load_ceda()
+    return list(zip(sector_codes, sector_names, strict=True))
+
+
+def search_sectors(q: str | None = None, *, limit: int = 50) -> list[tuple[str, str]]:
+    """Search CEDA sectors by code or name (case-insensitive substring match)."""
+    pairs = get_all_sectors()
+    if q and q.strip():
+        query = q.strip().lower()
+        pairs = [
+            (code, name)
+            for code, name in pairs
+            if query in name.lower() or query in code.lower()
+        ]
+    return pairs[:limit]
+
+
+def lookup_ef_by_sector_code(
+    sector_code: str,
+    country: str | None = None,
+    *,
+    material_input: str = "",
+    source_citation: str | None = None,
+) -> EFMatch:
+    """Resolve an EF directly from a known CEDA sector code."""
+    sector_names, sector_codes, ef_index = _load_ceda()
+    if sector_code not in sector_codes:
+        raise ValueError(f"Unknown sector code: {sector_code}")
+
+    idx = sector_codes.index(sector_code)
+    sector_name = sector_names[idx]
+    country_code = _resolve_country(country)
+    ef_value = _get_ef(ef_index, sector_code, country_code)
+    citation = source_citation or f"Open CEDA 2025, {sector_name}, {country_code}"
+
+    return EFMatch(
+        material_input=material_input or sector_name,
+        sector_name=sector_name,
+        sector_code=sector_code,
+        ef_kg_co2e_per_usd=ef_value,
+        country_used=country_code,
+        confidence_score=100.0,
+        is_low_confidence=False,
+        is_no_match=False,
+        source_citation=citation,
+        suggested_alternatives=[],
+    )
 
 
 # ---------------------------------------------------------------------------

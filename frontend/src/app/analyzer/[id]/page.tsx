@@ -31,6 +31,7 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
+import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
@@ -72,6 +73,7 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [exportLoading, setExportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [primaryDataOpen, setPrimaryDataOpen] = useState(false);
+  const [remapOpen, setRemapOpen] = useState(false);
   const [selectedLineItem, setSelectedLineItem] = useState<AnalysisLineItem | null>(null);
   const [primaryKgCo2e, setPrimaryKgCo2e] = useState("");
   const [sourceNote, setSourceNote] = useState("");
@@ -383,6 +385,11 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     setSourceNote("");
     setApplyResult(null);
     setPrimaryDataOpen(true);
+  }
+
+  function openRemapSheet(item: AnalysisLineItem) {
+    setSelectedLineItem(item);
+    setRemapOpen(true);
   }
 
   async function submitPrimaryData() {
@@ -718,6 +725,16 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </SheetContent>
           </Sheet>
 
+          <RemapLineSheet
+            lineItem={selectedLineItem}
+            onOpenChange={setRemapOpen}
+            open={remapOpen}
+            productId={analysis.product_id}
+            onRemapped={(result) => {
+              router.push(`/analyzer/${result.new_product_id}`);
+            }}
+          />
+
           {analysis.flagged_comment ? (
             <Alert>
               <FileWarning className="h-4 w-4" />
@@ -982,14 +999,26 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                         {item.data_source === "primary" ? "Primary" : "Secondary"}
                       </Badge>
                       {item.data_source !== "primary" && item.item_id ? (
-                        <Button
-                          onClick={() => openPrimaryDataSheet(item)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Enter supplier value
-                        </Button>
+                        <>
+                          {lineItemNeedsRemap(item) ? (
+                            <Button
+                              onClick={() => openRemapSheet(item)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Re-map factor
+                            </Button>
+                          ) : null}
+                          <Button
+                            onClick={() => openPrimaryDataSheet(item)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            Enter supplier value
+                          </Button>
+                        </>
                       ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-2 pl-0.5">

@@ -25,7 +25,7 @@ def test_health_check() -> None:
 
 
 def test_analyzer_checkpoint_flow(monkeypatch) -> None:
-    def fake_lookup(material: str, country: str | None = None) -> EFMatch:
+    def fake_lookup(material: str, country: str | None = None, overrides=None) -> EFMatch:
         return EFMatch(
             material_input=material,
             sector_name="Cotton farming",
@@ -540,4 +540,74 @@ def test_apply_primary_data_returns_422_for_non_positive_value(monkeypatch) -> N
         headers=AUTH_HEADERS,
     )
 
+    assert response.status_code == 422
+
+
+def test_analyze_bulk_creates_products_and_isolates_errors(monkeypatch) -> None:
+    def fake_lookup(material: str, country: str | None = None, overrides=None) -> EFMatch:
+        return EFMatch(
+            material_input=material,
+            sector_name="Cotton farming",
+            sector_code="1119A0",
+            ef_kg_co2e_per_usd=2.0,
+            country_used=country or "USA",
+            confidence_score=100.0,
+            is_low_confidence=False,
+            is_no_match=False,
+            source_citation="Test factor",
+            suggested_alternatives=[],
+        )
+
+    saved_products: list[tuple[str, float, int]] = []
+    next_product_id = 101
+
+    def fake_save_analysis(product_name: str, result, **kwargs) -> int:
+        nonlocal next_product_id
+        product_id = next_product_id
+        next_product_id += 1
+        saved_products.append((product_name, result.total_kg_co2e, result.flagged_count))
+        return product_id
+
+    monkeypatch.setattr("api.routes.analyzer.lookup_ef", fake_lookup)
+    monkeypatch.setattr("api.routes.analyzer.save_analysis", fake_save_analysis)
+
+    valid_csv = "component,material,quantity,spend_usd\nbody,cotton,1,10\n"
+    malformed_csv = "not,a,valid,bom\n"
+
+    response = client.post(
+        "/api/analyze/bulk",
+        files=[
+            ("files", ("alpha.csv", valid_csv, "text/csv")),
+            ("files", ("beta.csv", valid_csv, "text/csv")),
+            ("files", ("bad.csv", malformed_csv, "text/csv")),
+        ],
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == {"total": 3, "saved": 2, "flagged": 0, "error": 1}
+    assert len(payload["results"]) == 3
+
+    saved_rows = [row for row in payload["results"] if row["status"] == "saved"]
+    error_rows = [row for row in payload["results"] if row["status"] == "error"]
+    assert len(saved_rows) == 2
+    assert len(error_rows) == 1
+    assert error_rows[0]["filename"] == "bad.csv"
+    assert error_rows[0]["error"]
+    assert all(row["product_id"] is not None for row in saved_rows)
+    assert all(row["total_kg_co2e"] == 20.0 for row in saved_rows)
+    assert len(saved_products) == 2
+
+
+def test_analyze_bulk_requires_auth() -> None:
+    response = client.post(
+        "/api/analyze/bulk",
+        files=[("files", ("alpha.csv", "component,material,quantity,spend_usd\n", "text/csv"))],
+    )
+    assert response.status_code == 401
+
+
+def test_analyze_bulk_requires_at_least_one_file() -> None:
+    response = client.post("/api/analyze/bulk", files=[], headers=AUTH_HEADERS)
     assert response.status_code == 422

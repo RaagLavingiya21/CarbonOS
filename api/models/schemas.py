@@ -378,6 +378,80 @@ class AnalyzeResponse(BaseModel):
     product_id: int | None = None
 
 
+class BulkAnalyzeResultDTO(BaseModel):
+    filename: str
+    product_id: int | None = None
+    product_name: str | None = None
+    total_kg_co2e: float | None = None
+    flagged_items: int | None = None
+    status: Literal["saved", "error"]
+    error: str | None = None
+
+
+class BulkAnalyzeSummaryDTO(BaseModel):
+    total: int
+    saved: int
+    flagged: int
+    error: int
+
+
+class BulkAnalyzeResponse(BaseModel):
+    results: list[BulkAnalyzeResultDTO]
+    summary: BulkAnalyzeSummaryDTO
+
+
+class SectorOptionDTO(BaseModel):
+    sector_code: str
+    sector_name: str
+
+
+class EFOverrideDTO(BaseModel):
+    override_id: int
+    org_id: str | None = None
+    user_id: str
+    material_normalized: str
+    sector_code: str
+    sector_name: str | None = None
+    created_at: str
+    updated_at: str
+
+    @classmethod
+    def from_domain(cls, override) -> "EFOverrideDTO":
+        return cls(
+            override_id=override.override_id,
+            org_id=override.org_id,
+            user_id=override.user_id,
+            material_normalized=override.material_normalized,
+            sector_code=override.sector_code,
+            sector_name=override.sector_name,
+            created_at=override.created_at,
+            updated_at=override.updated_at,
+        )
+
+
+class CreateEFOverrideRequest(BaseModel):
+    material: str
+    sector_code: str
+    sector_name: str | None = None
+
+
+class RemapLineRequest(BaseModel):
+    item_id: int
+    sector_code: str
+    save_override: bool = False
+
+
+class RemapLineResponse(BaseModel):
+    new_product_id: int
+    version: int
+    total_kg_co2e_before: float
+    total_kg_co2e_after: float
+    delta_kg_co2e: float
+    remapped_item_id: int
+    sector_code: str
+    sector_name: str
+
+
 class AnalysisSummaryDTO(BaseModel):
     product_id: int
     product_name: str

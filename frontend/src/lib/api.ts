@@ -219,6 +219,26 @@ export type AnalyzeResponse = {
   product_id: number | null;
 };
 
+export type BulkAnalyzeResult = {
+  filename: string;
+  product_id?: number | null;
+  product_name?: string | null;
+  total_kg_co2e?: number | null;
+  flagged_items?: number | null;
+  status: "saved" | "error";
+  error?: string | null;
+};
+
+export type BulkAnalyzeResponse = {
+  results: BulkAnalyzeResult[];
+  summary: {
+    total: number;
+    saved: number;
+    flagged: number;
+    error: number;
+  };
+};
+
 export type EFMatch = {
   material_input: string;
   sector_name: string;
@@ -358,6 +378,33 @@ export type ApplyPrimaryDataResponse = {
   version: number;
   pds_before: number;
   pds_after: number;
+};
+
+export type RemapLineResponse = {
+  new_product_id: number;
+  version: number;
+  total_kg_co2e_before: number;
+  total_kg_co2e_after: number;
+  delta_kg_co2e: number;
+  remapped_item_id: number;
+  sector_code: string;
+  sector_name: string;
+};
+
+export type SectorOption = {
+  sector_code: string;
+  sector_name: string;
+};
+
+export type EFOverride = {
+  override_id: number;
+  org_id?: string | null;
+  user_id: string;
+  material_normalized: string;
+  sector_code: string;
+  sector_name?: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ShareSummary = {
@@ -575,6 +622,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  searchSectors: (q?: string) =>
+    request<SectorOption[]>(`/api/factors/sectors${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  listEFOverrides: () => request<EFOverride[]>("/api/ef-overrides"),
+  createEFOverride: (payload: { material: string; sector_code: string; sector_name?: string }) =>
+    request<EFOverride>("/api/ef-overrides", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deleteEFOverride: (overrideId: number) =>
+    request<{ deleted: boolean }>(`/api/ef-overrides/${overrideId}`, {
+      method: "DELETE",
+    }),
+  remapLine: (
+    productId: number,
+    itemId: number,
+    sectorCode: string,
+    saveOverride: boolean,
+  ) =>
+    request<RemapLineResponse>(`/api/analyses/${productId}/remap-line`, {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: itemId,
+        sector_code: sectorCode,
+        save_override: saveOverride,
+      }),
+    }),
   getAnalysis: (id: string) => request<AnalysisDetail>(`/api/analyses/${id}`),
   createScenario: (productId: number, payload: { name: string }) =>
     request<{ scenario_id: number }>(`/api/products/${productId}/scenarios`, {
@@ -649,6 +722,16 @@ export const api = {
       formData.append("geography_country", options.geographyCountry);
     }
     return request<AnalyzeResponse>("/api/analyze", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  analyzeBulk: (files: File[]) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("files", file);
+    }
+    return request<BulkAnalyzeResponse>("/api/analyze/bulk", {
       method: "POST",
       body: formData,
     });

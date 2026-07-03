@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
@@ -17,6 +18,9 @@ from api.models.schemas import (
     AnalyzeResponse,
     ApplyPrimaryDataRequest,
     ApplyPrimaryDataResponse,
+    BulkAnalyzeResponse,
+    BulkAnalyzeResultDTO,
+    BulkAnalyzeSummaryDTO,
     CalculateFootprintRequest,
     CalculateFootprintResponse,
     CriticReportDTO,
@@ -34,9 +38,10 @@ from api.models.schemas import (
     SaveAnalysisResponse,
 )
 from api.services.session_store import WorkflowSession, session_store
-from calc.critic import run_critic
-from calc.footprint import calculate_footprint
+from calc.critic import CriticReport, run_critic
+from calc.footprint import FootprintResult, calculate_footprint
 from calc.health import footprint_health
+from db.ef_override_store import get_active_overrides
 from db.org_store import get_active_org
 from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
 from db.store import (
@@ -76,9 +81,12 @@ def _normalize_geography_country(value: str | None) -> str | None:
     return normalized
 
 
-def _product_name_from_upload(upload: UploadFile) -> str:
-    filename = upload.filename or "Unknown Product"
+def _product_name_from_filename(filename: str) -> str:
     return filename.removesuffix(".csv").replace("_", " ").title()
+
+
+def _product_name_from_upload(upload: UploadFile) -> str:
+    return _product_name_from_filename(upload.filename or "Unknown Product")
 
 
 def _session_or_404(session_id: str) -> WorkflowSession:
@@ -88,7 +96,60 @@ def _session_or_404(session_id: str) -> WorkflowSession:
     return session
 
 
-def _match_factors_for_bom(bom: ParsedBOM) -> tuple[list[EFMatch | None], list[str]]:
+@dataclass
+class AnalyzePipelineResult:
+    bom: ParsedBOM
+    ef_matches: list[EFMatch | None]
+    warnings: list[str]
+    result: FootprintResult
+    critic_report: CriticReport
+
+
+def _run_analyze_pipeline(
+    raw_bytes: bytes,
+    *,
+    filename: str | None = None,
+    product_name: str | None = None,
+    overrides: dict[str, str] | None = None,
+) -> AnalyzePipelineResult:
+    """Parse BOM, match factors, calculate footprint, and run critic."""
+    resolved_name = product_name or _product_name_from_filename(filename or "Unknown Product.csv")
+    bom = parse_bom_csv(raw_bytes, resolved_name)
+    ef_matches, warnings = _match_factors_for_bom(bom, overrides)
+    result = calculate_footprint(bom, ef_matches)
+    result, critic_report = run_critic(result)
+    return AnalyzePipelineResult(
+        bom=bom,
+        ef_matches=ef_matches,
+        warnings=warnings,
+        result=result,
+        critic_report=critic_report,
+    )
+
+
+def _needs_bulk_review(pipeline: AnalyzePipelineResult) -> bool:
+    return (
+        pipeline.result.flagged_count > 0
+        or bool(pipeline.warnings)
+        or pipeline.critic_report.has_findings
+    )
+
+
+def _bulk_flagged_comment(pipeline: AnalyzePipelineResult) -> str:
+    parts: list[str] = []
+    if pipeline.warnings:
+        parts.extend(pipeline.warnings[:5])
+    for finding in pipeline.critic_report.findings[:5]:
+        parts.append(finding.message)
+    if pipeline.result.flagged_count > 0:
+        parts.append(f"{pipeline.result.flagged_count} line item(s) flagged during bulk import.")
+    return " | ".join(parts) or "Flagged during bulk import for analyst review."
+
+
+def _match_factors_for_bom(
+    bom: ParsedBOM,
+    overrides: dict[str, str] | None = None,
+) -> tuple[list[EFMatch | None], list[str]]:
     ef_matches: list[EFMatch | None] = []
     warnings: list[str] = []
     for row in bom.rows:
@@ -96,7 +157,7 @@ def _match_factors_for_bom(bom: ParsedBOM) -> tuple[list[EFMatch | None], list[s
             ef_matches.append(None)
             continue
 
-        ef = lookup_ef(row.material, row.country_of_origin)
+        ef = lookup_ef(row.material, row.country_of_origin, overrides=overrides)
         ef_matches.append(ef)
         if ef.is_no_match:
             warnings.append(
@@ -147,13 +208,17 @@ async def parse_bom(
 
 
 @router.post("/api/analyze/match-factors", response_model=MatchFactorsResponse)
-def match_factors(request: MatchFactorsRequest) -> MatchFactorsResponse:
+def match_factors(
+    request: MatchFactorsRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MatchFactorsResponse:
     session = _session_or_404(request.session_id)
     bom: ParsedBOM | None = session.data.get("bom")
     if bom is None:
         raise HTTPException(status_code=409, detail="No parsed BOM found for this session.")
 
-    ef_matches, warnings = _match_factors_for_bom(bom)
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
+    ef_matches, warnings = _match_factors_for_bom(bom, overrides)
     session_store.update(
         session.session_id,
         phase="ef_review",
@@ -209,12 +274,20 @@ async def analyze(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalyzeResponse:
     raw_bytes = await file.read()
-    bom = parse_bom_csv(raw_bytes, product_name or _product_name_from_upload(file))
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
+    pipeline = _run_analyze_pipeline(
+        raw_bytes,
+        filename=file.filename,
+        product_name=product_name,
+        overrides=overrides,
+    )
+    bom = pipeline.bom
+    ef_matches = pipeline.ef_matches
+    warnings = pipeline.warnings
+    result = pipeline.result
+    critic_report = pipeline.critic_report
     session = session_store.create("analyzer", "bom_review", bom=bom, file_key=file.filename)
 
-    ef_matches, warnings = _match_factors_for_bom(bom)
-    result = calculate_footprint(bom, ef_matches)
-    result, critic_report = run_critic(result)
     product_id = None
     phase: Literal["calc_review", "saved"] = "calc_review"
     analysis_date = date.today()
@@ -263,6 +336,92 @@ async def analyze(
         result=FootprintResultDTO.from_domain(result),
         critic_report=CriticReportDTO.from_domain(critic_report),
         product_id=product_id,
+    )
+
+
+@router.post("/api/analyze/bulk", response_model=BulkAnalyzeResponse)
+async def analyze_bulk(
+    files: list[UploadFile] = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> BulkAnalyzeResponse:
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one CSV file is required.")
+
+    results: list[BulkAnalyzeResultDTO] = []
+    analysis_date = date.today()
+    period_start, period_end = _default_reporting_period(analysis_date)
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
+
+    for upload in files:
+        filename = upload.filename or "unknown.csv"
+        try:
+            raw_bytes = await upload.read()
+            pipeline = _run_analyze_pipeline(raw_bytes, filename=filename, overrides=overrides)
+            if pipeline.bom.file_errors or not pipeline.bom.is_valid:
+                error_message = (
+                    "; ".join(pipeline.bom.file_errors)
+                    if pipeline.bom.file_errors
+                    else "No processable BOM rows found."
+                )
+                results.append(
+                    BulkAnalyzeResultDTO(
+                        filename=filename,
+                        status="error",
+                        error=error_message,
+                    )
+                )
+                continue
+
+            save_status: Literal["approved", "flagged"] = (
+                "flagged" if _needs_bulk_review(pipeline) else "approved"
+            )
+            product_id = save_analysis(
+                pipeline.bom.product_name,
+                pipeline.result,
+                user_id=current_user.user_id,
+                access_token=current_user.access_token,
+                analysis_date=analysis_date,
+                status=save_status,
+                flagged_comment=(
+                    _bulk_flagged_comment(pipeline) if save_status == "flagged" else None
+                ),
+                reporting_period_start=period_start,
+                reporting_period_end=period_end,
+            )
+            results.append(
+                BulkAnalyzeResultDTO(
+                    filename=filename,
+                    product_id=product_id,
+                    product_name=pipeline.bom.product_name,
+                    total_kg_co2e=pipeline.result.total_kg_co2e,
+                    flagged_items=pipeline.result.flagged_count,
+                    status="saved",
+                )
+            )
+        except Exception as exc:
+            results.append(
+                BulkAnalyzeResultDTO(
+                    filename=filename,
+                    status="error",
+                    error=str(exc),
+                )
+            )
+
+    saved_count = sum(1 for row in results if row.status == "saved")
+    flagged_count = sum(
+        1 for row in results if row.status == "saved" and (row.flagged_items or 0) > 0
+    )
+    error_count = sum(1 for row in results if row.status == "error")
+    clean_saved_count = saved_count - flagged_count
+
+    return BulkAnalyzeResponse(
+        results=results,
+        summary=BulkAnalyzeSummaryDTO(
+            total=len(results),
+            saved=clean_saved_count,
+            flagged=flagged_count,
+            error=error_count,
+        ),
     )
 
 
