@@ -517,6 +517,40 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </div>
           </section>
 
+          <KpiStrip
+            tiles={
+              [
+                {
+                  label: "Total footprint",
+                  value: compactNumber(analysis.total_kg_co2e),
+                  unit: "kg CO₂e",
+                  hint: (
+                    <>
+                      <Term name="scope 3 category 1">Scope 3 Cat 1</Term> ·{" "}
+                      <Term name="cradle-to-gate">cradle-to-gate</Term>
+                    </>
+                  ),
+                },
+                {
+                  label: "Matched lines",
+                  value: compactNumber(analysis.matched_items),
+                  unit: "in total",
+                },
+                {
+                  label: "Flagged",
+                  value: compactNumber(analysis.flagged_items),
+                  unit: "need review",
+                },
+                {
+                  label: "Primary data",
+                  value: compactNumber((analysis.primary_data_share ?? 0) * 100),
+                  unit: "%",
+                  bar: analysis.primary_data_share ?? 0,
+                },
+              ] satisfies KpiTileData[]
+            }
+          />
+
           {scenarios.length > 0 ? (
             <Card>
               <CardHeader>
@@ -824,94 +858,6 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </Card>
           ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Annual volume</CardTitle>
-              <CardDescription>
-                Production or sales volume for corporate Scope 3 roll-up. Stored per product
-                lineage and year — not on the footprint itself.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-4">
-              <div className="space-y-2">
-                <Label htmlFor="volume-year">Year</Label>
-                <Input
-                  id="volume-year"
-                  type="number"
-                  value={volumeYear}
-                  onChange={(event) => setVolumeYear(Number(event.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="annual-volume">Annual volume</Label>
-                <Input
-                  id="annual-volume"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={annualVolume}
-                  onChange={(event) => setAnnualVolume(event.target.value)}
-                  placeholder={volumeLoading ? "Loading…" : "e.g. 10000"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="volume-unit">Unit</Label>
-                <Input
-                  id="volume-unit"
-                  value={volumeUnit}
-                  onChange={(event) => setVolumeUnit(event.target.value)}
-                  placeholder="units"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <Button
-                  type="button"
-                  onClick={() => void saveVolume()}
-                  disabled={volumeSaving || volumeLoading}
-                >
-                  {volumeSaving ? "Saving…" : "Save volume"}
-                </Button>
-                {volumeSaved ? (
-                  <span className="text-caption text-muted-foreground">Saved</span>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          <KpiStrip
-            tiles={
-              [
-                {
-                  label: "Total footprint",
-                  value: compactNumber(analysis.total_kg_co2e),
-                  unit: "kg CO₂e",
-                  hint: (
-                    <>
-                      <Term name="scope 3 category 1">Scope 3 Cat 1</Term> ·{" "}
-                      <Term name="cradle-to-gate">cradle-to-gate</Term>
-                    </>
-                  ),
-                },
-                {
-                  label: "Matched lines",
-                  value: compactNumber(analysis.matched_items),
-                  unit: "in total",
-                },
-                {
-                  label: "Flagged",
-                  value: compactNumber(analysis.flagged_items),
-                  unit: "need review",
-                },
-                {
-                  label: "Primary data",
-                  value: compactNumber((analysis.primary_data_share ?? 0) * 100),
-                  unit: "%",
-                  bar: analysis.primary_data_share ?? 0,
-                },
-              ] satisfies KpiTileData[]
-            }
-          />
-
           {analysis.technological_dqr != null ? (
             <Card>
               <CardHeader>
@@ -1057,6 +1003,60 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                   No matched line items to chart yet.
                 </p>
               ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Annual volume</CardTitle>
+              <CardDescription>
+                Production or sales volume for corporate Scope 3 roll-up. Stored per product
+                lineage and year — not on the footprint itself.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="volume-year">Year</Label>
+                <Input
+                  id="volume-year"
+                  type="number"
+                  value={volumeYear}
+                  onChange={(event) => setVolumeYear(Number(event.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="annual-volume">Annual volume</Label>
+                <Input
+                  id="annual-volume"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={annualVolume}
+                  onChange={(event) => setAnnualVolume(event.target.value)}
+                  placeholder={volumeLoading ? "Loading…" : "e.g. 10000"}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="volume-unit">Unit</Label>
+                <Input
+                  id="volume-unit"
+                  value={volumeUnit}
+                  onChange={(event) => setVolumeUnit(event.target.value)}
+                  placeholder="units"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void saveVolume()}
+                  disabled={volumeSaving || volumeLoading}
+                >
+                  {volumeSaving ? "Saving…" : "Save volume"}
+                </Button>
+                {volumeSaved ? (
+                  <span className="text-caption text-muted-foreground">Saved</span>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </>
