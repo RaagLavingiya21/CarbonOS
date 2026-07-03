@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Copy, Download, FileWarning, FlaskConical, RefreshCw, Share2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileWarning, Flag, FlaskConical, RefreshCw, Share2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,17 +27,17 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
 import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
 import { StatusChip } from "@/components/portfolio/StatusChip";
+import { Cell, GroupHead, HeadCell, PctBar } from "@/components/portfolio/DataTable";
 import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
-import { formatKg, formatPct } from "@/lib/utils";
+import { cn, formatKg, formatPct } from "@/lib/utils";
 
 function compactNumber(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "0";
@@ -61,6 +61,10 @@ function formatLineDqr(item: AnalysisLineItem) {
   }
   return `T${item.technological_dqr ?? "—"}/G${item.geographical_dqr ?? "—"}/Y${item.temporal_dqr ?? "—"}`;
 }
+
+// Shared grid template for the line-item table (grouped header + rows + footer).
+const LINE_ITEM_GRID =
+  "grid-cols-[minmax(200px,2fr)_minmax(140px,1.3fr)_92px_88px_100px_140px_72px_150px]";
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -936,75 +940,198 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Emission hotspots</CardTitle>
-              <CardDescription>
-                Line-item contribution to the total footprint, largest first. Each{" "}
-                <Term name="hotspot">hotspot</Term> shows the{" "}
-                <Term name="emission factor">emission factor</Term> source it used.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {[...analysis.line_items]
-                .filter((item) => item.kg_co2e != null)
-                .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
-                .map((item, index) => (
-                  <div key={`${item.component}-${item.material}-${index}`} className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <HotspotBar
-                        label={item.component ?? "Unnamed component"}
-                        sublabel={item.material ?? undefined}
-                        sharePct={item.share_pct ?? 0}
-                        value={`${formatKg(item.kg_co2e)} kg`}
-                        emphasized={index === 0}
-                      />
-                      <Badge variant={dataSourceBadgeVariant(item.data_source)}>
-                        {item.data_source === "primary" ? "Primary" : "Secondary"}
-                      </Badge>
-                      {item.data_source !== "primary" && item.item_id ? (
-                        <>
-                          {lineItemNeedsRemap(item) ? (
-                            <Button
-                              onClick={() => openRemapSheet(item)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              Re-map factor
-                            </Button>
-                          ) : null}
-                          <Button
-                            onClick={() => openPrimaryDataSheet(item)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            Enter supplier value
-                          </Button>
-                        </>
-                      ) : null}
+          <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-2 px-4 py-2.5">
+              <div>
+                <h2 className="text-body font-semibold text-foreground">Line items &amp; hotspots</h2>
+                <p className="text-caption text-muted-foreground">
+                  Contribution to the total footprint, largest first. Each{" "}
+                  <Term name="hotspot">hotspot</Term> shows its{" "}
+                  <Term name="emission factor">emission factor</Term> source.
+                </p>
+              </div>
+            </header>
+            {analysis.line_items.every((item) => item.kg_co2e == null) ? (
+              <p className="px-4 py-10 text-center text-small text-muted-foreground">
+                No matched line items to chart yet.
+              </p>
+            ) : (
+              <div className="relative">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[1000px]">
+                    {/* Grouped header */}
+                    <div
+                      className={cn(
+                        "grid",
+                        LINE_ITEM_GRID,
+                        "border-b border-border/70 bg-surface-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80",
+                      )}
+                    >
+                      <GroupHead label="Line item" sticky />
+                      <GroupHead label="Emission factor" span={2} />
+                      <GroupHead label="Contribution" span={3} align="right" />
+                      <GroupHead label="Quality" />
+                      <GroupHead label="" />
                     </div>
-                    <div className="flex items-center justify-between gap-2 pl-0.5">
-                      <span className="truncate text-caption text-muted-foreground">
-                        {item.matched_sector ?? "unmatched"}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {formatLineDqr(item) ? (
-                          <Badge variant="outline">{formatLineDqr(item)}</Badge>
-                        ) : null}
-                        {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
-                      </div>
+
+                    {/* Column header */}
+                    <div
+                      className={cn(
+                        "grid",
+                        LINE_ITEM_GRID,
+                        "border-b border-border bg-surface-2 text-caption font-medium uppercase tracking-wide text-muted-foreground",
+                      )}
+                    >
+                      <HeadCell sticky>Line item</HeadCell>
+                      <HeadCell>Source</HeadCell>
+                      <HeadCell>Tier</HeadCell>
+                      <HeadCell align="right">Spend</HeadCell>
+                      <HeadCell align="right">kg CO₂e</HeadCell>
+                      <HeadCell>% of total</HeadCell>
+                      <HeadCell>DQR</HeadCell>
+                      <HeadCell> </HeadCell>
+                    </div>
+
+                    {/* Rows */}
+                    {[...analysis.line_items]
+                      .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
+                      .map((item, index) => {
+                        const flagged = /flag|low|no_ef|review|unmatch|missing/i.test(
+                          item.flag_status ?? "",
+                        );
+                        const secondary = item.data_source !== "primary" && item.item_id != null;
+                        return (
+                          <div
+                            key={`${item.component}-${item.material}-${index}`}
+                            className={cn(
+                              "group grid min-h-11 border-b border-border text-body transition-colors hover:bg-muted/60",
+                              LINE_ITEM_GRID,
+                            )}
+                          >
+                            <Cell sticky>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate font-medium text-foreground">
+                                    {item.component ?? "Unnamed component"}
+                                  </span>
+                                  <span className="text-border">·</span>
+                                  <span className="truncate text-muted-foreground">
+                                    {item.material ?? "—"}
+                                  </span>
+                                  {flagged ? (
+                                    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-data-medium-bg px-1 py-0.5 text-[10px] font-medium text-data-medium">
+                                      <Flag className="h-2.5 w-2.5" />
+                                      flag
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="truncate text-caption text-muted-foreground">
+                                  {item.matched_sector ?? "unmatched"}
+                                </div>
+                              </div>
+                            </Cell>
+                            <Cell>
+                              {item.ef_source ? (
+                                <SourceCitation source={item.ef_source} />
+                              ) : (
+                                <span className="text-caption text-muted-foreground">—</span>
+                              )}
+                            </Cell>
+                            <Cell>
+                              <Badge variant={dataSourceBadgeVariant(item.data_source)}>
+                                {item.data_source === "primary" ? "Primary" : "Secondary"}
+                              </Badge>
+                            </Cell>
+                            <Cell align="right">
+                              <span className="num text-caption text-muted-foreground">
+                                {item.spend_usd != null ? `$${item.spend_usd.toFixed(2)}` : "—"}
+                              </span>
+                            </Cell>
+                            <Cell align="right">
+                              <span className="num text-body font-semibold text-foreground">
+                                {item.kg_co2e != null ? compactNumber(item.kg_co2e) : "—"}
+                              </span>
+                            </Cell>
+                            <Cell>
+                              <PctBar value={(item.share_pct ?? 0) / 100} />
+                            </Cell>
+                            <Cell>
+                              {formatLineDqr(item) ? (
+                                <span className="num text-caption text-muted-foreground">
+                                  {formatLineDqr(item)}
+                                </span>
+                              ) : (
+                                <span className="text-caption text-muted-foreground/50">—</span>
+                              )}
+                            </Cell>
+                            <Cell>
+                              {secondary ? (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {lineItemNeedsRemap(item) ? (
+                                    <Button
+                                      onClick={() => openRemapSheet(item)}
+                                      size="sm"
+                                      type="button"
+                                      variant="outline"
+                                      className="h-6 px-2 text-caption"
+                                    >
+                                      Re-map
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    onClick={() => openPrimaryDataSheet(item)}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    className="h-6 px-2 text-caption"
+                                  >
+                                    Enter value
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </Cell>
+                          </div>
+                        );
+                      })}
+
+                    {/* Total footer */}
+                    <div
+                      className={cn(
+                        "grid border-t border-border bg-surface-2",
+                        LINE_ITEM_GRID,
+                      )}
+                    >
+                      <Cell sticky>
+                        <span className="text-caption uppercase tracking-wide text-muted-foreground">
+                          Total · {analysis.line_items.length} lines
+                        </span>
+                      </Cell>
+                      <Cell> </Cell>
+                      <Cell> </Cell>
+                      <Cell align="right">
+                        <span className="num text-caption text-muted-foreground">
+                          ${analysis.line_items.reduce((s, i) => s + (i.spend_usd ?? 0), 0).toFixed(2)}
+                        </span>
+                      </Cell>
+                      <Cell align="right">
+                        <span className="num text-body font-semibold text-foreground">
+                          {compactNumber(
+                            analysis.line_items.reduce((s, i) => s + (i.kg_co2e ?? 0), 0),
+                          )}
+                        </span>
+                      </Cell>
+                      <Cell>
+                        <span className="num text-caption text-muted-foreground">100%</span>
+                      </Cell>
+                      <Cell> </Cell>
+                      <Cell> </Cell>
                     </div>
                   </div>
-                ))}
-              {analysis.line_items.every((item) => item.kg_co2e == null) ? (
-                <p className="py-6 text-center text-small text-muted-foreground">
-                  No matched line items to chart yet.
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
+                </div>
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent" />
+              </div>
+            )}
+          </div>
 
           <Card>
             <CardHeader>
