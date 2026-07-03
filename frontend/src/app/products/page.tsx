@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Flag } from "lucide-react";
 
-import { AnalyzerPageContent } from "@/app/analyzer/page";
+import { AnalyzerPageContent } from "@/components/analyzer/AnalyzerFlow";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalysisSummary, PortfolioSummary, api } from "@/lib/api";
