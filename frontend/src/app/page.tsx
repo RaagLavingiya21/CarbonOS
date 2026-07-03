@@ -2,278 +2,516 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  AlertTriangle,
   ArrowRight,
-  BarChart3,
-  FileSearch,
+  ChevronRight,
+  Clock,
   Factory,
+  FileSearch,
+  Flag,
   MessageSquare,
+  Sparkles,
   UploadCloud,
+  type LucideIcon,
 } from "lucide-react";
 
-import { ChatInput } from "@/components/chat/ChatInput";
-import { MetricCard } from "@/components/data/MetricCard";
-import {
-  ModuleShowcaseCard,
-  type ModuleShowcaseData,
-} from "@/components/dashboard/ModuleShowcaseCard";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
+import { StatusChip } from "@/components/portfolio/StatusChip";
+import { Placeholder } from "@/components/portfolio/Placeholder";
+import { Skeleton } from "@/components/ui/skeleton";
 import { chatApi, type ChatThread } from "@/lib/chat-api";
-import { api, type PortfolioSummary } from "@/lib/api";
-import { cn, formatKg, formatPct, formatRelativeTime } from "@/lib/utils";
+import { api, type AnalysisSummary, type PortfolioSummary } from "@/lib/api";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
-const MODULES: ModuleShowcaseData[] = [
+type ModuleTileData = {
+  name: string;
+  icon: LucideIcon;
+  desc: string;
+  message: string;
+  accent: string;
+};
+
+const MODULES: ModuleTileData[] = [
   {
     name: "Analyzer",
     icon: UploadCloud,
-    job: "Estimate a product's footprint from its BOM.",
-    problem:
-      "Bills of materials are messy, and there's no easy way to get a Scope 3 number out of them.",
-    steps: [
-      "Parse & clean the uploaded BOM",
-      "Match each line to an emission factor",
-      "Calculate the footprint & rank hotspots",
-    ],
-    ctaLabel: "Analyze a BOM",
+    desc: "Estimate a product's footprint from its BOM",
     message: "I want to analyze a bill of materials",
+    accent: "text-primary",
   },
   {
     name: "Gap Analyzer",
     icon: FileSearch,
-    job: "Find what's missing in your Scope 3 data.",
-    problem:
-      "You can't improve what you can't measure — and data gaps hide your biggest risks.",
-    steps: [
-      "Assess your reporting requirements",
-      "Score what's material",
-      "Surface data gaps & next steps",
-    ],
-    ctaLabel: "Check my gaps",
+    desc: "Find what's missing in your Scope 3 data",
     message: "Check my Scope 3 gaps",
+    accent: "text-data-info",
   },
   {
     name: "Supplier Copilot",
     icon: Factory,
-    job: "Engage the right suppliers first.",
-    problem:
-      "Supplier outreach is slow and unfocused; you need to start with the highest-impact ones.",
-    steps: [
-      "Rank suppliers by emission impact",
-      "Draft a GHG-grounded data request",
-      "Track responses",
-    ],
-    ctaLabel: "Start engagement",
+    desc: "Engage the highest-impact suppliers first",
     message: "Draft a supplier email",
+    accent: "text-data-medium",
   },
   {
     name: "Advisor",
     icon: MessageSquare,
-    job: "Ask anything about your footprints & the GHG Protocol.",
-    problem:
-      "Methodology questions and your own data live in different places.",
-    steps: [
-      "Ask in plain language",
-      "Grounded in your data + GHG Protocol",
-      "Answers cite their sources",
-    ],
-    ctaLabel: "Open chat",
+    desc: "Ask anything about your data & the GHG Protocol",
     message: "What can you help me with?",
+    accent: "text-data-low",
   },
 ];
 
-function sortThreadsByUpdatedAt(threads: ChatThread[]): ChatThread[] {
-  return [...threads].sort(
-    (left, right) =>
-      new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
-  );
+function compactNumber(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "0";
+  return new Intl.NumberFormat("en", {
+    maximumFractionDigits: value >= 100 ? 0 : 1,
+  }).format(value);
 }
 
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/* ---- Attention queue derivation (from real analyses) ---- */
+
+type AttentionKind = "flag" | "review" | "stale" | "attention";
+
+type AttentionItem = {
+  productId: number;
+  title: string;
+  meta: string;
+  status?: string | null;
+  kind: AttentionKind;
+  severity: number; // higher = more urgent
+  updated?: string | null;
+};
+
+function toAttentionItem(a: AnalysisSummary): AttentionItem | null {
+  const flagged = a.flagged_items ?? 0;
+  const health = (a.health_status ?? "").toLowerCase();
+  const status = (a.status ?? "").toLowerCase();
+  const reason = a.health_reasons?.[0];
+
+  if (flagged > 0) {
+    return {
+      productId: a.product_id,
+      title: a.product_name,
+      meta: reason ?? `${flagged} flagged line item${flagged === 1 ? "" : "s"}`,
+      status: a.status,
+      kind: "flag",
+      severity: 3,
+      updated: a.analysis_date,
+    };
+  }
+  if (status === "under_review") {
+    return {
+      productId: a.product_id,
+      title: a.product_name,
+      meta: reason ?? "Awaiting review",
+      status: a.status,
+      kind: "review",
+      severity: 2,
+      updated: a.submitted_at ?? a.analysis_date,
+    };
+  }
+  if (health === "stale") {
+    return {
+      productId: a.product_id,
+      title: a.product_name,
+      meta: reason ?? "Footprint is stale — consider recalculating",
+      status: a.status,
+      kind: "stale",
+      severity: 2,
+      updated: a.analysis_date,
+    };
+  }
+  if (health === "attention") {
+    return {
+      productId: a.product_id,
+      title: a.product_name,
+      meta: reason ?? "Needs attention",
+      status: a.status,
+      kind: "attention",
+      severity: 1,
+      updated: a.analysis_date,
+    };
+  }
+  return null;
+}
+
+const ATTENTION_META: Record<
+  AttentionKind,
+  { label: string; Icon: LucideIcon; className: string }
+> = {
+  flag: { label: "Flag", Icon: Flag, className: "bg-data-medium-bg text-data-medium" },
+  review: { label: "Review", Icon: Clock, className: "bg-primary/10 text-primary" },
+  stale: { label: "Stale", Icon: AlertTriangle, className: "bg-data-high-bg text-data-high" },
+  attention: {
+    label: "Attention",
+    Icon: AlertTriangle,
+    className: "bg-data-info-bg text-data-info",
+  },
+};
+
+/* ------------------------------- Page ------------------------------- */
+
 export default function Home() {
-  const [recentThreads, setRecentThreads] = useState<ChatThread[]>([]);
-  const [loadingThreads, setLoadingThreads] = useState(true);
-  const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummary | null>(null);
-  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
-  const [portfolioError, setPortfolioError] = useState(false);
+  const router = useRouter();
+  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+  const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    chatApi
-      .listThreads()
-      .then((threads) => setRecentThreads(sortThreadsByUpdatedAt(threads).slice(0, 5)))
-      .catch(() => setRecentThreads([]))
-      .finally(() => setLoadingThreads(false));
-  }, []);
-
-  const loadPortfolio = useCallback(async () => {
-    setLoadingPortfolio(true);
-    setPortfolioError(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
     try {
-      setPortfolioSummary(await api.getPortfolioSummary());
+      const [summaryData, analysesData] = await Promise.all([
+        api.getPortfolioSummary(),
+        api.listAnalyses().catch(() => [] as AnalysisSummary[]),
+      ]);
+      setSummary(summaryData);
+      setAnalyses(analysesData);
     } catch {
-      // Safari aborts in-flight fetches on back-navigation ("TypeError: Load failed").
-      // Retry once so a transient blip doesn't blank the dashboard; surface a retry
-      // affordance only if it genuinely fails, rather than silently rendering nothing.
+      // Retry once — Safari aborts in-flight fetches on back-navigation.
       try {
-        setPortfolioSummary(await api.getPortfolioSummary());
-      } catch (retryError) {
-        console.error("Failed to load portfolio summary:", retryError);
-        setPortfolioError(true);
+        setSummary(await api.getPortfolioSummary());
+      } catch {
+        setError(true);
       }
     } finally {
-      setLoadingPortfolio(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadPortfolio();
-  }, [loadPortfolio]);
+    void load();
+  }, [load]);
 
-  const router = useRouter();
+  useEffect(() => {
+    chatApi
+      .listThreads()
+      .then((t) =>
+        setThreads(
+          [...t]
+            .sort(
+              (a, b) =>
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+            )
+            .slice(0, 5),
+        ),
+      )
+      .catch(() => setThreads([]));
+  }, []);
 
-  const handleSend = useCallback(
-    (message: string) => {
-      router.push(`/chat?message=${encodeURIComponent(message)}`);
+  const askAssistant = useCallback(
+    (message?: string) => {
+      router.push(message ? `/chat?message=${encodeURIComponent(message)}` : "/chat");
     },
     [router],
   );
 
+  const kpiTiles: KpiTileData[] = useMemo(() => {
+    if (!summary) return [];
+    const approved =
+      (summary.counts_by_status?.approved ?? 0) +
+      (summary.counts_by_status?.published ?? 0);
+    return [
+      {
+        label: "Portfolio footprint",
+        value: compactNumber(summary.total_kg_co2e),
+        unit: "kg CO₂e",
+      },
+      {
+        label: "Primary data share",
+        value: compactNumber((summary.avg_primary_data_share ?? 0) * 100),
+        unit: "%",
+        bar: summary.avg_primary_data_share ?? 0,
+      },
+      {
+        label: "Open flags",
+        value: compactNumber(summary.open_flags_count),
+        unit: "products",
+        hint: `${summary.needs_attention_count ?? 0} need attention`,
+      },
+      {
+        label: "Approved & published",
+        value: compactNumber(approved),
+        unit: `of ${summary.product_count}`,
+      },
+    ];
+  }, [summary]);
+
+  const attention = useMemo(
+    () =>
+      analyses
+        .map(toAttentionItem)
+        .filter((x): x is AttentionItem => x !== null)
+        .sort((a, b) => b.severity - a.severity)
+        .slice(0, 6),
+    [analyses],
+  );
+
   return (
-    <div className="mx-auto flex max-w-4xl flex-col items-center gap-12 py-4 md:py-10">
-      <section className="w-full space-y-4 text-center">
-        <h1 className="text-h1 font-medium text-balance md:text-display">
-          Carbon footprint assistant
-        </h1>
-        <p className="mx-auto max-w-xl text-body-lg text-muted-foreground text-pretty">
-          Analyze bills of materials, close Scope 3 data gaps, and engage
-          suppliers — all from one conversation with your platform agent.
-        </p>
-        <div className="mx-auto w-full max-w-2xl text-left">
-          <ChatInput variant="hero" onSend={handleSend} showModuleButtons={false} />
+    <div className="mx-auto w-full max-w-[1200px] space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
+            {new Date().toLocaleDateString("en", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}
+          </div>
+          <h1 className="mt-1 text-h1 font-semibold text-foreground">{greeting()}</h1>
+          <p className="mt-1 max-w-xl text-small text-muted-foreground">
+            {summary
+              ? summary.needs_attention_count && summary.needs_attention_count > 0
+                ? `${summary.needs_attention_count} product${summary.needs_attention_count === 1 ? "" : "s"} need your attention. Tracking ${summary.product_count} footprint${summary.product_count === 1 ? "" : "s"}.`
+                : `All clear — tracking ${summary.product_count} footprint${summary.product_count === 1 ? "" : "s"}.`
+              : "Your Scope 3 command center."}
+          </p>
         </div>
-      </section>
+        <button
+          type="button"
+          onClick={() => askAssistant()}
+          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-small font-medium text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Ask the assistant
+        </button>
+      </div>
 
-      {!loadingPortfolio && portfolioError ? (
-        <section className="w-full text-center">
-          <p className="text-sm text-muted-foreground">
-            Couldn&apos;t load your portfolio overview.{" "}
-            <button
-              type="button"
-              onClick={() => void loadPortfolio()}
-              className="underline underline-offset-4"
+      {/* KPI strip (real) */}
+      {loading && !summary ? (
+        <Skeleton className="h-[104px] rounded-lg" />
+      ) : error ? (
+        <div className="rounded-lg border border-border bg-surface p-4 text-small text-muted-foreground">
+          Couldn&apos;t load your portfolio overview.{" "}
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Retry
+          </button>
+        </div>
+      ) : summary ? (
+        <KpiStrip tiles={kpiTiles} />
+      ) : null}
+
+      {/* Two-column body */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Attention queue (real) */}
+        <section className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs lg:col-span-2">
+          <header className="flex items-center justify-between border-b border-border bg-surface-2 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <h2 className="text-body font-semibold text-foreground">Needs your attention</h2>
+              {attention.length > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-data-medium-bg px-1.5 py-0.5 text-caption font-medium text-data-medium">
+                  {attention.length} open
+                </span>
+              ) : null}
+            </div>
+            <Link
+              href="/products?health=attention"
+              className="inline-flex items-center gap-1 text-caption font-medium text-primary hover:underline"
             >
-              Retry
-            </button>
-          </p>
+              View portfolio <ArrowRight className="h-3 w-3" />
+            </Link>
+          </header>
+          {loading ? (
+            <div className="space-y-2 p-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 rounded-md" />
+              ))}
+            </div>
+          ) : attention.length === 0 ? (
+            <p className="px-4 py-10 text-center text-small text-muted-foreground">
+              Nothing needs attention right now. 🎉
+            </p>
+          ) : (
+            <ul>
+              {attention.map((item, i) => (
+                <AttentionRow key={item.productId} item={item} last={i === attention.length - 1} />
+              ))}
+            </ul>
+          )}
         </section>
-      ) : !loadingPortfolio && portfolioSummary && portfolioSummary.product_count > 0 ? (
-        <section className="w-full">
-          <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">
-            Portfolio overview
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Link href="/products">
-              <MetricCard
-                className="transition hover:border-primary/40"
-                label="Total portfolio"
-                value={formatKg(portfolioSummary.total_kg_co2e)}
-                unit="kg CO₂e"
-              />
-            </Link>
-            <Link href="/products">
-              <MetricCard
-                className="transition hover:border-primary/40"
-                label="Avg primary data share"
-                value={formatPct(portfolioSummary.avg_primary_data_share * 100)}
-              />
-            </Link>
-            <Link href="/products">
-              <MetricCard
-                className="transition hover:border-primary/40"
-                label="Open flags"
-                value={portfolioSummary.open_flags_count}
-                hint="Products with flagged line items"
-              />
-            </Link>
-            <Link href="/products?health=attention">
-              <MetricCard
-                className="transition hover:border-primary/40"
-                label="Needs attention"
-                value={portfolioSummary.needs_attention_count ?? 0}
-                hint="Stale or flagged footprints"
-              />
-            </Link>
-            {Object.entries(portfolioSummary.counts_by_status).map(([status, count]) => (
-              <Link key={status} href={`/products?status=${encodeURIComponent(status)}`}>
-                <MetricCard
-                  className="transition hover:border-primary/40"
-                  label={status.charAt(0).toUpperCase() + status.slice(1)}
-                  value={count}
-                  hint="Saved footprints"
-                />
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : !loadingPortfolio && portfolioSummary?.product_count === 0 ? (
-        <section className="w-full text-center">
-          <p className="text-sm text-muted-foreground">
-            No saved product footprints yet.{" "}
-            <Link href="/analyzer" className="underline underline-offset-4">
-              Analyze a BOM
-            </Link>{" "}
-            to build your portfolio.
-          </p>
-        </section>
-      ) : null}
 
-      <section className="w-full">
-        <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">
-          Explore the modules
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {MODULES.map((module) => (
-            <ModuleShowcaseCard key={module.name} {...module} />
-          ))}
+        {/* Right column: trend (placeholder) + status breakdown (real) */}
+        <aside className="flex flex-col gap-5">
+          <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+            <header className="border-b border-border bg-surface-2 px-4 py-2.5">
+              <h2 className="text-body font-semibold text-foreground">Portfolio trend</h2>
+            </header>
+            <div className="flex flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+              <Activity className="h-5 w-5 text-muted-foreground/40" />
+              <p className="text-small text-muted-foreground">
+                Trend appears once you have footprints across multiple reporting periods.
+              </p>
+              <Placeholder label="No historical periods yet" />
+            </div>
+          </div>
+
+          {summary ? <StatusBreakdown summary={summary} /> : null}
+        </aside>
+      </div>
+
+      {/* Modules */}
+      <section>
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-body font-semibold text-foreground">Modules</h2>
+          <span className="text-caption text-muted-foreground">
+            Or ask the assistant to run any of these
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          {MODULES.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.name}
+                type="button"
+                onClick={() => askAssistant(m.message)}
+                className="group flex items-center gap-3 bg-surface p-4 text-left transition-colors hover:bg-muted/40"
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10">
+                  <Icon className={cn("h-4 w-4", m.accent)} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-body font-semibold text-foreground">{m.name}</span>
+                  <span className="block truncate text-caption text-muted-foreground">
+                    {m.desc}
+                  </span>
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      {!loadingThreads && recentThreads.length > 0 ? (
-        <section className="w-full">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-medium">Recent conversations</h2>
-            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-              <Link href="/chat">
-                View all
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="divide-y p-0">
-              {recentThreads.map((thread) => (
+      {/* Recent conversations (real) */}
+      {threads.length > 0 ? (
+        <section className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+          <header className="flex items-center justify-between border-b border-border bg-surface-2 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              <h2 className="text-body font-semibold text-foreground">Recent conversations</h2>
+            </div>
+            <Link href="/chat" className="text-caption font-medium text-primary hover:underline">
+              View all
+            </Link>
+          </header>
+          <ul className="divide-y divide-border">
+            {threads.map((thread) => (
+              <li key={thread.thread_id}>
                 <Link
-                  key={thread.thread_id}
                   href={`/chat?thread=${thread.thread_id}`}
-                  className={cn(
-                    "flex items-center justify-between gap-4 px-4 py-3 transition hover:bg-accent/50",
-                  )}
+                  className="flex items-center justify-between gap-4 px-4 py-2.5 transition-colors hover:bg-muted/40"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
+                  <span className="min-w-0">
+                    <span className="block truncate text-body font-medium text-foreground">
                       {thread.title ?? "New conversation"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
+                    </span>
+                    <span className="block text-caption text-muted-foreground">
                       {formatRelativeTime(thread.updated_at)}
-                    </p>
-                  </div>
-                  <BarChart3 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </span>
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </Link>
-              ))}
-            </CardContent>
-          </Card>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function AttentionRow({ item, last }: { item: AttentionItem; last: boolean }) {
+  const meta = ATTENTION_META[item.kind];
+  const Icon = meta.Icon;
+  return (
+    <li>
+      <Link
+        href={`/analyzer/${item.productId}`}
+        className={cn(
+          "group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40",
+          !last && "border-b border-border",
+        )}
+      >
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-caption font-medium",
+            meta.className,
+          )}
+        >
+          <Icon className="h-2.5 w-2.5" />
+          {meta.label}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-body font-medium text-foreground">{item.title}</span>
+          <span className="block truncate text-caption text-muted-foreground">{item.meta}</span>
+        </span>
+        {item.status ? <StatusChip status={item.status} /> : null}
+        <span className="num shrink-0 text-caption text-muted-foreground">
+          {item.updated ? formatRelativeTime(item.updated) : ""}
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      </Link>
+    </li>
+  );
+}
+
+function StatusBreakdown({ summary }: { summary: PortfolioSummary }) {
+  const entries = Object.entries(summary.counts_by_status ?? {});
+  const total = entries.reduce((s, [, c]) => s + c, 0) || 1;
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+      <header className="flex items-center justify-between border-b border-border bg-surface-2 px-4 py-2.5">
+        <h2 className="text-body font-semibold text-foreground">By status</h2>
+        <Link href="/products" className="text-caption font-medium text-primary hover:underline">
+          Portfolio
+        </Link>
+      </header>
+      <ul className="divide-y divide-border">
+        {entries.length === 0 ? (
+          <li className="px-4 py-3 text-caption text-muted-foreground">No footprints yet.</li>
+        ) : (
+          entries.map(([status, count]) => (
+            <li key={status} className="px-4 py-2.5">
+              <Link
+                href={`/products?status=${encodeURIComponent(status)}`}
+                className="block"
+              >
+                <div className="flex items-center justify-between text-small">
+                  <span className="font-medium capitalize text-foreground">
+                    {status.replace(/_/g, " ")}
+                  </span>
+                  <span className="num text-muted-foreground">{count}</span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary"
+                    style={{ width: `${(count / total) * 100}%` }}
+                  />
+                </div>
+              </Link>
+            </li>
+          ))
+        )}
+      </ul>
     </div>
   );
 }

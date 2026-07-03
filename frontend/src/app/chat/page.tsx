@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatLanding } from "@/components/chat/ChatLanding";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ThreadList } from "@/components/chat/ThreadList";
 import { SplitLayout } from "@/components/layout/SplitLayout";
@@ -375,6 +376,10 @@ function ChatWorkspace() {
 
   const chatDisabled = loading || switchingThread;
   const hasMessages = messages.length > 0;
+  // On the empty landing, hide the persistent thread-list column so the
+  // welcome view is a single centered column (Lovable-style); recents live
+  // inside the landing instead.
+  const onLanding = !initializing && !switchingThread && Boolean(thread) && !hasMessages;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -385,13 +390,15 @@ function ChatWorkspace() {
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <ThreadList
-          threads={threads}
-          activeThreadId={thread?.thread_id ?? null}
-          onSelect={(threadId) => void selectThread(threadId)}
-          onNewChat={() => void handleNewChat()}
-          onDelete={(threadId) => void handleDeleteThread(threadId)}
-        />
+        {!onLanding ? (
+          <ThreadList
+            threads={threads}
+            activeThreadId={thread?.thread_id ?? null}
+            onSelect={(threadId) => void selectThread(threadId)}
+            onNewChat={() => void handleNewChat()}
+            onDelete={(threadId) => void handleDeleteThread(threadId)}
+          />
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
           {initializing ? (
@@ -418,18 +425,12 @@ function ChatWorkspace() {
               </p>
             </div>
           ) : !hasMessages ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
-              <h1 className="text-h1 font-medium md:text-display">
-                How can I help you?
-              </h1>
-              <div className="w-full max-w-2xl">
-                <ChatInput
-                  variant="hero"
-                  onSend={handleSend}
-                  disabled={chatDisabled}
-                />
-              </div>
-            </div>
+            <ChatLanding
+              onSend={handleSend}
+              disabled={chatDisabled}
+              threads={threads}
+              onSelectThread={(threadId) => void selectThread(threadId)}
+            />
           ) : (
             <SplitLayout
               chat={

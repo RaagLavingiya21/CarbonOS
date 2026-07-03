@@ -23,15 +23,15 @@ export function SourceCitation({
     );
   }
   return (
-    <Tooltip content={source}>
+    <Tooltip content={source} className="min-w-0 max-w-full">
       <span
         className={cn(
-          "inline-flex max-w-full items-center gap-1 font-mono text-caption text-muted-foreground",
+          "inline-flex min-w-0 max-w-full items-center gap-1 font-mono text-caption text-muted-foreground",
           className,
         )}
       >
         <BookMarked className="h-3 w-3 shrink-0" aria-hidden />
-        <span className="truncate">{source}</span>
+        <span className="min-w-0 truncate">{source}</span>
       </span>
     </Tooltip>
   );

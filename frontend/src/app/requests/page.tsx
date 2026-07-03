@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Copy, Inbox } from "lucide-react";
+import { Copy, Inbox } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -101,20 +100,16 @@ export default function RequestsPage() {
   const openRequests = requests.filter((request) => request.status === "open");
 
   return (
-    <div className="space-y-6">
-      <Button asChild variant="ghost" className="-ml-3">
-        <Link href="/">
-          <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
-        </Link>
-      </Button>
-
+    <div className="space-y-4">
       <section>
-        <div className="flex items-center gap-2">
-          <Inbox className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-h1">PCF requests</h1>
+        <div className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
+          Inbound
         </div>
-        <p className="mt-2 text-small text-muted-foreground">
+        <h1 className="mt-1 flex items-center gap-2 text-h1 font-semibold text-foreground">
+          <Inbox className="h-5 w-5 text-muted-foreground" />
+          PCF requests
+        </h1>
+        <p className="mt-1 max-w-xl text-small text-muted-foreground">
           Inbound product carbon footprint requests for your active organization.
         </p>
       </section>

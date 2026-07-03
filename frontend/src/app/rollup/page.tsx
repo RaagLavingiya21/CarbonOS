@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BarChart3, Download, FileWarning } from "lucide-react";
+import { BarChart3, Download, FileWarning } from "lucide-react";
 
 import { MetricCard } from "@/components/data/MetricCard";
 import { Term } from "@/components/data/Term";
@@ -105,21 +105,17 @@ export default function RollupPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Button asChild variant="ghost" className="-ml-3">
-        <Link href="/">
-          <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
-        </Link>
-      </Button>
-
+    <div className="space-y-4">
       <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-h1">Corporate footprint</h1>
+          <div className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
+            Scope 3 Category 1
           </div>
-          <p className="mt-2 text-small text-muted-foreground">
+          <h1 className="mt-1 flex items-center gap-2 text-h1 font-semibold text-foreground">
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            Corporate footprint
+          </h1>
+          <p className="mt-1 max-w-xl text-small text-muted-foreground">
             Scope 3 Category 1 roll-up from published product footprints multiplied by annual
             volume.
           </p>
