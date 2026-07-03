@@ -3,7 +3,7 @@
 **Executes:** the top un-addressed gap in `PRODUCT_STRATEGY.md`'s gap analysis (the "Establish" bottleneck). Read `PRODUCT_STRATEGY.md`, `PCF_PLATFORM_DESIGN.md`, and `CLAUDE.md` first.
 **Branch:** `feature/wave-4-front-door`.
 
-> **DEPENDENCY — read first.** This wave's migration is numbered **`029`**, on top of Wave 3's `028`. This branch was created before Wave 3 merged, so **rebase it onto `main` after Wave 3 (PR with migration 028) merges** before implementing — otherwise the migration numbering collides. Confirm `supabase/migrations/028_*.sql` exists on your base before you start.
+> **Base confirmed.** This branch sits on top of the merged Wave 3 (`supabase/migrations/028_product_volumes.sql` is present on the base), so this wave's migration is numbered **`029`** with no collision. Ready to implement directly — no rebase needed.
 
 ## Why
 Two gaps make the "front door" the bottleneck for a real portfolio: analysts get **one product in at a time**, and when the emission-factor match is wrong they can **flag but not fix** it — and the fix doesn't stick, so the same messy material gets re-corrected forever. Wave 4 makes ingestion bulk and makes factor corrections institutional knowledge.
