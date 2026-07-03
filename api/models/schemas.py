@@ -378,6 +378,28 @@ class AnalyzeResponse(BaseModel):
     product_id: int | None = None
 
 
+class BulkAnalyzeResultDTO(BaseModel):
+    filename: str
+    product_id: int | None = None
+    product_name: str | None = None
+    total_kg_co2e: float | None = None
+    flagged_items: int | None = None
+    status: Literal["saved", "error"]
+    error: str | None = None
+
+
+class BulkAnalyzeSummaryDTO(BaseModel):
+    total: int
+    saved: int
+    flagged: int
+    error: int
+
+
+class BulkAnalyzeResponse(BaseModel):
+    results: list[BulkAnalyzeResultDTO]
+    summary: BulkAnalyzeSummaryDTO
+
+
 class AnalysisSummaryDTO(BaseModel):
     product_id: int
     product_name: str
