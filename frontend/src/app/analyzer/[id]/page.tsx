@@ -31,16 +31,19 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
+import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
+import { StatusChip } from "@/components/portfolio/StatusChip";
 import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
-function statusBadgeVariant(status: string | null | undefined) {
-  if (status === "flagged") return "destructive" as const;
-  if (status === "published") return "default" as const;
-  return "secondary" as const;
+function compactNumber(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "0";
+  return new Intl.NumberFormat("en", {
+    maximumFractionDigits: value >= 100 ? 0 : 1,
+  }).format(value);
 }
 
 function dataSourceBadgeVariant(dataSource: string | null | undefined) {
@@ -417,11 +420,11 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     : "/analyzer";
 
   return (
-    <div className="space-y-6">
-      <Button asChild variant="ghost" className="-ml-3">
-        <Link href="/">
-          <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
+    <div className="space-y-5">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+        <Link href="/products">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to portfolio
         </Link>
       </Button>
 
@@ -444,22 +447,24 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       ) : analysis ? (
         <>
           <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusBadgeVariant(analysis.status)}>
-                  {analysis.status ?? "saved"}
-                </Badge>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <StatusChip status={analysis.status} />
                 {analysis.version ? (
-                  <Badge variant="outline">Version {analysis.version}</Badge>
+                  <span className="num inline-flex items-center rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-caption font-medium text-foreground">
+                    v{analysis.version}
+                  </span>
                 ) : null}
+                <span className="text-caption text-muted-foreground">
+                  Analyzed {analysis.analysis_date}
+                  {analysis.published_at
+                    ? ` · Published ${new Date(analysis.published_at).toLocaleDateString()}`
+                    : null}
+                </span>
               </div>
-              <h1 className="mt-3 text-h1">{analysis.product_name}</h1>
-              <p className="mt-2 text-small text-muted-foreground">
-                Analysis date: {analysis.analysis_date}
-                {analysis.published_at
-                  ? ` · Published ${new Date(analysis.published_at).toLocaleDateString()}`
-                  : null}
-              </p>
+              <h1 className="mt-1.5 text-h1 font-semibold tracking-tight text-foreground">
+                {analysis.product_name}
+              </h1>
             </div>
             <div className="flex flex-wrap gap-2">
               {analysis.status === "approved" ? (
@@ -873,26 +878,39 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </CardContent>
           </Card>
 
-          <section className="grid gap-4 md:grid-cols-4">
-            <MetricCard
-              label="Total footprint"
-              value={formatKg(analysis.total_kg_co2e)}
-              unit="kg CO₂e"
-              hint={
-                <>
-                  <Term name="scope 3 category 1">Scope 3 Category 1</Term>,{" "}
-                  <Term name="cradle-to-gate">cradle-to-gate</Term>
-                </>
-              }
-            />
-            <MetricCard label="Matched line items" value={analysis.matched_items} hint="Included in total" />
-            <MetricCard label="Flagged line items" value={analysis.flagged_items} hint="Need human review" />
-            <MetricCard
-              label="Primary data share"
-              value={formatPct((analysis.primary_data_share ?? 0) * 100)}
-              hint="Share of footprint from supplier-specific data"
-            />
-          </section>
+          <KpiStrip
+            tiles={
+              [
+                {
+                  label: "Total footprint",
+                  value: compactNumber(analysis.total_kg_co2e),
+                  unit: "kg CO₂e",
+                  hint: (
+                    <>
+                      <Term name="scope 3 category 1">Scope 3 Cat 1</Term> ·{" "}
+                      <Term name="cradle-to-gate">cradle-to-gate</Term>
+                    </>
+                  ),
+                },
+                {
+                  label: "Matched lines",
+                  value: compactNumber(analysis.matched_items),
+                  unit: "in total",
+                },
+                {
+                  label: "Flagged",
+                  value: compactNumber(analysis.flagged_items),
+                  unit: "need review",
+                },
+                {
+                  label: "Primary data",
+                  value: compactNumber((analysis.primary_data_share ?? 0) * 100),
+                  unit: "%",
+                  bar: analysis.primary_data_share ?? 0,
+                },
+              ] satisfies KpiTileData[]
+            }
+          />
 
           {analysis.technological_dqr != null ? (
             <Card>

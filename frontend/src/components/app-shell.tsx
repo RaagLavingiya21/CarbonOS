@@ -16,7 +16,6 @@ import {
   MessageSquare,
   Search,
   Settings,
-  UploadCloud,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,7 @@ import { LandingPage } from "@/components/marketing/LandingPage";
 import { GlobalChatIcon } from "@/components/layout/GlobalChatIcon";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { WorkspaceBadge } from "@/components/layout/WorkspaceBadge";
+import { PortfolioNav } from "@/components/portfolio/PortfolioNav";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { toggleTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,6 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/analyzer", label: "Analyzer", icon: UploadCloud },
   { href: "/products", label: "Portfolio", icon: Boxes },
   { href: "/requests", label: "Requests", icon: Inbox },
   { href: "/rollup", label: "Corporate footprint", icon: BarChart3 },
@@ -149,6 +148,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const Icon = item.icon;
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            // Portfolio gets a collapsible status sub-tree (real counts).
+            if (item.href === "/products") {
+              return <PortfolioNav key={item.href} pathname={pathname} />;
+            }
             return (
               <Link
                 key={item.href}

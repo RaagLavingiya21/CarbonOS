@@ -18,10 +18,23 @@ const config: Config = {
     extend: {
       colors: {
         border: "hsl(var(--border))",
+        "border-strong": "hsl(var(--border-strong))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Layered surfaces (Linear/Stripe-style depth).
+        surface: "hsl(var(--surface))",
+        "surface-2": "hsl(var(--surface-2))",
+        elevated: "hsl(var(--elevated))",
+        subtle: "hsl(var(--subtle))",
+        // State semantics (kept in sync with the data palette via CSS vars).
+        success: "hsl(var(--success))",
+        "success-bg": "hsl(var(--success-bg))",
+        warning: "hsl(var(--warning))",
+        "warning-bg": "hsl(var(--warning-bg))",
+        info: "hsl(var(--info))",
+        "info-bg": "hsl(var(--info-bg))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -68,18 +81,18 @@ const config: Config = {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
-        display: ["var(--font-serif)"],
+        display: ["var(--font-display)"],
       },
       fontSize: {
-        // Disciplined type scale (size / line-height / tracking).
-        caption: ["0.75rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
-        small: ["0.8125rem", { lineHeight: "1.25rem" }],
-        body: ["0.9375rem", { lineHeight: "1.6" }],
-        "body-lg": ["1.0625rem", { lineHeight: "1.65" }],
-        h3: ["1.25rem", { lineHeight: "1.35", letterSpacing: "-0.01em" }],
-        h2: ["1.625rem", { lineHeight: "1.25", letterSpacing: "-0.015em" }],
-        h1: ["2.125rem", { lineHeight: "1.15", letterSpacing: "-0.02em" }],
-        display: ["3rem", { lineHeight: "1.05", letterSpacing: "-0.025em" }],
+        // Compact, data-dense type scale (size / line-height / tracking).
+        caption: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
+        small: ["0.75rem", { lineHeight: "1.1rem" }],
+        body: ["0.8125rem", { lineHeight: "1.45" }],
+        "body-lg": ["0.875rem", { lineHeight: "1.55" }],
+        h3: ["0.9375rem", { lineHeight: "1.35", letterSpacing: "-0.01em" }],
+        h2: ["1.125rem", { lineHeight: "1.3", letterSpacing: "-0.015em" }],
+        h1: ["1.375rem", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
+        display: ["1.75rem", { lineHeight: "1.15", letterSpacing: "-0.025em" }],
       },
       borderRadius: {
         lg: "var(--radius)",
