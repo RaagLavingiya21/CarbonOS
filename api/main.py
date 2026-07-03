@@ -26,6 +26,7 @@ from api.routes import (
     panels,
     public,
     requests,
+    rollup,
     scenarios,
     shares,
 )
@@ -155,6 +156,7 @@ async def log_requests(request: Request, call_next):
 
 
 app.include_router(analyzer.router)
+app.include_router(rollup.router)
 app.include_router(shares.router)
 app.include_router(public.router)
 app.include_router(requests.router)
