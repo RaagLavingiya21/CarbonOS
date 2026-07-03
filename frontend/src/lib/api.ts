@@ -219,6 +219,26 @@ export type AnalyzeResponse = {
   product_id: number | null;
 };
 
+export type BulkAnalyzeResult = {
+  filename: string;
+  product_id?: number | null;
+  product_name?: string | null;
+  total_kg_co2e?: number | null;
+  flagged_items?: number | null;
+  status: "saved" | "error";
+  error?: string | null;
+};
+
+export type BulkAnalyzeResponse = {
+  results: BulkAnalyzeResult[];
+  summary: {
+    total: number;
+    saved: number;
+    flagged: number;
+    error: number;
+  };
+};
+
 export type EFMatch = {
   material_input: string;
   sector_name: string;
@@ -649,6 +669,16 @@ export const api = {
       formData.append("geography_country", options.geographyCountry);
     }
     return request<AnalyzeResponse>("/api/analyze", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  analyzeBulk: (files: File[]) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("files", file);
+    }
+    return request<BulkAnalyzeResponse>("/api/analyze/bulk", {
       method: "POST",
       body: formData,
     });

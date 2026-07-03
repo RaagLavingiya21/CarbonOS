@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Copy, Download, FileSpreadsheet, Save, UploadCloud } from "lucide-react";
@@ -26,8 +27,10 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
-import { AnalyzeResponse, api } from "@/lib/api";
+import { AnalyzeResponse, BulkAnalyzeResponse, api } from "@/lib/api";
 import { formatKg, formatPct } from "@/lib/utils";
+
+type ImportMode = "single" | "bulk";
 
 function reportingDatesFromYear(year: number | ""): { start?: string; end?: string } {
   if (!year) return {};
@@ -47,7 +50,11 @@ export default function AnalyzerPage() {
 
 function AnalyzerPageContent() {
   const searchParams = useSearchParams();
+  const [importMode, setImportMode] = useState<ImportMode>("single");
   const [file, setFile] = useState<File | null>(null);
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkResults, setBulkResults] = useState<BulkAnalyzeResponse | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [productName, setProductName] = useState("");
   const [recalculateOfProductId, setRecalculateOfProductId] = useState<number | null>(null);
   const [savedVersion, setSavedVersion] = useState<number | null>(null);
@@ -90,6 +97,22 @@ function AnalyzerPageContent() {
       geographyCountry: geographyCountry.trim().toUpperCase() || undefined,
     };
   }, [productDescription, reportingYear, geographyCountry]);
+
+  async function runBulkAnalysis(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (bulkFiles.length === 0) return;
+    setBulkLoading(true);
+    setError(null);
+    setBulkResults(null);
+    try {
+      const response = await api.analyzeBulk(bulkFiles);
+      setBulkResults(response);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBulkLoading(false);
+    }
+  }
 
   async function runAnalysis(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -202,9 +225,29 @@ function AnalyzerPageContent() {
         <Card className="h-fit">
           <CardHeader>
             <CardTitle>Analysis input</CardTitle>
-            <CardDescription>Upload a CSV BOM. The backend performs all parsing, factor matching, and calculations.</CardDescription>
+            <CardDescription>
+              Upload one BOM CSV or import multiple files in one batch. The backend performs all parsing, factor matching, and calculations.
+            </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={importMode === "single" ? "default" : "outline"}
+                onClick={() => setImportMode("single")}
+              >
+                Single product
+              </Button>
+              <Button
+                type="button"
+                variant={importMode === "bulk" ? "default" : "outline"}
+                onClick={() => setImportMode("bulk")}
+              >
+                Bulk import
+              </Button>
+            </div>
+
+            {importMode === "single" ? (
             <form className="space-y-4" onSubmit={runAnalysis}>
               <div className="space-y-2">
                 <Label htmlFor="product-name">Product name</Label>
@@ -265,11 +308,158 @@ function AnalyzerPageContent() {
                 {loading ? "Analyzing..." : "Run analysis"}
               </Button>
             </form>
+            ) : (
+            <form className="space-y-4" onSubmit={runBulkAnalysis}>
+              <div className="space-y-2">
+                <Label htmlFor="bulk-bom-files">BOM CSV files</Label>
+                <Input
+                  id="bulk-bom-files"
+                  type="file"
+                  accept=".csv,text/csv"
+                  multiple
+                  required
+                  onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Each file becomes one product. One bad file will not stop the rest.
+                </p>
+              </div>
+              <Button className="w-full" disabled={bulkLoading || bulkFiles.length === 0} type="submit">
+                <UploadCloud className="h-4 w-4" />
+                {bulkLoading
+                  ? "Analyzing..."
+                  : `Analyze ${bulkFiles.length || 0} file${bulkFiles.length === 1 ? "" : "s"}`}
+              </Button>
+            </form>
+            )}
           </CardContent>
         </Card>
 
         <div className="space-y-6">
-          {loading ? (
+          {importMode === "bulk" ? (
+            bulkLoading ? (
+              <Card>
+                <CardContent className="flex min-h-[360px] flex-col items-center justify-center text-center">
+                  <div className="mb-6 h-16 w-16 animate-pulse rounded-2xl bg-accent" />
+                  <h3 className="text-lg font-medium">Running bulk footprint workflow</h3>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                    FastAPI is processing each BOM file independently and saving successful analyses.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : bulkResults ? (
+              <>
+                <section className="grid gap-4 md:grid-cols-4">
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Total files</CardDescription>
+                      <CardTitle className="text-3xl">{bulkResults.summary.total}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Saved</CardDescription>
+                      <CardTitle className="text-3xl">{bulkResults.summary.saved}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Flagged</CardDescription>
+                      <CardTitle className="text-3xl">{bulkResults.summary.flagged}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Errors</CardDescription>
+                      <CardTitle className="text-3xl">{bulkResults.summary.error}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                </section>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Bulk import results</CardTitle>
+                    <CardDescription>
+                      Each saved product opens in the analyzer detail view for review.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto rounded-xl border">
+                      <table className="w-full min-w-[720px] text-left text-sm">
+                        <thead className="bg-secondary text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-3">Filename</th>
+                            <th className="px-4 py-3">Product</th>
+                            <th className="px-4 py-3">Total kg CO2e</th>
+                            <th className="px-4 py-3">Flagged items</th>
+                            <th className="px-4 py-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkResults.results.map((row) => (
+                            <tr key={row.filename} className="border-t bg-card">
+                              <td className="px-4 py-3 font-medium">{row.filename}</td>
+                              <td className="px-4 py-3">
+                                {row.status === "saved" && row.product_id ? (
+                                  <Link
+                                    className="text-primary underline-offset-4 hover:underline"
+                                    href={`/analyzer/${row.product_id}`}
+                                  >
+                                    {row.product_name ?? `Product ${row.product_id}`}
+                                  </Link>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.total_kg_co2e != null ? formatKg(row.total_kg_co2e) : "-"}
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.flagged_items != null ? row.flagged_items : "-"}
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.status === "saved" ? (
+                                  <Badge variant={(row.flagged_items ?? 0) > 0 ? "destructive" : "secondary"}>
+                                    {(row.flagged_items ?? 0) > 0 ? "Saved (flagged)" : "Saved"}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" title={row.error ?? undefined}>
+                                    Error
+                                  </Badge>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {bulkResults.results.some((row) => row.status === "error") ? (
+                      <div className="mt-4 space-y-2">
+                        {bulkResults.results
+                          .filter((row) => row.status === "error")
+                          .map((row) => (
+                            <Alert key={`${row.filename}-error`} variant="destructive">
+                              <AlertTitle>{row.filename}</AlertTitle>
+                              <AlertDescription>{row.error}</AlertDescription>
+                            </Alert>
+                          ))}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="flex min-h-[360px] flex-col items-center justify-center text-center">
+                  <FileSpreadsheet className="h-12 w-12 text-muted-foreground" />
+                  <h3 className="mt-4 text-lg font-medium">Awaiting bulk BOM upload</h3>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                    Drop multiple CSV files to create several products in one pass. Results will appear here with links to each saved analysis.
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          ) : loading ? (
             <Card>
               <CardContent className="flex min-h-[360px] flex-col items-center justify-center text-center">
                 <div className="mb-6 h-16 w-16 animate-pulse rounded-2xl bg-accent" />
