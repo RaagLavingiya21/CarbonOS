@@ -8,6 +8,7 @@ import {
   Boxes,
   Factory,
   FileSearch,
+  Inbox,
   Leaf,
   LayoutDashboard,
   LogOut,
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/analyzer", label: "Analyzer", icon: UploadCloud },
   { href: "/products", label: "Portfolio", icon: Boxes },
+  { href: "/requests", label: "Requests", icon: Inbox },
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch },
   { href: "/advisor", label: "Advisor", icon: Bot },
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory },
@@ -41,7 +43,7 @@ const navItems = [
 const publicRoutes = ["/login", "/signup"];
 // Routes rendered bare (no app chrome) and reachable by anyone, logged in or out.
 const bareRoutes = ["/demo"];
-const bareRoutePrefixes = ["/shared"];
+const bareRoutePrefixes = ["/shared", "/request"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

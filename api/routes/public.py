@@ -9,9 +9,28 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from api.models.schemas import CreatePcfRequestRequest, CreatePcfRequestResponse
+from db.request_store import create_request
 from db.share_store import get_shared_footprint, get_shared_pact_payload
 
 router = APIRouter(tags=["public"])
+
+
+@router.post("/api/public/pcf-requests", response_model=CreatePcfRequestResponse)
+def create_public_pcf_request(body: CreatePcfRequestRequest) -> CreatePcfRequestResponse:
+    """Accept an inbound PCF request without authentication (service-client insert)."""
+    try:
+        request_id = create_request(
+            body.org_id,
+            requester_name=body.requester_name,
+            requester_email=body.requester_email,
+            requester_company=body.requester_company,
+            product_name=body.product_name,
+            message=body.message,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return CreatePcfRequestResponse(request_id=request_id)
 
 
 @router.get("/api/public/footprints/{share_token}")

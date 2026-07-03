@@ -358,6 +358,27 @@ export type PublicSharedFootprint = {
   version_lineage: Array<Record<string, unknown>>;
 };
 
+export type PcfRequest = {
+  request_id: number;
+  org_id: string;
+  requester_name?: string | null;
+  requester_email?: string | null;
+  requester_company?: string | null;
+  product_name?: string | null;
+  message?: string | null;
+  status: string;
+  fulfilled_share_id?: number | null;
+  share_token?: string | null;
+  created_at: string;
+};
+
+export type FulfilPcfRequestResponse = {
+  request_id: number;
+  status: string;
+  share_id: number;
+  share_token: string;
+};
+
 export type LineItemMatch = {
   product_id: number | null;
   version: number | null;
@@ -434,6 +455,19 @@ async function request<T>(
 
 async function fetchPublic<T>(path: string): Promise<T> {
   const response = await fetch(`${BACKEND_URL}${path}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function fetchPublicPost<T>(path: string, body: object): Promise<T> {
+  const response = await fetch(`${BACKEND_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
@@ -631,6 +665,26 @@ export const api = {
   fetchPublicPact: (token: string) =>
     fetchPublic<Record<string, unknown>>(
       `/api/public/footprints/${encodeURIComponent(token)}/pact`,
+    ),
+  submitPcfRequest: (payload: {
+    org_id: string;
+    requester_name?: string;
+    requester_email?: string;
+    requester_company?: string;
+    product_name?: string;
+    message?: string;
+  }) =>
+    fetchPublicPost<{ request_id: number }>("/api/public/pcf-requests", payload),
+  listPcfRequests: () => request<PcfRequest[]>("/api/pcf-requests"),
+  fulfilPcfRequest: (requestId: number, productId: number) =>
+    request<FulfilPcfRequestResponse>(`/api/pcf-requests/${requestId}/fulfil`, {
+      method: "POST",
+      body: JSON.stringify({ product_id: productId }),
+    }),
+  declinePcfRequest: (requestId: number) =>
+    request<{ request_id: number; status: string }>(
+      `/api/pcf-requests/${requestId}/decline`,
+      { method: "POST", body: JSON.stringify({}) },
     ),
   fetchProvenance: async (productId: number, format: "json" | "markdown" = "json") => {
     const token = await getAccessToken();
