@@ -28,13 +28,15 @@ from api.models.schemas import (
     PublishAnalysisResponse,
     SaveAnalysisRequest,
     SaveAnalysisResponse,
+    ApplyPrimaryDataRequest,
+    ApplyPrimaryDataResponse,
 )
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
 from db.org_store import get_active_org
 from db.reader import get_product_by_id, get_products_for_active_org
-from db.store import publish_analysis, save_analysis
+from db.store import apply_primary_data, publish_analysis, save_analysis
 from exchange.pact import build_product_footprint, validate_product_footprint
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
@@ -369,6 +371,33 @@ def publish_analysis_route(
         status=updated["status"],
         published_at=updated["published_at"],
     )
+
+
+@router.post(
+    "/api/analyses/{product_id}/primary-data",
+    response_model=ApplyPrimaryDataResponse,
+)
+def apply_primary_data_route(
+    product_id: int,
+    request: ApplyPrimaryDataRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ApplyPrimaryDataResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        result = apply_primary_data(
+            product_id,
+            request.item_id,
+            request.primary_kg_co2e,
+            request.source_note,
+            user_id=current_user.user_id,
+            access_token=current_user.access_token,
+            engagement_id=request.engagement_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ApplyPrimaryDataResponse(**result)
 
 
 @router.get("/api/footprints/{product_id}/pact")

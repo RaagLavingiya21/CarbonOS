@@ -19,12 +19,14 @@ from api.models.schemas import (
     DraftEmailRequest,
     DraftEmailResponse,
     EmailDraftResultDTO,
+    LineItemMatchDTO,
     ParseResponseResultDTO,
     RouteResponseRequest,
     RouteResponseResponse,
     RoutingResultDTO,
     SuppliersListResponse,
 )
+from copilot.exception_router import STORE_DATA
 from copilot.suppliers_list import run as get_suppliers_list
 from db.copilot_store import (
     append_audit_log,
@@ -32,6 +34,7 @@ from db.copilot_store import (
     get_audit_log,
     get_engagement,
 )
+from db.reader import find_line_item_for_engagement
 
 router = APIRouter(tags=["supplier-copilot"])
 
@@ -161,10 +164,26 @@ def route_supplier_response(
         )
 
     new_status = state.get("engagement_status") or engagement.status
+
+    suggested_match = None
+    if (
+        routing_result
+        and routing_result.decision
+        and routing_result.decision.action == STORE_DATA
+    ):
+        match_result = find_line_item_for_engagement(
+            engagement.product_name,
+            request.component or engagement.component_name,
+            engagement.material,
+            current_user.access_token,
+        )
+        suggested_match = LineItemMatchDTO.from_dict(match_result)
+
     return RouteResponseResponse(
         parsed=ParseResponseResultDTO.from_domain(parse_result),
         routing=RoutingResultDTO.from_domain(routing_result) if routing_result else None,
         engagement_status=new_status,
+        suggested_match=suggested_match,
     )
 
 

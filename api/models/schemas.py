@@ -257,6 +257,27 @@ class PublishAnalysisResponse(BaseModel):
     published_at: str
 
 
+class ApplyPrimaryDataRequest(BaseModel):
+    item_id: int
+    primary_kg_co2e: float
+    source_note: str
+    engagement_id: int | None = None
+
+    @field_validator("primary_kg_co2e")
+    @classmethod
+    def validate_primary_kg_co2e(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("primary_kg_co2e must be greater than 0")
+        return value
+
+
+class ApplyPrimaryDataResponse(BaseModel):
+    new_product_id: int
+    version: int
+    pds_before: float
+    pds_after: float
+
+
 class AnalyzeResponse(BaseModel):
     session_id: str
     phase: Literal["calc_review", "saved"]
@@ -289,6 +310,7 @@ class AnalysisSummaryDTO(BaseModel):
 
 
 class AnalysisLineItemDTO(BaseModel):
+    item_id: int | None = None
     component: str | None
     material: str | None
     spend_usd: float | None
@@ -298,10 +320,11 @@ class AnalysisLineItemDTO(BaseModel):
     kg_co2e: float | None
     share_pct: float | None
     flag_status: str
+    data_source: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisLineItemDTO":
-        return cls(**row)
+        return cls(**{k: v for k, v in row.items() if k in cls.model_fields})
 
 
 class AnalysisDetailDTO(AnalysisSummaryDTO):
@@ -540,6 +563,7 @@ class ParsedResponseDTO(BaseModel):
     issues_identified: list[str]
     completeness_score: str
     raw_llm_output: str = ""
+    primary_kg_co2e: float | None = None
 
     @classmethod
     def from_domain(cls, parsed: ParsedResponse) -> "ParsedResponseDTO":
@@ -588,10 +612,30 @@ class RouteResponseRequest(BaseModel):
     session_id: str | None = None
 
 
+class LineItemMatchDTO(BaseModel):
+    product_id: int | None = None
+    version: int | None = None
+    item_id: int | None = None
+    matches: list[AnalysisLineItemDTO] = Field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LineItemMatchDTO":
+        matches = [
+            AnalysisLineItemDTO.from_row(item) for item in data.get("matches", [])
+        ]
+        return cls(
+            product_id=data.get("product_id"),
+            version=data.get("version"),
+            item_id=data.get("item_id"),
+            matches=matches,
+        )
+
+
 class RouteResponseResponse(BaseModel):
     parsed: ParseResponseResultDTO
     routing: RoutingResultDTO | None
     engagement_status: str
+    suggested_match: LineItemMatchDTO | None = None
 
 
 class AuditEntryDTO(BaseModel):
