@@ -46,6 +46,44 @@ export type AnalysisDetail = AnalysisSummary & {
   line_items: AnalysisLineItem[];
 };
 
+export type ScenarioSummary = {
+  scenario_id: number;
+  baseline_product_id: number;
+  name: string;
+  baseline_total_kg_co2e: number;
+  total_kg_co2e: number;
+  delta_kg?: number | null;
+  delta_pct?: number | null;
+  created_at?: string | null;
+};
+
+export type ScenarioLineItem = {
+  scenario_item_id?: number | null;
+  component: string | null;
+  material: string | null;
+  spend_usd: number | null;
+  matched_sector: string | null;
+  emission_factor: number | null;
+  ef_source: string | null;
+  kg_co2e: number | null;
+  share_pct: number | null;
+  baseline_material?: string | null;
+  baseline_kg_co2e?: number | null;
+  is_edited?: boolean;
+};
+
+export type ScenarioDetail = ScenarioSummary & {
+  line_items: ScenarioLineItem[];
+};
+
+export type EditScenarioLineItemResponse = {
+  scenario_total: number;
+  baseline_total: number;
+  delta_kg: number;
+  delta_pct: number;
+  item: ScenarioLineItem;
+};
+
 export type BomFlag = {
   row_index: number;
   field: string;
@@ -365,6 +403,40 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getAnalysis: (id: string) => request<AnalysisDetail>(`/api/analyses/${id}`),
+  createScenario: (productId: number, payload: { name: string }) =>
+    request<{ scenario_id: number }>(`/api/products/${productId}/scenarios`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listScenarios: (productId: number) =>
+    request<ScenarioSummary[]>(`/api/products/${productId}/scenarios`),
+  getScenario: (scenarioId: number) =>
+    request<ScenarioDetail>(`/api/scenarios/${scenarioId}`),
+  editScenarioLineItem: (
+    scenarioId: number,
+    scenarioItemId: number,
+    payload: { material?: string; spend_usd?: number },
+  ) =>
+    request<EditScenarioLineItemResponse>(
+      `/api/scenarios/${scenarioId}/line-items/${scenarioItemId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    ),
+  deleteScenario: async (scenarioId: number) => {
+    const token = await getAccessToken();
+    const response = await fetch(`${BACKEND_URL}/api/scenarios/${scenarioId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+  },
   exportAnalysisCsv: async (id: string) => {
     const token = await getAccessToken();
     const response = await fetch(`${BACKEND_URL}/api/analyses/${id}/export?format=csv`, {
