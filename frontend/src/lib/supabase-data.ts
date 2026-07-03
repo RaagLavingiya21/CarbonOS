@@ -5,7 +5,7 @@ const PRODUCT_COLUMNS =
   "product_id, product_name, analysis_date, total_kg_co2e, matched_items, flagged_items, status, flagged_comment, product_lineage_id, published_at, version, primary_data_share, declared_unit";
 
 const LINE_ITEM_COLUMNS =
-  "component, material, spend_usd, matched_sector, emission_factor, ef_source, kg_co2e, share_pct, flag_status";
+  "item_id, component, material, spend_usd, matched_sector, emission_factor, ef_source, kg_co2e, share_pct, flag_status, data_source";
 
 export async function listAnalysesFromSupabase(): Promise<AnalysisSummary[]> {
   const supabase = createSupabaseBrowserClient();

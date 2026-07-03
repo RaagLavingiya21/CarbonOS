@@ -34,6 +34,7 @@ class AnalysisSkill(Skill):
                     "list_products",
                     "get_product_details",
                     "get_hotspots",
+                    "rank_secondary_hotspots",
                     "compare_products",
                     "launch_bom_analyzer",
                     "launch_gap_analyzer",
@@ -91,6 +92,7 @@ class AnalysisSkill(Skill):
             "list_products": self._list_products,
             "get_product_details": self._get_product_details,
             "get_hotspots": self._get_hotspots,
+            "rank_secondary_hotspots": self._rank_secondary_hotspots,
             "compare_products": self._compare_products,
             "launch_bom_analyzer": self._launch_bom_analyzer,
             "launch_gap_analyzer": self._launch_gap_analyzer,
@@ -175,6 +177,44 @@ class AnalysisSkill(Skill):
                 "total_kg_co2e": product["total_kg_co2e"],
                 "hotspot_count": len(top),
                 "hotspots": [_line_item_summary(li) for li in top],
+            },
+        )
+
+    def _rank_secondary_hotspots(
+        self,
+        *,
+        access_token: str,
+        product_id: int | None = None,
+        product_name: str | None = None,
+        limit: int = _HOTSPOT_LIMIT,
+        **_: Any,
+    ) -> dict[str, Any]:
+        product = _resolve_product(access_token, product_id, product_name)
+        if product is None:
+            return _error(
+                "rank_secondary_hotspots",
+                "Product not found. Provide a valid product_id or product_name.",
+            )
+
+        line_items = product.get("line_items") or get_product_line_items(
+            product["product_id"], access_token
+        )
+        secondary = [
+            li
+            for li in line_items
+            if li.get("data_source") != "primary" and li.get("kg_co2e") is not None
+        ]
+        secondary.sort(key=lambda li: li.get("kg_co2e") or 0, reverse=True)
+        top = secondary[: max(limit, 1)]
+
+        return _success(
+            "rank_secondary_hotspots",
+            {
+                "product_id": product["product_id"],
+                "product_name": product["product_name"],
+                "total_kg_co2e": product["total_kg_co2e"],
+                "secondary_count": len(top),
+                "candidates": [_line_item_summary(li) for li in top],
             },
         )
 
@@ -330,6 +370,7 @@ def _product_detail(product: dict) -> dict[str, Any]:
 
 def _line_item_summary(line_item: dict) -> dict[str, Any]:
     return {
+        "item_id": line_item.get("item_id"),
         "component": line_item.get("component"),
         "material": line_item.get("material"),
         "spend_usd": line_item.get("spend_usd"),
@@ -339,6 +380,7 @@ def _line_item_summary(line_item: dict) -> dict[str, Any]:
         "kg_co2e": line_item.get("kg_co2e"),
         "share_pct": line_item.get("share_pct"),
         "flag_status": line_item.get("flag_status"),
+        "data_source": line_item.get("data_source"),
     }
 
 

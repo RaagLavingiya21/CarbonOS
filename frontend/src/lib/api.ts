@@ -29,6 +29,7 @@ export type PortfolioSummary = {
 };
 
 export type AnalysisLineItem = {
+  item_id?: number | null;
   component: string | null;
   material: string | null;
   spend_usd: number | null;
@@ -38,6 +39,7 @@ export type AnalysisLineItem = {
   kg_co2e: number | null;
   share_pct: number | null;
   flag_status: string;
+  data_source?: string | null;
 };
 
 export type AnalysisDetail = AnalysisSummary & {
@@ -257,6 +259,20 @@ export type DraftEmailResponse = {
   error: string | null;
 };
 
+export type ApplyPrimaryDataResponse = {
+  new_product_id: number;
+  version: number;
+  pds_before: number;
+  pds_after: number;
+};
+
+export type LineItemMatch = {
+  product_id: number | null;
+  version: number | null;
+  item_id: number | null;
+  matches: AnalysisLineItem[];
+};
+
 export type RouteResponseResponse = {
   parsed: {
     parsed: {
@@ -265,6 +281,7 @@ export type RouteResponseResponse = {
       issues_identified: string[];
       completeness_score: string;
       raw_llm_output: string;
+      primary_kg_co2e?: number | null;
     } | null;
     error: string | null;
   };
@@ -277,6 +294,7 @@ export type RouteResponseResponse = {
     error: string | null;
   } | null;
   engagement_status: string;
+  suggested_match?: LineItemMatch | null;
 };
 
 async function getAccessToken() {
@@ -333,6 +351,19 @@ export const api = {
       `/api/analyses/${productId}/publish`,
       { method: "POST" },
     ),
+  applyPrimaryData: (
+    productId: number,
+    payload: {
+      item_id: number;
+      primary_kg_co2e: number;
+      source_note: string;
+      engagement_id?: number;
+    },
+  ) =>
+    request<ApplyPrimaryDataResponse>(`/api/analyses/${productId}/primary-data`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getAnalysis: (id: string) => request<AnalysisDetail>(`/api/analyses/${id}`),
   exportAnalysisCsv: async (id: string) => {
     const token = await getAccessToken();

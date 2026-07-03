@@ -54,6 +54,8 @@ Rules:
 - Be conservative: if in doubt about completeness, score lower.
 - data_provided should summarise in plain English what the email actually contains.
 - Do NOT fabricate data fields not present in the email.
+- primary_kg_co2e: extract the single total cradle-to-gate kg CO₂e the supplier reports for the \
+requested component, or null if none is stated or the value is ambiguous.
 
 REQUIRED: End your response with this JSON block — do not omit it:
 ```json
@@ -61,7 +63,8 @@ REQUIRED: End your response with this JSON block — do not omit it:
   "response_type": "...",
   "data_provided": "...",
   "issues_identified": [],
-  "completeness_score": "..."
+  "completeness_score": "...",
+  "primary_kg_co2e": null
 }
 ```
 """
@@ -75,7 +78,8 @@ Return ONLY the JSON block, nothing else:
   "response_type": "data_submission or question or pushback or no_response or partial",
   "data_provided": "one sentence describing what the email contains",
   "issues_identified": ["list of issue codes or empty array"],
-  "completeness_score": "complete or partial or none"
+  "completeness_score": "complete or partial or none",
+  "primary_kg_co2e": null
 }
 ```
 """
@@ -102,12 +106,22 @@ def _parse_structured(text: str) -> ParsedResponse | None:
     if completeness not in _VALID_COMPLETENESS:
         completeness = "none"
 
+    primary_kg_co2e: float | None = None
+    if completeness == "complete":
+        raw_primary = data.get("primary_kg_co2e")
+        if raw_primary is not None:
+            try:
+                primary_kg_co2e = float(raw_primary)
+            except (TypeError, ValueError):
+                primary_kg_co2e = None
+
     return ParsedResponse(
         response_type=response_type,
         data_provided=str(data.get("data_provided", "")),
         issues_identified=issues,
         completeness_score=completeness,
         raw_llm_output=text,
+        primary_kg_co2e=primary_kg_co2e,
     )
 
 

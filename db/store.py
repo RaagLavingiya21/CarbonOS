@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from calc.footprint import FootprintResult, LineItem
+from calc.pds import compute_primary_data_share
 from db.client import get_user_client
-from db.copilot_store import append_audit_log
+from db.copilot_store import append_audit_log, update_engagement
 from db.reader import get_product_by_id
 
 
@@ -74,6 +75,15 @@ def save_analysis(
         insert_data["product_lineage_id"] = source["product_lineage_id"]
         insert_data["version"] = source["version"] + 1
 
+    pds_rows = [
+        {
+            "kg_co2e": round(li.kg_co2e, 6) if li.is_matched else None,
+            "data_source": "secondary",
+        }
+        for li in result.line_items
+    ]
+    insert_data["primary_data_share"] = compute_primary_data_share(pds_rows)
+
     client = get_user_client(access_token)
     product_response = (
         client.table("products")
@@ -116,6 +126,114 @@ def publish_analysis(
         product_name=product.get("product_name"),
         status="published",
     )
+
+
+def apply_primary_data(
+    source_product_id: int,
+    item_id: int,
+    primary_kg_co2e: float,
+    source_note: str,
+    *,
+    user_id: str,
+    access_token: str,
+    engagement_id: int | None = None,
+) -> dict:
+    """Apply supplier primary data to a line item, creating a new footprint version."""
+    source = get_product_by_id(source_product_id, access_token)
+    if source is None:
+        raise ValueError(f"Source product {source_product_id} not found.")
+
+    source_items = source.get("line_items") or []
+    matched = next((li for li in source_items if li.get("item_id") == item_id), None)
+    if matched is None:
+        raise ValueError(f"Line item {item_id} not found on product {source_product_id}.")
+
+    pds_before = compute_primary_data_share(source_items)
+
+    cloned_items: list[dict] = []
+    for li in source_items:
+        row = dict(li)
+        if row.get("item_id") == item_id:
+            row["kg_co2e"] = round(primary_kg_co2e, 6)
+            row["data_source"] = "primary"
+            row["ef_source"] = f"Supplier primary data: {source_note}"
+            row["emission_factor"] = None
+        cloned_items.append(row)
+
+    total_kg_co2e = sum(li["kg_co2e"] for li in cloned_items if li.get("kg_co2e") is not None)
+    for li in cloned_items:
+        kg = li.get("kg_co2e")
+        if kg is not None and total_kg_co2e > 0:
+            li["share_pct"] = round(kg / total_kg_co2e * 100, 4)
+        else:
+            li["share_pct"] = None
+
+    pds_after = compute_primary_data_share(cloned_items)
+    new_version = int(source.get("version") or 1) + 1
+
+    insert_data: dict = {
+        "user_id": user_id,
+        "product_name": source["product_name"],
+        "analysis_date": source["analysis_date"],
+        "total_kg_co2e": round(total_kg_co2e, 6),
+        "matched_items": source.get("matched_items"),
+        "flagged_items": source.get("flagged_items"),
+        "status": "approved",
+        "flagged_comment": source.get("flagged_comment"),
+        "product_description": source.get("product_description"),
+        "declared_unit": source.get("declared_unit") or "piece",
+        "unitary_product_amount": source.get("unitary_product_amount") or 1,
+        "system_boundary": source.get("system_boundary") or "cradle-to-gate",
+        "reporting_period_start": source.get("reporting_period_start"),
+        "reporting_period_end": source.get("reporting_period_end"),
+        "geography_country": source.get("geography_country"),
+        "primary_data_share": pds_after,
+        "spec_version": source.get("spec_version") or "3.0.0",
+        "product_lineage_id": source["product_lineage_id"],
+        "version": new_version,
+    }
+
+    client = get_user_client(access_token)
+    product_response = client.table("products").insert(insert_data).execute()
+    new_product_id = int(product_response.data[0]["product_id"])
+
+    line_item_rows = []
+    for li in cloned_items:
+        line_item_rows.append(
+            {
+                "product_id": new_product_id,
+                "user_id": user_id,
+                "component": li.get("component"),
+                "material": li.get("material"),
+                "spend_usd": li.get("spend_usd"),
+                "matched_sector": li.get("matched_sector"),
+                "emission_factor": li.get("emission_factor"),
+                "ef_source": li.get("ef_source"),
+                "kg_co2e": li.get("kg_co2e"),
+                "share_pct": li.get("share_pct"),
+                "flag_status": li.get("flag_status") or "ok",
+                "data_source": li.get("data_source") or "secondary",
+            }
+        )
+    if line_item_rows:
+        client.table("line_items").insert(line_item_rows).execute()
+
+    if engagement_id is not None:
+        update_engagement(
+            engagement_id,
+            access_token=access_token,
+            primary_kg_co2e=primary_kg_co2e,
+            applied_to_product_id=new_product_id,
+            pds_before=pds_before,
+            pds_after=pds_after,
+        )
+
+    return {
+        "new_product_id": new_product_id,
+        "version": new_version,
+        "pds_before": pds_before,
+        "pds_after": pds_after,
+    }
 
 
 def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:

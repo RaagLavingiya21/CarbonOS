@@ -17,7 +17,7 @@ _PRODUCT_COLUMNS = (
 )
 
 _LINE_ITEM_COLUMNS = (
-    "component, material, spend_usd, matched_sector, emission_factor, "
+    "item_id, component, material, spend_usd, matched_sector, emission_factor, "
     "ef_source, kg_co2e, share_pct, flag_status, data_source"
 )
 
@@ -107,6 +107,48 @@ def get_product_line_items(product_id: int, access_token: str) -> list[dict]:
         .execute()
     )
     return response.data
+
+
+def find_line_item_for_engagement(
+    product_name: str,
+    component: str | None,
+    material: str | None,
+    access_token: str,
+) -> dict:
+    """Find the best line-item match for a supplier engagement on the latest product version."""
+    client = get_user_client(access_token)
+    response = (
+        client.table("products")
+        .select("product_id, version")
+        .eq("product_name", product_name)
+        .order("version", desc=True)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return {"product_id": None, "version": None, "item_id": None, "matches": []}
+
+    product_id = int(response.data[0]["product_id"])
+    version = int(response.data[0]["version"])
+    line_items = get_product_line_items(product_id, access_token)
+
+    component_norm = (component or "").strip().lower()
+    material_norm = (material or "").strip().lower()
+    matches = [
+        li
+        for li in line_items
+        if (li.get("component") or "").strip().lower() == component_norm
+        and (li.get("material") or "").strip().lower() == material_norm
+    ]
+
+    item_id = int(matches[0]["item_id"]) if len(matches) == 1 else None
+    return {
+        "product_id": product_id,
+        "version": version,
+        "item_id": item_id,
+        "matches": matches,
+    }
 
 
 def build_llm_context(access_token: str, *, user_id: str | None = None) -> str:
