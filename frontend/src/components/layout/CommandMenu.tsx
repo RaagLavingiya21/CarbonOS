@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bot,
+  Boxes,
   Factory,
   FileSearch,
   LayoutDashboard,
@@ -38,6 +39,7 @@ const NAV: Array<Omit<CommandItem, "run"> & { href: string }> = [
   { id: "nav-dashboard", label: "Go to Dashboard", hint: "Overview", icon: LayoutDashboard, href: "/" },
   { id: "nav-chat", label: "Open Chat", hint: "Platform assistant", icon: MessageSquare, href: "/chat" },
   { id: "nav-analyzer", label: "Open Analyzer", hint: "BOM footprint", icon: UploadCloud, href: "/analyzer" },
+  { id: "nav-portfolio", label: "Open Portfolio", hint: "All footprints", icon: Boxes, href: "/products" },
   { id: "nav-gap", label: "Open Gap Analysis", hint: "Scope 3 readiness", icon: FileSearch, href: "/gap-analysis" },
   { id: "nav-advisor", label: "Open Advisor", hint: "Ask questions", icon: Bot, href: "/advisor" },
   { id: "nav-suppliers", label: "Open Supplier Copilot", hint: "Engagement", icon: Factory, href: "/suppliers" },
