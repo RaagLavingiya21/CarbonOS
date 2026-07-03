@@ -48,6 +48,7 @@ class ParsedResponse:
     issues_identified: list[str]    # wrong_facility / anomalous_values / dispute / missing_fields / wrong_contact
     completeness_score: str         # complete / partial / none
     raw_llm_output: str = ""
+    primary_kg_co2e: float | None = None
 
 
 @dataclass
