@@ -95,6 +95,7 @@ export default function Home() {
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [portfolioSummary, setPortfolioSummary] = useState<PortfolioSummary | null>(null);
   const [loadingPortfolio, setLoadingPortfolio] = useState(true);
+  const [portfolioError, setPortfolioError] = useState(false);
 
   useEffect(() => {
     chatApi
@@ -104,13 +105,29 @@ export default function Home() {
       .finally(() => setLoadingThreads(false));
   }, []);
 
-  useEffect(() => {
-    api
-      .getPortfolioSummary()
-      .then(setPortfolioSummary)
-      .catch(() => setPortfolioSummary(null))
-      .finally(() => setLoadingPortfolio(false));
+  const loadPortfolio = useCallback(async () => {
+    setLoadingPortfolio(true);
+    setPortfolioError(false);
+    try {
+      setPortfolioSummary(await api.getPortfolioSummary());
+    } catch {
+      // Safari aborts in-flight fetches on back-navigation ("TypeError: Load failed").
+      // Retry once so a transient blip doesn't blank the dashboard; surface a retry
+      // affordance only if it genuinely fails, rather than silently rendering nothing.
+      try {
+        setPortfolioSummary(await api.getPortfolioSummary());
+      } catch (retryError) {
+        console.error("Failed to load portfolio summary:", retryError);
+        setPortfolioError(true);
+      }
+    } finally {
+      setLoadingPortfolio(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPortfolio();
+  }, [loadPortfolio]);
 
   const router = useRouter();
 
@@ -136,7 +153,20 @@ export default function Home() {
         </div>
       </section>
 
-      {!loadingPortfolio && portfolioSummary && portfolioSummary.product_count > 0 ? (
+      {!loadingPortfolio && portfolioError ? (
+        <section className="w-full text-center">
+          <p className="text-sm text-muted-foreground">
+            Couldn&apos;t load your portfolio overview.{" "}
+            <button
+              type="button"
+              onClick={() => void loadPortfolio()}
+              className="underline underline-offset-4"
+            >
+              Retry
+            </button>
+          </p>
+        </section>
+      ) : !loadingPortfolio && portfolioSummary && portfolioSummary.product_count > 0 ? (
         <section className="w-full">
           <h2 className="mb-4 text-center text-sm font-medium text-muted-foreground">
             Portfolio overview
