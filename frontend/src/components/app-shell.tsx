@@ -41,6 +41,7 @@ const navItems = [
 const publicRoutes = ["/login", "/signup"];
 // Routes rendered bare (no app chrome) and reachable by anyone, logged in or out.
 const bareRoutes = ["/demo"];
+const bareRoutePrefixes = ["/shared"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,7 +51,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const isPublicRoute = publicRoutes.includes(pathname);
-  const isBareRoute = bareRoutes.includes(pathname);
+  const isBareRoute =
+    bareRoutes.includes(pathname) ||
+    bareRoutePrefixes.some((prefix) => pathname.startsWith(prefix));
   // Logged-out visitors see the marketing landing page at "/"; logged-in
   // visitors see the dashboard there.
   const isLandingRoute = pathname === "/";
