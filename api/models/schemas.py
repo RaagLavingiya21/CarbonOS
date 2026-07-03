@@ -976,3 +976,49 @@ class FulfilPcfRequestResponse(BaseModel):
 class DeclinePcfRequestResponse(BaseModel):
     request_id: int
     status: str
+
+
+class SetProductVolumeRequest(BaseModel):
+    year: int
+    annual_volume: float
+    unit: str = "units"
+
+    @field_validator("annual_volume")
+    @classmethod
+    def validate_annual_volume(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("annual_volume must be greater than or equal to 0")
+        return value
+
+
+class ProductVolumeDTO(BaseModel):
+    volume_id: int
+    product_lineage_id: str
+    user_id: str
+    year: int
+    annual_volume: float
+    unit: str
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class RollupMissingVolumeProductDTO(BaseModel):
+    product_id: int
+    product_name: str
+
+
+class RollupBreakdownRowDTO(BaseModel):
+    product_id: int
+    product_name: str
+    per_unit_kg_co2e: float
+    annual_volume: float
+    contribution_kg_co2e: float
+    share_pct: float
+
+
+class RollupResponseDTO(BaseModel):
+    scope3_cat1_total_kg_co2e: float
+    product_count: int
+    breakdown: list[RollupBreakdownRowDTO]
+    year: int
+    products_missing_volume: list[RollupMissingVolumeProductDTO] = Field(default_factory=list)

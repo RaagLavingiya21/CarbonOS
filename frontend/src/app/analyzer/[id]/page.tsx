@@ -88,6 +88,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [creatingShare, setCreatingShare] = useState(false);
   const [newShareLink, setNewShareLink] = useState<string | null>(null);
   const [revokingShareId, setRevokingShareId] = useState<number | null>(null);
+  const [volumeYear, setVolumeYear] = useState(new Date().getFullYear());
+  const [annualVolume, setAnnualVolume] = useState("");
+  const [volumeUnit, setVolumeUnit] = useState("units");
+  const [volumeSaving, setVolumeSaving] = useState(false);
+  const [volumeSaved, setVolumeSaved] = useState(false);
+  const [volumeLoading, setVolumeLoading] = useState(false);
 
   useEffect(() => {
     createSupabaseBrowserClient()
@@ -129,6 +135,54 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       .catch(() => setShares([]))
       .finally(() => setSharesLoading(false));
   }, [analysis?.product_id, analysis?.status]);
+
+  useEffect(() => {
+    if (!analysis?.product_id) return;
+    setVolumeLoading(true);
+    setVolumeSaved(false);
+    api
+      .getProductVolume(analysis.product_id, volumeYear)
+      .then((row) => {
+        if (row) {
+          setAnnualVolume(String(row.annual_volume));
+          setVolumeUnit(row.unit || "units");
+        } else {
+          setAnnualVolume("");
+          setVolumeUnit("units");
+        }
+      })
+      .catch(() => {
+        setAnnualVolume("");
+        setVolumeUnit("units");
+      })
+      .finally(() => setVolumeLoading(false));
+  }, [analysis?.product_id, volumeYear]);
+
+  async function saveVolume() {
+    if (!analysis) return;
+    const parsedVolume = Number(annualVolume);
+    if (!Number.isFinite(parsedVolume) || parsedVolume < 0) {
+      setError("Annual volume must be a non-negative number.");
+      return;
+    }
+    setVolumeSaving(true);
+    setError(null);
+    setVolumeSaved(false);
+    try {
+      const saved = await api.setProductVolume(analysis.product_id, {
+        year: volumeYear,
+        annualVolume: parsedVolume,
+        unit: volumeUnit.trim() || "units",
+      });
+      setAnnualVolume(String(saved.annual_volume));
+      setVolumeUnit(saved.unit);
+      setVolumeSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setVolumeSaving(false);
+    }
+  }
 
   async function createShareLink() {
     if (!analysis) return;
@@ -747,6 +801,60 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Annual volume</CardTitle>
+              <CardDescription>
+                Production or sales volume for corporate Scope 3 roll-up. Stored per product
+                lineage and year — not on the footprint itself.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="volume-year">Year</Label>
+                <Input
+                  id="volume-year"
+                  type="number"
+                  value={volumeYear}
+                  onChange={(event) => setVolumeYear(Number(event.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="annual-volume">Annual volume</Label>
+                <Input
+                  id="annual-volume"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={annualVolume}
+                  onChange={(event) => setAnnualVolume(event.target.value)}
+                  placeholder={volumeLoading ? "Loading…" : "e.g. 10000"}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="volume-unit">Unit</Label>
+                <Input
+                  id="volume-unit"
+                  value={volumeUnit}
+                  onChange={(event) => setVolumeUnit(event.target.value)}
+                  placeholder="units"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void saveVolume()}
+                  disabled={volumeSaving || volumeLoading}
+                >
+                  {volumeSaving ? "Saving…" : "Save volume"}
+                </Button>
+                {volumeSaved ? (
+                  <span className="text-caption text-muted-foreground">Saved</span>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
 
           <section className="grid gap-4 md:grid-cols-4">
             <MetricCard
