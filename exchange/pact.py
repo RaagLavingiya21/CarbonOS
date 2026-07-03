@@ -213,12 +213,15 @@ def _validate_geography_mutual_exclusivity(pcf: dict) -> list[str]:
 
 
 def _decimal_str(value: float) -> str:
+    # PACT's Decimal type is a JSON string matching ^[+-]?\d+(\.\d+)?$ - no exponents.
+    # "g" formatting switches to scientific notation below 1e-4, which violates that
+    # pattern, so fixed-point formatting is required even though it can be sparser.
     if value == 0:
         return "0"
     if float(value).is_integer():
         return str(int(value))
-    text = format(float(value), ".15g")
-    return text
+    text = f"{float(value):.10f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _coerce_date(value: object | None) -> date | None:
