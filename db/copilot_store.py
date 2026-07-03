@@ -141,6 +141,10 @@ def update_engagement(
         "decision_rationale",
         "ghg_protocol_citation",
         "next_step",
+        "primary_kg_co2e",
+        "applied_to_product_id",
+        "pds_before",
+        "pds_after",
     }
     updates = {key: value for key, value in fields.items() if key in allowed}
     if not updates:
