@@ -223,7 +223,7 @@ function ProductsPageContent() {
                   className={cn(
                     "grid",
                     GRID,
-                    "border-b border-border/70 bg-surface-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80",
+                    "border-b border-border/70 bg-surface-2 text-caption font-semibold text-muted-foreground/80",
                   )}
                 >
                   <GroupHead label="Product" sticky />
@@ -239,7 +239,7 @@ function ProductsPageContent() {
                   className={cn(
                     "grid",
                     GRID,
-                    "border-b border-border bg-surface-2 text-caption font-medium uppercase tracking-wide text-muted-foreground",
+                    "border-b border-border bg-surface-2 text-caption font-medium text-muted-foreground",
                   )}
                 >
                   <HeadCell sticky>
