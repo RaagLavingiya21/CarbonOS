@@ -125,3 +125,16 @@ def test_total_per_unit_emissions_math() -> None:
 
     assert pcf["pcfExcludingBiogenicUptake"] == "5"
     assert pcf["fossilGhgEmissions"] == "5"
+
+
+def test_small_footprint_does_not_serialize_as_scientific_notation(pact_schema: dict) -> None:
+    # A small per-unit footprint (routine for a low-spend line item, since kg_co2e is
+    # already rounded to 6 decimal places in db/store.py) must still serialize as plain
+    # decimal notation - the PACT Decimal pattern (^[+-]?\d+(\.\d+)?$) rejects "4e-06".
+    product = _sample_product(total_kg_co2e=0.000004, unitary_product_amount=1.0)
+    payload = build_product_footprint(product, org_name="Acme Corp", org_id="org-123")
+    pcf = payload["pcf"]
+
+    assert pcf["pcfExcludingBiogenicUptake"] == "0.000004"
+    assert "e" not in pcf["pcfExcludingBiogenicUptake"].lower()
+    jsonschema.validate(instance=payload, schema=pact_schema)
