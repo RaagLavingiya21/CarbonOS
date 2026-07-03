@@ -27,11 +27,10 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
 import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
 import { StatusChip } from "@/components/portfolio/StatusChip";
-import { Cell, GroupHead, HeadCell, PctBar } from "@/components/portfolio/DataTable";
+import { Cell, HeadCell, PctBar } from "@/components/portfolio/DataTable";
 import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -948,31 +947,16 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               <div className="relative">
                 <div className="overflow-x-auto">
                   <div className="min-w-[1000px]">
-                    {/* Grouped header */}
-                    <div
-                      className={cn(
-                        "grid",
-                        LINE_ITEM_GRID,
-                        "border-b border-border/70 bg-surface-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80",
-                      )}
-                    >
-                      <GroupHead label="Line item" sticky />
-                      <GroupHead label="Emission factor" span={2} />
-                      <GroupHead label="Contribution" span={3} align="right" />
-                      <GroupHead label="Quality" />
-                      <GroupHead label="" />
-                    </div>
-
                     {/* Column header */}
                     <div
                       className={cn(
                         "grid",
                         LINE_ITEM_GRID,
-                        "border-b border-border bg-surface-2 text-caption font-medium uppercase tracking-wide text-muted-foreground",
+                        "border-b border-border bg-surface-2 text-caption font-medium text-muted-foreground",
                       )}
                     >
                       <HeadCell sticky>Line item</HeadCell>
-                      <HeadCell>Source</HeadCell>
+                      <HeadCell>Emission factor</HeadCell>
                       <HeadCell>Tier</HeadCell>
                       <HeadCell align="right">Spend</HeadCell>
                       <HeadCell align="right">kg CO₂e</HeadCell>
@@ -1003,10 +987,6 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                                   <span className="truncate font-medium text-foreground">
                                     {item.component ?? "Unnamed component"}
                                   </span>
-                                  <span className="text-border">·</span>
-                                  <span className="truncate text-muted-foreground">
-                                    {item.material ?? "—"}
-                                  </span>
                                   {flagged ? (
                                     <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-data-medium-bg px-1 py-0.5 text-[10px] font-medium text-data-medium">
                                       <Flag className="h-2.5 w-2.5" />
@@ -1015,13 +995,18 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                                   ) : null}
                                 </div>
                                 <div className="truncate text-caption text-muted-foreground">
-                                  {item.matched_sector ?? "unmatched"}
+                                  {item.material ?? "—"} · {item.matched_sector ?? "unmatched"}
                                 </div>
                               </div>
                             </Cell>
                             <Cell>
                               {item.ef_source ? (
-                                <SourceCitation source={item.ef_source} />
+                                <span
+                                  title={item.ef_source}
+                                  className="truncate text-caption text-muted-foreground"
+                                >
+                                  {item.ef_source}
+                                </span>
                               ) : (
                                 <span className="text-caption text-muted-foreground">—</span>
                               )}
