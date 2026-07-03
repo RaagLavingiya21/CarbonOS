@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -25,7 +24,7 @@ const STEPS = [
  * Analyzer nav item). Compact by default; expands to explain the flow. Every CTA
  * routes into the live `/analyzer` workflow — no fake upload happens here.
  */
-export function AnalyzeQuickStart() {
+export function AnalyzeQuickStart({ onStart }: { onStart: () => void }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -94,9 +93,10 @@ export function AnalyzeQuickStart() {
           </div>
 
           <div className="p-4">
-            <Link
-              href="/analyzer"
-              className="group relative flex h-full min-h-[170px] flex-col items-center justify-center rounded-lg border border-dashed border-primary/35 bg-primary/[0.03] p-4 text-center transition-colors hover:bg-primary/[0.06]"
+            <button
+              type="button"
+              onClick={onStart}
+              className="group relative flex h-full min-h-[170px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-primary/35 bg-primary/[0.03] p-4 text-center transition-colors hover:bg-primary/[0.06]"
             >
               <span className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
                 <UploadCloud className="h-5 w-5" />
@@ -136,7 +136,7 @@ export function AnalyzeQuickStart() {
                 <Sparkles className="h-3 w-3" />
                 Sample BOM in analyzer
               </span>
-            </Link>
+            </button>
           </div>
 
           <button

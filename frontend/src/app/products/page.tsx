@@ -2,8 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Flag } from "lucide-react";
+import { ArrowLeft, ChevronRight, Flag } from "lucide-react";
 
+import { AnalyzerPageContent } from "@/app/analyzer/page";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnalysisSummary, PortfolioSummary, api } from "@/lib/api";
@@ -52,6 +53,9 @@ function ProductsPageContent() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Analyzer is folded into Portfolio: the quick-start opens the full analyze
+  // flow inline here instead of navigating to a separate page.
+  const [analyzeMode, setAnalyzeMode] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -112,6 +116,24 @@ function ProductsPageContent() {
     return [...present, ...extras];
   }, [summary]);
 
+  if (analyzeMode) {
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setAnalyzeMode(false)}
+          className="-ml-1 inline-flex items-center gap-1.5 text-small font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to portfolio
+        </button>
+        <Suspense fallback={null}>
+          <AnalyzerPageContent />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Page header */}
@@ -136,7 +158,7 @@ function ProductsPageContent() {
       ) : null}
 
       {/* Analyzer quick-start (folded in from the old standalone module) */}
-      <AnalyzeQuickStart />
+      <AnalyzeQuickStart onStart={() => setAnalyzeMode(true)} />
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-1.5">

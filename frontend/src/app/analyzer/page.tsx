@@ -49,7 +49,11 @@ export default function AnalyzerPage() {
   );
 }
 
-function AnalyzerPageContent() {
+/**
+ * The analyzer workflow, exported so it can be embedded inline on the Portfolio
+ * page (the analyzer is folded into Portfolio) as well as served at /analyzer.
+ */
+export function AnalyzerPageContent() {
   const searchParams = useSearchParams();
   const [importMode, setImportMode] = useState<ImportMode>("single");
   const [file, setFile] = useState<File | null>(null);
