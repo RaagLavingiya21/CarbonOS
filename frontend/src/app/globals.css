@@ -9,31 +9,31 @@
 
 @layer base {
   :root {
-    /* ── Surfaces & ink (warm-white canvas, cool-slate ink) ─────── */
-    --background: 40 30% 98%;        /* warm paper canvas */
+    /* ── Surfaces & ink — calibrated to Lovable (warm-white, cool ink) ── */
+    --background: 45 33% 98%;        /* warm paper canvas */
     --surface: 0 0% 100%;            /* white cards / raised surfaces */
-    --surface-2: 40 18% 97%;         /* quiet panel headers, table heads */
+    --surface-2: 50 30% 96%;         /* quiet panel headers, table heads */
     --elevated: 0 0% 100%;           /* popovers, dropdowns, dock */
-    --foreground: 220 20% 18%;       /* cool slate ink */
+    --foreground: 218 26% 8%;        /* cool near-black slate ink */
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 18%;
+    --card-foreground: 218 26% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 18%;
+    --popover-foreground: 218 26% 8%;
 
     /* ── Brand (used sparingly, primary actions only) ───────────── */
-    --primary: 160 42% 30%;          /* muted forest green */
-    --primary-foreground: 40 30% 98%;
+    --primary: 150 50% 24%;          /* forest green */
+    --primary-foreground: 45 33% 98%;
 
-    --secondary: 40 16% 95%;
-    --secondary-foreground: 220 18% 24%;
-    --muted: 40 14% 95%;
-    --muted-foreground: 220 10% 46%;
-    --subtle: 220 9% 55%;            /* dimmer than muted-foreground */
-    --accent: 155 30% 92%;           /* soft green tint */
-    --accent-foreground: 160 42% 26%;
+    --secondary: 45 24% 93%;
+    --secondary-foreground: 218 19% 11%;
+    --muted: 40 23% 95%;
+    --muted-foreground: 218 5% 39%;
+    --subtle: 220 4% 51%;            /* dimmer than muted-foreground */
+    --accent: 144 45% 94%;           /* soft green tint */
+    --accent-foreground: 153 79% 13%;
 
-    --destructive: 8 62% 48%;
-    --destructive-foreground: 40 30% 98%;
+    --destructive: 1 63% 48%;
+    --destructive-foreground: 45 33% 98%;
 
     /* ── State semantics (aliased to the data palette, in sync) ─── */
     --success: var(--data-low);
@@ -44,22 +44,22 @@
     --info-bg: var(--data-info-bg);
 
     /* ── Lines ──────────────────────────────────────────────────── */
-    --border: 40 13% 89%;            /* hairline, low contrast */
-    --border-strong: 40 12% 82%;     /* emphasized dividers, focus-within */
-    --input: 40 13% 87%;
-    --ring: 160 42% 36%;
+    --border: 40 11% 89%;            /* hairline, low contrast */
+    --border-strong: 51 7% 81%;      /* emphasized dividers, focus-within */
+    --input: 40 11% 89%;
+    --ring: 150 50% 24%;
 
     /* ── Semantic data palette (emission tiers + states) ────────── */
-    --data-low: 150 48% 34%;         /* low emission / good / success */
-    --data-low-bg: 150 40% 94%;
-    --data-medium: 40 82% 44%;       /* medium / warning */
-    --data-medium-bg: 40 84% 92%;
-    --data-high: 10 66% 48%;         /* hotspot / high */
-    --data-high-bg: 10 72% 95%;
-    --data-neutral: 220 8% 48%;
-    --data-neutral-bg: 220 12% 94%;
-    --data-info: 216 55% 48%;
-    --data-info-bg: 216 60% 95%;
+    --data-low: 150 74% 30%;         /* low emission / good / success */
+    --data-low-bg: 137 51% 92%;
+    --data-medium: 38 69% 50%;       /* medium / warning */
+    --data-medium-bg: 39 100% 89%;
+    --data-high: 1 63% 48%;          /* hotspot / high */
+    --data-high-bg: 10 100% 94%;
+    --data-neutral: 218 5% 39%;
+    --data-neutral-bg: 210 19% 94%;
+    --data-info: 204 83% 43%;
+    --data-info-bg: 206 100% 94%;
 
     /* ── Typography ─────────────────────────────────────────────── */
     --font-serif: "Newsreader", "Iowan Old Style", "Palatino Linotype",
@@ -87,45 +87,45 @@
   }
 
   .dark {
-    --background: 222 22% 10%;
-    --surface: 222 20% 12%;
-    --surface-2: 222 18% 15%;
-    --elevated: 222 18% 16%;
-    --foreground: 210 16% 92%;
-    --card: 222 20% 12%;
-    --card-foreground: 210 16% 92%;
-    --popover: 222 20% 14%;
-    --popover-foreground: 210 16% 92%;
+    --background: 220 21% 5%;
+    --surface: 214 18% 8%;
+    --surface-2: 223 14% 10%;
+    --elevated: 218 14% 11%;
+    --foreground: 48 17% 94%;
+    --card: 214 17% 8%;
+    --card-foreground: 48 17% 94%;
+    --popover: 218 14% 11%;
+    --popover-foreground: 48 17% 94%;
 
-    --primary: 150 45% 50%;
-    --primary-foreground: 222 24% 10%;
+    --primary: 144 43% 54%;
+    --primary-foreground: 220 21% 5%;
 
-    --secondary: 222 16% 18%;
-    --secondary-foreground: 210 14% 88%;
-    --muted: 222 16% 18%;
-    --muted-foreground: 220 10% 62%;
-    --subtle: 220 9% 52%;
-    --accent: 160 28% 20%;
-    --accent-foreground: 150 42% 78%;
+    --secondary: 218 13% 13%;
+    --secondary-foreground: 48 17% 94%;
+    --muted: 214 13% 11%;
+    --muted-foreground: 220 5% 57%;
+    --subtle: 215 5% 45%;
+    --accent: 146 36% 14%;
+    --accent-foreground: 141 59% 73%;
 
-    --destructive: 8 56% 54%;
-    --destructive-foreground: 210 16% 92%;
+    --destructive: 3 86% 61%;
+    --destructive-foreground: 45 25% 97%;
 
-    --border: 222 14% 22%;
-    --border-strong: 222 14% 30%;
-    --input: 222 14% 24%;
-    --ring: 150 45% 50%;
+    --border: 218 10% 16%;
+    --border-strong: 216 9% 22%;
+    --input: 218 11% 15%;
+    --ring: 144 43% 54%;
 
-    --data-low: 150 46% 54%;
-    --data-low-bg: 150 30% 16%;
-    --data-medium: 40 74% 56%;
-    --data-medium-bg: 40 40% 16%;
-    --data-high: 10 62% 58%;
-    --data-high-bg: 10 40% 16%;
-    --data-neutral: 220 8% 62%;
-    --data-neutral-bg: 220 10% 18%;
-    --data-info: 216 56% 60%;
-    --data-info-bg: 216 40% 18%;
+    --data-low: 144 43% 54%;
+    --data-low-bg: 144 45% 13%;
+    --data-medium: 38 86% 56%;
+    --data-medium-bg: 41 94% 12%;
+    --data-high: 3 86% 61%;
+    --data-high-bg: 5 49% 20%;
+    --data-neutral: 220 5% 57%;
+    --data-neutral-bg: 218 11% 15%;
+    --data-info: 206 84% 61%;
+    --data-info-bg: 206 66% 17%;
 
     --shadow-xs: 0 1px 2px -1px hsl(0 0% 0% / 0.4), 0 1px 1px hsl(0 0% 0% / 0.3);
     --shadow-overlay: 0 16px 40px -12px hsl(0 0% 0% / 0.55),

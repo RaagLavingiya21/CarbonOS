@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatLanding } from "@/components/chat/ChatLanding";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ThreadList } from "@/components/chat/ThreadList";
 import { SplitLayout } from "@/components/layout/SplitLayout";
@@ -418,18 +419,12 @@ function ChatWorkspace() {
               </p>
             </div>
           ) : !hasMessages ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4">
-              <h1 className="text-h1 font-medium md:text-display">
-                How can I help you?
-              </h1>
-              <div className="w-full max-w-2xl">
-                <ChatInput
-                  variant="hero"
-                  onSend={handleSend}
-                  disabled={chatDisabled}
-                />
-              </div>
-            </div>
+            <ChatLanding
+              onSend={handleSend}
+              disabled={chatDisabled}
+              threads={threads}
+              onSelectThread={(threadId) => void selectThread(threadId)}
+            />
           ) : (
             <SplitLayout
               chat={

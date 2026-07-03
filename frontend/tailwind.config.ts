@@ -86,13 +86,13 @@ const config: Config = {
       fontSize: {
         // Compact, data-dense type scale (size / line-height / tracking).
         caption: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
-        small: ["0.75rem", { lineHeight: "1.1rem" }],
-        body: ["0.8125rem", { lineHeight: "1.45" }],
-        "body-lg": ["0.875rem", { lineHeight: "1.55" }],
+        small: ["0.78125rem", { lineHeight: "1.15rem" }],
+        body: ["0.875rem", { lineHeight: "1.5" }],
+        "body-lg": ["0.9375rem", { lineHeight: "1.55" }],
         h3: ["0.9375rem", { lineHeight: "1.35", letterSpacing: "-0.01em" }],
         h2: ["1.125rem", { lineHeight: "1.3", letterSpacing: "-0.015em" }],
         h1: ["1.375rem", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
-        display: ["1.75rem", { lineHeight: "1.15", letterSpacing: "-0.025em" }],
+        display: ["1.625rem", { lineHeight: "1.15", letterSpacing: "-0.025em" }],
       },
       borderRadius: {
         lg: "var(--radius)",
