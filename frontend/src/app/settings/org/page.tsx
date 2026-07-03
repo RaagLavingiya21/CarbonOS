@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, UserMinus, UserPlus } from "lucide-react";
+import { Building2, Copy, UserMinus, UserPlus } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export default function OrgSettingsPage() {
 
   const [orgName, setOrgName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
+  const [requestLinkCopied, setRequestLinkCopied] = useState(false);
 
   const loadOrg = useCallback(async () => {
     setLoading(true);
@@ -114,6 +115,18 @@ export default function OrgSettingsPage() {
   const members = orgDetail?.members ?? [];
   const hasPersonalOrg = orgDetail?.orgs.some((org) => !org.is_demo) ?? false;
   const isDemoActive = activeOrg?.is_demo ?? false;
+
+  const requestLink =
+    activeOrg && !isDemoActive
+      ? `${typeof window !== "undefined" ? window.location.origin : ""}/request/${activeOrg.id}`
+      : null;
+
+  async function copyRequestLink() {
+    if (!requestLink) return;
+    await navigator.clipboard.writeText(requestLink);
+    setRequestLinkCopied(true);
+    window.setTimeout(() => setRequestLinkCopied(false), 2000);
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -232,6 +245,27 @@ export default function OrgSettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {requestLink ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Public PCF request link</CardTitle>
+                <CardDescription>
+                  Share this link with customers or partners so they can request a product
+                  carbon footprint from your organization.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="break-all rounded-lg border bg-muted/30 p-3 font-mono text-xs">
+                  {requestLink}
+                </p>
+                <Button onClick={() => void copyRequestLink()} type="button" variant="outline">
+                  <Copy className="h-4 w-4" />
+                  {requestLinkCopied ? "Copied" : "Copy link"}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {!isDemoActive ? (
             <Card>
