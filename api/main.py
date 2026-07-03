@@ -21,6 +21,7 @@ from api.routes import (
     analyzer,
     chat,
     copilot,
+    factors,
     gap_analyzer,
     org,
     panels,
@@ -156,6 +157,7 @@ async def log_requests(request: Request, call_next):
 
 
 app.include_router(analyzer.router)
+app.include_router(factors.router)
 app.include_router(rollup.router)
 app.include_router(shares.router)
 app.include_router(public.router)

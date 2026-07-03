@@ -41,6 +41,7 @@ from api.services.session_store import WorkflowSession, session_store
 from calc.critic import CriticReport, run_critic
 from calc.footprint import FootprintResult, calculate_footprint
 from calc.health import footprint_health
+from db.ef_override_store import get_active_overrides
 from db.org_store import get_active_org
 from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
 from db.store import (
@@ -109,11 +110,12 @@ def _run_analyze_pipeline(
     *,
     filename: str | None = None,
     product_name: str | None = None,
+    overrides: dict[str, str] | None = None,
 ) -> AnalyzePipelineResult:
     """Parse BOM, match factors, calculate footprint, and run critic."""
     resolved_name = product_name or _product_name_from_filename(filename or "Unknown Product.csv")
     bom = parse_bom_csv(raw_bytes, resolved_name)
-    ef_matches, warnings = _match_factors_for_bom(bom)
+    ef_matches, warnings = _match_factors_for_bom(bom, overrides)
     result = calculate_footprint(bom, ef_matches)
     result, critic_report = run_critic(result)
     return AnalyzePipelineResult(
@@ -144,7 +146,10 @@ def _bulk_flagged_comment(pipeline: AnalyzePipelineResult) -> str:
     return " | ".join(parts) or "Flagged during bulk import for analyst review."
 
 
-def _match_factors_for_bom(bom: ParsedBOM) -> tuple[list[EFMatch | None], list[str]]:
+def _match_factors_for_bom(
+    bom: ParsedBOM,
+    overrides: dict[str, str] | None = None,
+) -> tuple[list[EFMatch | None], list[str]]:
     ef_matches: list[EFMatch | None] = []
     warnings: list[str] = []
     for row in bom.rows:
@@ -152,7 +157,7 @@ def _match_factors_for_bom(bom: ParsedBOM) -> tuple[list[EFMatch | None], list[s
             ef_matches.append(None)
             continue
 
-        ef = lookup_ef(row.material, row.country_of_origin)
+        ef = lookup_ef(row.material, row.country_of_origin, overrides=overrides)
         ef_matches.append(ef)
         if ef.is_no_match:
             warnings.append(
@@ -203,13 +208,17 @@ async def parse_bom(
 
 
 @router.post("/api/analyze/match-factors", response_model=MatchFactorsResponse)
-def match_factors(request: MatchFactorsRequest) -> MatchFactorsResponse:
+def match_factors(
+    request: MatchFactorsRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MatchFactorsResponse:
     session = _session_or_404(request.session_id)
     bom: ParsedBOM | None = session.data.get("bom")
     if bom is None:
         raise HTTPException(status_code=409, detail="No parsed BOM found for this session.")
 
-    ef_matches, warnings = _match_factors_for_bom(bom)
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
+    ef_matches, warnings = _match_factors_for_bom(bom, overrides)
     session_store.update(
         session.session_id,
         phase="ef_review",
@@ -265,10 +274,12 @@ async def analyze(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalyzeResponse:
     raw_bytes = await file.read()
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
     pipeline = _run_analyze_pipeline(
         raw_bytes,
         filename=file.filename,
         product_name=product_name,
+        overrides=overrides,
     )
     bom = pipeline.bom
     ef_matches = pipeline.ef_matches
@@ -339,12 +350,13 @@ async def analyze_bulk(
     results: list[BulkAnalyzeResultDTO] = []
     analysis_date = date.today()
     period_start, period_end = _default_reporting_period(analysis_date)
+    overrides = get_active_overrides(current_user.access_token, user_id=current_user.user_id)
 
     for upload in files:
         filename = upload.filename or "unknown.csv"
         try:
             raw_bytes = await upload.read()
-            pipeline = _run_analyze_pipeline(raw_bytes, filename=filename)
+            pipeline = _run_analyze_pipeline(raw_bytes, filename=filename, overrides=overrides)
             if pipeline.bom.file_errors or not pipeline.bom.is_valid:
                 error_message = (
                     "; ".join(pipeline.bom.file_errors)
