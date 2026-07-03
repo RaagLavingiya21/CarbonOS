@@ -18,6 +18,10 @@ export type AnalysisSummary = {
   version?: number | null;
   primary_data_share?: number | null;
   declared_unit?: string | null;
+  technological_dqr?: number | null;
+  geographical_dqr?: number | null;
+  temporal_dqr?: number | null;
+  dqr_computed_at?: string | null;
 };
 
 export type PortfolioSummary = {
@@ -40,6 +44,11 @@ export type AnalysisLineItem = {
   share_pct: number | null;
   flag_status: string;
   data_source?: string | null;
+  ef_confidence?: number | null;
+  country_of_origin?: string | null;
+  technological_dqr?: number | null;
+  geographical_dqr?: number | null;
+  temporal_dqr?: number | null;
 };
 
 export type AnalysisDetail = AnalysisSummary & {

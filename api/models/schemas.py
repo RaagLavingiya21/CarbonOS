@@ -377,6 +377,10 @@ class AnalysisSummaryDTO(BaseModel):
     version: int | None = None
     primary_data_share: float | None = None
     declared_unit: str | None = None
+    technological_dqr: int | None = None
+    geographical_dqr: int | None = None
+    temporal_dqr: int | None = None
+    dqr_computed_at: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisSummaryDTO":
@@ -395,6 +399,11 @@ class AnalysisLineItemDTO(BaseModel):
     share_pct: float | None
     flag_status: str
     data_source: str | None = None
+    ef_confidence: float | None = None
+    country_of_origin: str | None = None
+    technological_dqr: int | None = None
+    geographical_dqr: int | None = None
+    temporal_dqr: int | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "AnalysisLineItemDTO":

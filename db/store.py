@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
+from calc.dqr import aggregate_dqr, line_item_dqr
 from calc.footprint import FootprintResult, LineItem
 from calc.pds import compute_primary_data_share
 from db.client import get_user_client
@@ -84,6 +85,17 @@ def save_analysis(
     ]
     insert_data["primary_data_share"] = compute_primary_data_share(pds_rows)
 
+    reporting_year = _reporting_year(reporting_period_start)
+    line_item_rows = [
+        _line_item_row(product_id=0, user_id=user_id, li=li, reporting_year=reporting_year)
+        for li in result.line_items
+    ]
+    aggregate = aggregate_dqr(line_item_rows)
+    insert_data["technological_dqr"] = aggregate["technological"]
+    insert_data["geographical_dqr"] = aggregate["geographical"]
+    insert_data["temporal_dqr"] = aggregate["temporal"]
+    insert_data["dqr_computed_at"] = datetime.now(UTC).isoformat()
+
     client = get_user_client(access_token)
     product_response = (
         client.table("products")
@@ -92,11 +104,42 @@ def save_analysis(
     )
     product_id = product_response.data[0]["product_id"]
 
-    line_item_rows = [_line_item_row(product_id, user_id, li) for li in result.line_items]
+    for row in line_item_rows:
+        row["product_id"] = product_id
     if line_item_rows:
         client.table("line_items").insert(line_item_rows).execute()
 
     return int(product_id)
+
+
+def _reporting_year(reporting_period_start: date | str | None) -> int:
+    if reporting_period_start is None:
+        return date.today().year
+    if isinstance(reporting_period_start, date):
+        return reporting_period_start.year
+    return date.fromisoformat(str(reporting_period_start)[:10]).year
+
+
+def _dqr_fields_for_dict_row(
+    row: dict,
+    *,
+    reporting_year: int,
+) -> dict[str, int | float | str | None]:
+    is_low = "low_confidence" in (row.get("flag_status") or "")
+    dqr = line_item_dqr(
+        ef_confidence=row.get("ef_confidence"),
+        is_low_confidence=is_low,
+        data_source=row.get("data_source") or "secondary",
+        country_of_origin=row.get("country_of_origin"),
+        reporting_year=reporting_year,
+    )
+    return {
+        "ef_confidence": row.get("ef_confidence"),
+        "country_of_origin": row.get("country_of_origin"),
+        "technological_dqr": dqr["technological"],
+        "geographical_dqr": dqr["geographical"],
+        "temporal_dqr": dqr["temporal"],
+    }
 
 
 def publish_analysis(
@@ -193,28 +236,40 @@ def apply_primary_data(
         "version": new_version,
     }
 
+    reporting_year = _reporting_year(source.get("reporting_period_start"))
+    line_item_rows = []
+    for li in cloned_items:
+        row = {
+            "product_id": 0,
+            "user_id": user_id,
+            "component": li.get("component"),
+            "material": li.get("material"),
+            "spend_usd": li.get("spend_usd"),
+            "matched_sector": li.get("matched_sector"),
+            "emission_factor": li.get("emission_factor"),
+            "ef_source": li.get("ef_source"),
+            "kg_co2e": li.get("kg_co2e"),
+            "share_pct": li.get("share_pct"),
+            "flag_status": li.get("flag_status") or "ok",
+            "data_source": li.get("data_source") or "secondary",
+            "ef_confidence": li.get("ef_confidence"),
+            "country_of_origin": li.get("country_of_origin"),
+        }
+        row.update(_dqr_fields_for_dict_row(row, reporting_year=reporting_year))
+        line_item_rows.append(row)
+
+    aggregate = aggregate_dqr(line_item_rows)
+    insert_data["technological_dqr"] = aggregate["technological"]
+    insert_data["geographical_dqr"] = aggregate["geographical"]
+    insert_data["temporal_dqr"] = aggregate["temporal"]
+    insert_data["dqr_computed_at"] = datetime.now(UTC).isoformat()
+
     client = get_user_client(access_token)
     product_response = client.table("products").insert(insert_data).execute()
     new_product_id = int(product_response.data[0]["product_id"])
 
-    line_item_rows = []
-    for li in cloned_items:
-        line_item_rows.append(
-            {
-                "product_id": new_product_id,
-                "user_id": user_id,
-                "component": li.get("component"),
-                "material": li.get("material"),
-                "spend_usd": li.get("spend_usd"),
-                "matched_sector": li.get("matched_sector"),
-                "emission_factor": li.get("emission_factor"),
-                "ef_source": li.get("ef_source"),
-                "kg_co2e": li.get("kg_co2e"),
-                "share_pct": li.get("share_pct"),
-                "flag_status": li.get("flag_status") or "ok",
-                "data_source": li.get("data_source") or "secondary",
-            }
-        )
+    for row in line_item_rows:
+        row["product_id"] = new_product_id
     if line_item_rows:
         client.table("line_items").insert(line_item_rows).execute()
 
@@ -236,7 +291,13 @@ def apply_primary_data(
     }
 
 
-def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
+def _line_item_row(
+    product_id: int,
+    user_id: str,
+    li: LineItem,
+    *,
+    reporting_year: int,
+) -> dict:
     flags = []
     if li.is_flagged_by_parser:
         flags.append("parser_flagged")
@@ -246,7 +307,7 @@ def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
         flags.append("unmatched")
     flag_status = "|".join(flags) if flags else "ok"
 
-    return {
+    row = {
         "product_id": product_id,
         "user_id": user_id,
         "component": li.component,
@@ -259,4 +320,10 @@ def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
         "share_pct": round(li.share_pct, 4) if li.is_matched else None,
         "flag_status": flag_status,
         "data_source": "secondary",
+        "ef_confidence": round(li.ef_confidence, 4) if li.ef_confidence else None,
+        "country_of_origin": li.country_of_origin,
     }
+    row.update(
+        _dqr_fields_for_dict_row(row, reporting_year=reporting_year)
+    )
+    return row

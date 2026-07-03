@@ -13,12 +13,14 @@ _PRODUCT_COLUMNS = (
     "product_description, declared_unit, unitary_product_amount, system_boundary, "
     "reporting_period_start, reporting_period_end, geography_country, "
     "primary_data_share, spec_version, version, product_lineage_id, published_at, "
+    "technological_dqr, geographical_dqr, temporal_dqr, dqr_computed_at, "
     "created_at, updated_at"
 )
 
 _LINE_ITEM_COLUMNS = (
     "item_id, component, material, spend_usd, matched_sector, emission_factor, "
-    "ef_source, kg_co2e, share_pct, flag_status, data_source"
+    "ef_source, kg_co2e, share_pct, flag_status, data_source, ef_confidence, "
+    "country_of_origin, technological_dqr, geographical_dqr, temporal_dqr"
 )
 
 

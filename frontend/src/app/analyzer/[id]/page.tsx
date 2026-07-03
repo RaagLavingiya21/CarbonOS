@@ -46,6 +46,17 @@ function dataSourceBadgeVariant(dataSource: string | null | undefined) {
   return "outline" as const;
 }
 
+function formatLineDqr(item: AnalysisLineItem) {
+  if (
+    item.technological_dqr == null &&
+    item.geographical_dqr == null &&
+    item.temporal_dqr == null
+  ) {
+    return null;
+  }
+  return `T${item.technological_dqr ?? "—"}/G${item.geographical_dqr ?? "—"}/Y${item.temporal_dqr ?? "—"}`;
+}
+
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
@@ -439,6 +450,35 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             />
           </section>
 
+          {analysis.technological_dqr != null ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Data quality</CardTitle>
+                <CardDescription>
+                  PACT Data Quality Rating (1 = best, 5 = worst): technological, geographical,
+                  temporal.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-3">
+                <MetricCard
+                  label="Technological DQR"
+                  value={analysis.technological_dqr}
+                  hint="Primary data = 1; secondary by EF confidence"
+                />
+                <MetricCard
+                  label="Geographical DQR"
+                  value={analysis.geographical_dqr ?? "—"}
+                  hint="Country-specific activity data vs global fallback"
+                />
+                <MetricCard
+                  label="Temporal DQR"
+                  value={analysis.temporal_dqr ?? "—"}
+                  hint="Reporting period vs Open CEDA 2025 vintage"
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader>
               <CardTitle>Emission hotspots</CardTitle>
@@ -480,7 +520,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                       <span className="truncate text-caption text-muted-foreground">
                         {item.matched_sector ?? "unmatched"}
                       </span>
-                      {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
+                      <div className="flex items-center gap-2">
+                        {formatLineDqr(item) ? (
+                          <Badge variant="outline">{formatLineDqr(item)}</Badge>
+                        ) : null}
+                        {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -100,9 +100,9 @@ def build_product_footprint(
         "exemptedEmissionsPercent": "0",
         "primaryDataShare": _decimal_str(float(product.get("primary_data_share") or 0)),
         "dqi": {
-            "technologicalDQR": "4",
-            "geographicalDQR": "4",
-            "temporalDQR": "4",
+            "technologicalDQR": _dqr_str(product.get("technological_dqr")),
+            "geographicalDQR": _dqr_str(product.get("geographical_dqr")),
+            "temporalDQR": _dqr_str(product.get("temporal_dqr")),
         },
         "secondaryEmissionFactorSources": [
             {"name": "Open CEDA 2025", "version": "2025"},
@@ -210,6 +210,12 @@ def _validate_geography_mutual_exclusivity(pcf: dict) -> list[str]:
     if len(present) > 1:
         return [f"Geography fields are mutually exclusive; found: {', '.join(present)}"]
     return []
+
+
+def _dqr_str(value: object | None) -> str:
+    if value is None:
+        return "5"
+    return _decimal_str(int(value))
 
 
 def _decimal_str(value: float) -> str:
