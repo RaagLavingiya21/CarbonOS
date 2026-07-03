@@ -45,6 +45,15 @@ def create_request(
     Known limitation: no rate-limiting infrastructure — inputs are length-capped
     and validated instead.
     """
+    row = {
+        "requester_name": _cap_text(requester_name, field="requester_name"),
+        "requester_email": _cap_text(requester_email, field="requester_email"),
+        "requester_company": _cap_text(requester_company, field="requester_company"),
+        "product_name": _cap_text(product_name, field="product_name"),
+        "message": _cap_text(message, field="message"),
+        "status": "open",
+    }
+
     client = get_service_client()
     org_response = (
         client.table("organizations")
@@ -56,15 +65,7 @@ def create_request(
     if not org_response.data:
         raise ValueError(f"Organization '{org_id}' not found.")
 
-    row = {
-        "org_id": org_id,
-        "requester_name": _cap_text(requester_name, field="requester_name"),
-        "requester_email": _cap_text(requester_email, field="requester_email"),
-        "requester_company": _cap_text(requester_company, field="requester_company"),
-        "product_name": _cap_text(product_name, field="product_name"),
-        "message": _cap_text(message, field="message"),
-        "status": "open",
-    }
+    row["org_id"] = org_id
     response = client.table("pcf_requests").insert(row).execute()
     return int(response.data[0]["request_id"])
 
