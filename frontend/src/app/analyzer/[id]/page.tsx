@@ -31,7 +31,7 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
-import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, ScenarioSummary, api } from "@/lib/api";
+import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, api } from "@/lib/api";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -75,6 +75,8 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [applyResult, setApplyResult] = useState<ApplyPrimaryDataResponse | null>(null);
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [creatingScenario, setCreatingScenario] = useState(false);
+  const [provenance, setProvenance] = useState<FootprintProvenance | null>(null);
+  const [provenanceLoading, setProvenanceLoading] = useState(false);
 
   useEffect(() => {
     getAnalysisFromSupabase(params.id)
@@ -90,6 +92,36 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       .then(setScenarios)
       .catch(() => setScenarios([]));
   }, [analysis?.product_id]);
+
+  useEffect(() => {
+    if (!analysis?.product_id) return;
+    setProvenanceLoading(true);
+    api
+      .fetchProvenance(analysis.product_id)
+      .then((data) => setProvenance(data as FootprintProvenance))
+      .catch(() => setProvenance(null))
+      .finally(() => setProvenanceLoading(false));
+  }, [analysis?.product_id]);
+
+  async function downloadProvenance(format: "json" | "markdown") {
+    if (!analysis) return;
+    setError(null);
+    try {
+      const data = await api.fetchProvenance(analysis.product_id, format);
+      const blob = new Blob(
+        [typeof data === "string" ? data : JSON.stringify(data, null, 2)],
+        { type: format === "markdown" ? "text/markdown" : "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `footprint-${analysis.product_id}-provenance.${format === "markdown" ? "md" : "json"}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function exportCsv() {
     if (!analysis) return;
@@ -478,6 +510,55 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Provenance / methodology</CardTitle>
+              <CardDescription>
+                Auditor-facing traceability: method statement, per-line citations, and version
+                lineage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {provenanceLoading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : provenance ? (
+                <>
+                  <p className="text-small text-muted-foreground">
+                    {provenance.method_statement.summary}
+                  </p>
+                  <p className="text-small">
+                    {provenance.version_lineage.length} version(s) in lineage · PDS{" "}
+                    {formatPct((provenance.primary_data_share ?? 0) * 100)}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => void downloadProvenance("json")}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download methodology (.json)
+                    </Button>
+                    <Button
+                      onClick={() => void downloadProvenance("markdown")}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download methodology (.md)
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-small text-muted-foreground">
+                  Provenance unavailable for this footprint.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

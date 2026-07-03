@@ -8,7 +8,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
@@ -35,9 +35,10 @@ from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
 from db.org_store import get_active_org
-from db.reader import get_product_by_id, get_products_for_active_org
+from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
 from db.store import apply_primary_data, publish_analysis, save_analysis
 from exchange.pact import build_product_footprint, validate_product_footprint
+from exchange.provenance import build_provenance_markdown
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
 
@@ -423,6 +424,23 @@ def export_pact(
     if violations:
         raise HTTPException(status_code=500, detail=violations)
     return payload
+
+
+@router.get("/api/footprints/{product_id}/provenance")
+def get_provenance(
+    product_id: int,
+    format: Literal["json", "markdown"] = Query("json"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict | PlainTextResponse:
+    provenance = get_footprint_provenance(product_id, current_user.access_token)
+    if provenance is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    if format == "markdown":
+        return PlainTextResponse(
+            build_provenance_markdown(provenance),
+            media_type="text/markdown; charset=utf-8",
+        )
+    return provenance
 
 
 @router.get("/api/analyses/{product_id}/export")

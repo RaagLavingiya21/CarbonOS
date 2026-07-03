@@ -55,6 +55,16 @@ export type AnalysisDetail = AnalysisSummary & {
   line_items: AnalysisLineItem[];
 };
 
+export type FootprintProvenance = {
+  product_id: number;
+  metadata: Record<string, unknown>;
+  method_statement: { summary: string; detail: string };
+  primary_data_share: number | null;
+  aggregate_dqr: Record<string, unknown>;
+  line_items: AnalysisLineItem[];
+  version_lineage: Array<Record<string, unknown>>;
+};
+
 export type ScenarioSummary = {
   scenario_id: number;
   baseline_product_id: number;
@@ -537,6 +547,25 @@ export const api = {
     }),
   fetchPactPayload: (productId: number) =>
     request<Record<string, unknown>>(`/api/footprints/${productId}/pact`),
+  fetchProvenance: async (productId: number, format: "json" | "markdown" = "json") => {
+    const token = await getAccessToken();
+    const response = await fetch(
+      `${BACKEND_URL}/api/footprints/${productId}/provenance?format=${format}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    if (format === "markdown") {
+      return response.text();
+    }
+    return response.json() as Promise<FootprintProvenance>;
+  },
   chatAdvisor: (
     userMessage: string,
     conversationHistory: Message[],
