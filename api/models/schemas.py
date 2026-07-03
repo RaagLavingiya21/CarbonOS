@@ -911,3 +911,25 @@ class SetActiveOrgRequest(BaseModel):
 
 class RemoveMemberResponse(BaseModel):
     removed: bool
+
+
+class CreateShareRequest(BaseModel):
+    recipient_label: str | None = None
+
+
+class CreateShareResponse(BaseModel):
+    share_token: str
+    share_id: int
+
+
+class ShareSummaryDTO(BaseModel):
+    share_id: int
+    share_token: str
+    recipient_label: str | None = None
+    created_at: str
+    revoked_at: str | None = None
+
+
+class RevokeShareResponse(BaseModel):
+    share_id: int
+    revoked_at: str

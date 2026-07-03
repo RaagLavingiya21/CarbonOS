@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Copy, Download, FileWarning, FlaskConical, RefreshCw } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileWarning, FlaskConical, RefreshCw, Share2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
-import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, api } from "@/lib/api";
+import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
@@ -81,6 +81,13 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [creatingScenario, setCreatingScenario] = useState(false);
   const [provenance, setProvenance] = useState<FootprintProvenance | null>(null);
   const [provenanceLoading, setProvenanceLoading] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shares, setShares] = useState<ShareSummary[]>([]);
+  const [sharesLoading, setSharesLoading] = useState(false);
+  const [recipientLabel, setRecipientLabel] = useState("");
+  const [creatingShare, setCreatingShare] = useState(false);
+  const [newShareLink, setNewShareLink] = useState<string | null>(null);
+  const [revokingShareId, setRevokingShareId] = useState<number | null>(null);
 
   useEffect(() => {
     createSupabaseBrowserClient()
@@ -112,6 +119,57 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       .catch(() => setProvenance(null))
       .finally(() => setProvenanceLoading(false));
   }, [analysis?.product_id]);
+
+  useEffect(() => {
+    if (!analysis?.product_id || analysis.status !== "published") return;
+    setSharesLoading(true);
+    api
+      .listShares(analysis.product_id)
+      .then(setShares)
+      .catch(() => setShares([]))
+      .finally(() => setSharesLoading(false));
+  }, [analysis?.product_id, analysis?.status]);
+
+  async function createShareLink() {
+    if (!analysis) return;
+    setCreatingShare(true);
+    setError(null);
+    try {
+      const result = await api.createShare(analysis.product_id, {
+        recipient_label: recipientLabel.trim() || undefined,
+      });
+      const link = `${window.location.origin}/shared/${result.share_token}`;
+      setNewShareLink(link);
+      setRecipientLabel("");
+      const updated = await api.listShares(analysis.product_id);
+      setShares(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCreatingShare(false);
+    }
+  }
+
+  async function revokeShare(shareId: number) {
+    if (!analysis) return;
+    setRevokingShareId(shareId);
+    setError(null);
+    try {
+      await api.revokeShare(shareId);
+      const updated = await api.listShares(analysis.product_id);
+      setShares(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRevokingShareId(null);
+    }
+  }
+
+  async function copyShareLink(link: string) {
+    await navigator.clipboard.writeText(link);
+  }
+
+  const activeShares = shares.filter((share) => !share.revoked_at);
 
   async function downloadProvenance(format: "json" | "markdown") {
     if (!analysis) return;
@@ -361,9 +419,15 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               ) : analysis.status === "under_review" ? (
                 <Badge variant="outline">Awaiting review</Badge>
               ) : analysis.status === "published" ? (
-                <Button disabled type="button" variant="outline">
-                  Published — read-only
-                </Button>
+                <>
+                  <Button onClick={() => setShareOpen(true)} type="button" variant="outline">
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </Button>
+                  <Button disabled type="button" variant="outline">
+                    Published — read-only
+                  </Button>
+                </>
               ) : null}
               <Button
                 disabled={creatingScenario}
@@ -418,6 +482,95 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               </CardContent>
             </Card>
           ) : null}
+
+          <Sheet open={shareOpen} onOpenChange={setShareOpen}>
+            <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+              <SheetHeader>
+                <SheetTitle>Share published footprint</SheetTitle>
+                <SheetDescription>
+                  Create a revocable read-only link for customers or auditors. Only published
+                  footprints can be shared.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recipient-label">Recipient label (optional)</Label>
+                  <Input
+                    id="recipient-label"
+                    placeholder="e.g. Retail partner — Q3 review"
+                    value={recipientLabel}
+                    onChange={(event) => setRecipientLabel(event.target.value)}
+                  />
+                </div>
+                <Button disabled={creatingShare} onClick={() => void createShareLink()} type="button">
+                  {creatingShare ? "Creating..." : "Create share link"}
+                </Button>
+                {newShareLink ? (
+                  <div className="space-y-2 rounded-lg border p-3">
+                    <p className="text-small font-medium">New share link</p>
+                    <p className="break-all text-small text-muted-foreground">{newShareLink}</p>
+                    <Button
+                      onClick={() => void copyShareLink(newShareLink)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy link
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <p className="text-small font-medium">Active shares</p>
+                  {sharesLoading ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : activeShares.length === 0 ? (
+                    <p className="text-small text-muted-foreground">No active share links yet.</p>
+                  ) : (
+                    activeShares.map((share) => {
+                      const link = `${window.location.origin}/shared/${share.share_token}`;
+                      return (
+                        <div
+                          key={share.share_id}
+                          className="space-y-2 rounded-lg border p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-small font-medium">
+                              {share.recipient_label ?? "Shared link"}
+                            </p>
+                            <p className="text-caption text-muted-foreground">
+                              {new Date(share.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <p className="break-all text-caption text-muted-foreground">{link}</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              onClick={() => void copyShareLink(link)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <Copy className="h-4 w-4" />
+                              Copy
+                            </Button>
+                            <Button
+                              disabled={revokingShareId === share.share_id}
+                              onClick={() => void revokeShare(share.share_id)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              {revokingShareId === share.share_id ? "Revoking..." : "Revoke"}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           <Sheet open={exportOpen} onOpenChange={setExportOpen}>
             <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">

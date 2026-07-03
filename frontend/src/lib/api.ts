@@ -332,6 +332,32 @@ export type ApplyPrimaryDataResponse = {
   pds_after: number;
 };
 
+export type ShareSummary = {
+  share_id: number;
+  share_token: string;
+  recipient_label?: string | null;
+  created_at: string;
+  revoked_at?: string | null;
+};
+
+export type CreateShareResponse = {
+  share_token: string;
+  share_id: number;
+};
+
+export type PublicSharedFootprint = {
+  product_name: string;
+  total_kg_co2e: number;
+  matched_items: number;
+  flagged_items: number;
+  metadata: Record<string, unknown>;
+  method_statement: { summary: string; detail: string };
+  primary_data_share: number | null;
+  aggregate_dqr: Record<string, unknown>;
+  line_items: AnalysisLineItem[];
+  version_lineage: Array<Record<string, unknown>>;
+};
+
 export type LineItemMatch = {
   product_id: number | null;
   version: number | null;
@@ -403,6 +429,15 @@ async function request<T>(
     throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
   }
 
+  return response.json() as Promise<T>;
+}
+
+async function fetchPublic<T>(path: string): Promise<T> {
+  const response = await fetch(`${BACKEND_URL}${path}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -578,6 +613,25 @@ export const api = {
     }),
   fetchPactPayload: (productId: number) =>
     request<Record<string, unknown>>(`/api/footprints/${productId}/pact`),
+  createShare: (productId: number, payload: { recipient_label?: string }) =>
+    request<CreateShareResponse>(`/api/analyses/${productId}/shares`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listShares: (productId: number) =>
+    request<ShareSummary[]>(`/api/analyses/${productId}/shares`),
+  revokeShare: (shareId: number) =>
+    request<{ share_id: number; revoked_at: string }>(`/api/shares/${shareId}`, {
+      method: "DELETE",
+    }),
+  fetchPublicFootprint: (token: string) =>
+    fetchPublic<PublicSharedFootprint>(
+      `/api/public/footprints/${encodeURIComponent(token)}`,
+    ),
+  fetchPublicPact: (token: string) =>
+    fetchPublic<Record<string, unknown>>(
+      `/api/public/footprints/${encodeURIComponent(token)}/pact`,
+    ),
   fetchProvenance: async (productId: number, format: "json" | "markdown" = "json") => {
     const token = await getAccessToken();
     const response = await fetch(
