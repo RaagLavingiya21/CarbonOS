@@ -8,7 +8,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.schemas import (
@@ -28,16 +28,26 @@ from api.models.schemas import (
     ParseBOMResponse,
     ParsedBOMDTO,
     PublishAnalysisResponse,
+    RejectReviewRequest,
+    ReviewActionResponse,
     SaveAnalysisRequest,
     SaveAnalysisResponse,
 )
 from api.services.session_store import WorkflowSession, session_store
 from calc.critic import run_critic
 from calc.footprint import calculate_footprint
+from calc.health import footprint_health
 from db.org_store import get_active_org
-from db.reader import get_product_by_id, get_products_for_active_org
-from db.store import apply_primary_data, publish_analysis, save_analysis
+from db.reader import get_footprint_provenance, get_product_by_id, get_products_for_active_org
+from db.store import (
+    apply_primary_data,
+    approve_review,
+    reject_review,
+    save_analysis,
+    submit_for_review,
+)
 from exchange.pact import build_product_footprint, validate_product_footprint
+from exchange.provenance import build_provenance_markdown
 from factors.ef_lookup import EFMatch, lookup_ef
 from parsing.bom_parser import ParsedBOM, parse_bom_csv
 
@@ -295,29 +305,44 @@ def save_analysis_result(
     return SaveAnalysisResponse(product_id=product_id, phase="saved")
 
 
+def _enrich_product_row(row: dict) -> dict:
+    health = footprint_health(row)
+    enriched = dict(row)
+    enriched["health_status"] = health["status"]
+    enriched["health_reasons"] = health["reasons"]
+    return enriched
+
+
 @router.get("/api/analyses", response_model=list[AnalysisSummaryDTO])
 def list_analyses(
     status: str | None = Query(None),
+    health: str | None = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[AnalysisSummaryDTO]:
-    return [
-        AnalysisSummaryDTO.from_row(row)
+    rows = [
+        _enrich_product_row(row)
         for row in get_products_for_active_org(
             current_user.access_token,
             user_id=current_user.user_id,
             status=status,
         )
     ]
+    if health is not None:
+        rows = [row for row in rows if row.get("health_status") == health]
+    return [AnalysisSummaryDTO.from_row(row) for row in rows]
 
 
 @router.get("/api/analyses/summary")
 def get_portfolio_summary(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    products = get_products_for_active_org(
-        current_user.access_token,
-        user_id=current_user.user_id,
-    )
+    products = [
+        _enrich_product_row(row)
+        for row in get_products_for_active_org(
+            current_user.access_token,
+            user_id=current_user.user_id,
+        )
+    ]
     total_kg_co2e = sum(p.get("total_kg_co2e") or 0 for p in products)
     pds_values = [p.get("primary_data_share") or 0 for p in products]
     avg_primary_data_share = sum(pds_values) / len(pds_values) if pds_values else 0.0
@@ -326,12 +351,19 @@ def get_portfolio_summary(
         product_status = product.get("status") or "unknown"
         counts_by_status[product_status] = counts_by_status.get(product_status, 0) + 1
     open_flags_count = sum(1 for p in products if (p.get("flagged_items") or 0) > 0)
+    counts_by_health: dict[str, int] = {}
+    for product in products:
+        health_status = product.get("health_status") or "healthy"
+        counts_by_health[health_status] = counts_by_health.get(health_status, 0) + 1
     return {
         "total_kg_co2e": total_kg_co2e,
         "avg_primary_data_share": avg_primary_data_share,
         "counts_by_status": counts_by_status,
+        "counts_by_health": counts_by_health,
         "open_flags_count": open_flags_count,
         "product_count": len(products),
+        "needs_attention_count": counts_by_health.get("attention", 0)
+        + counts_by_health.get("stale", 0),
     }
 
 
@@ -346,30 +378,102 @@ def get_analysis(
     return AnalysisDetailDTO.from_row(product)
 
 
-@router.post("/api/analyses/{product_id}/publish", response_model=PublishAnalysisResponse)
-def publish_analysis_route(
+@router.post("/api/analyses/{product_id}/submit-review", response_model=ReviewActionResponse)
+def submit_review_route(
     product_id: int,
     current_user: CurrentUser = Depends(get_current_user),
-) -> PublishAnalysisResponse:
+) -> ReviewActionResponse:
     product = get_product_by_id(product_id, current_user.access_token)
     if product is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
     try:
-        publish_analysis(
+        submit_for_review(
             product_id,
             user_id=current_user.user_id,
             access_token=current_user.access_token,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
     updated = get_product_by_id(product_id, current_user.access_token)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
-    return PublishAnalysisResponse(
+    return ReviewActionResponse(
         product_id=product_id,
         status=updated["status"],
-        published_at=updated["published_at"],
+        submitted_for_review_by=updated.get("submitted_for_review_by"),
+        submitted_at=updated.get("submitted_at"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/approve-review", response_model=ReviewActionResponse)
+def approve_review_route(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReviewActionResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        approve_review(
+            product_id,
+            reviewer_user_id=current_user.user_id,
+            access_token=current_user.access_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    updated = get_product_by_id(product_id, current_user.access_token)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    return ReviewActionResponse(
+        product_id=product_id,
+        status=updated["status"],
+        reviewed_by=updated.get("reviewed_by"),
+        reviewed_at=updated.get("reviewed_at"),
+        published_at=updated.get("published_at"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/reject-review", response_model=ReviewActionResponse)
+def reject_review_route(
+    product_id: int,
+    request: RejectReviewRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReviewActionResponse:
+    product = get_product_by_id(product_id, current_user.access_token)
+    if product is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    try:
+        reject_review(
+            product_id,
+            request.comment,
+            reviewer_user_id=current_user.user_id,
+            access_token=current_user.access_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    updated = get_product_by_id(product_id, current_user.access_token)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    return ReviewActionResponse(
+        product_id=product_id,
+        status=updated["status"],
+        reviewed_by=updated.get("reviewed_by"),
+        reviewed_at=updated.get("reviewed_at"),
+        review_comment=updated.get("review_comment"),
+    )
+
+
+@router.post("/api/analyses/{product_id}/publish", response_model=PublishAnalysisResponse)
+def publish_analysis_route(
+    product_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PublishAnalysisResponse:
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "Direct publish is not permitted. Submit for review and have a different "
+            "org member approve the footprint."
+        ),
     )
 
 
@@ -423,6 +527,23 @@ def export_pact(
     if violations:
         raise HTTPException(status_code=500, detail=violations)
     return payload
+
+
+@router.get("/api/footprints/{product_id}/provenance", response_model=None)
+def get_provenance(
+    product_id: int,
+    format: Literal["json", "markdown"] = Query("json"),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    provenance = get_footprint_provenance(product_id, current_user.access_token)
+    if provenance is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {product_id} not found.")
+    if format == "markdown":
+        return PlainTextResponse(
+            build_provenance_markdown(provenance),
+            media_type="text/markdown; charset=utf-8",
+        )
+    return provenance
 
 
 @router.get("/api/analyses/{product_id}/export")

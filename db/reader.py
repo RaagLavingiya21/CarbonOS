@@ -13,12 +13,15 @@ _PRODUCT_COLUMNS = (
     "product_description, declared_unit, unitary_product_amount, system_boundary, "
     "reporting_period_start, reporting_period_end, geography_country, "
     "primary_data_share, spec_version, version, product_lineage_id, published_at, "
+    "technological_dqr, geographical_dqr, temporal_dqr, dqr_computed_at, "
+    "submitted_for_review_by, submitted_at, reviewed_by, reviewed_at, review_comment, "
     "created_at, updated_at"
 )
 
 _LINE_ITEM_COLUMNS = (
     "item_id, component, material, spend_usd, matched_sector, emission_factor, "
-    "ef_source, kg_co2e, share_pct, flag_status, data_source"
+    "ef_source, kg_co2e, share_pct, flag_status, data_source, ef_confidence, "
+    "country_of_origin, technological_dqr, geographical_dqr, temporal_dqr"
 )
 
 
@@ -148,6 +151,60 @@ def find_line_item_for_engagement(
         "version": version,
         "item_id": item_id,
         "matches": matches,
+    }
+
+
+def get_footprint_provenance(product_id: int, access_token: str) -> dict | None:
+    """Return consolidated provenance for a footprint including version lineage."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        return None
+
+    client = get_user_client(access_token)
+    lineage_id = product.get("product_lineage_id")
+    version_rows: list[dict] = []
+    if lineage_id:
+        response = (
+            client.table("products")
+            .select(
+                "product_id, version, status, analysis_date, published_at, created_at"
+            )
+            .eq("product_lineage_id", lineage_id)
+            .order("version")
+            .execute()
+        )
+        version_rows = response.data
+
+    return {
+        "product_id": product_id,
+        "metadata": {
+            "product_name": product.get("product_name"),
+            "declared_unit": product.get("declared_unit"),
+            "unitary_product_amount": product.get("unitary_product_amount"),
+            "system_boundary": product.get("system_boundary"),
+            "geography_country": product.get("geography_country"),
+            "reporting_period_start": product.get("reporting_period_start"),
+            "reporting_period_end": product.get("reporting_period_end"),
+            "version": product.get("version"),
+            "status": product.get("status"),
+        },
+        "method_statement": {
+            "summary": "Spend-based Open CEDA 2025 screening assessment (kg CO₂e per USD spend).",
+            "detail": (
+                "Cradle-to-gate Scope 3 Category 1 footprint derived from bill-of-materials "
+                "spend matched to Open CEDA 2025 emission factors. Screening-grade — not "
+                "certification-ready."
+            ),
+        },
+        "primary_data_share": product.get("primary_data_share"),
+        "aggregate_dqr": {
+            "technological": product.get("technological_dqr"),
+            "geographical": product.get("geographical_dqr"),
+            "temporal": product.get("temporal_dqr"),
+            "computed_at": product.get("dqr_computed_at"),
+        },
+        "line_items": product.get("line_items") or [],
+        "version_lineage": version_rows,
     }
 
 

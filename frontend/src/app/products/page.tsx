@@ -25,9 +25,16 @@ function statusBadgeVariant(status: string | null | undefined) {
   return "secondary" as const;
 }
 
+function healthBadgeVariant(health: string | null | undefined) {
+  if (health === "stale") return "destructive" as const;
+  if (health === "attention") return "secondary" as const;
+  return "outline" as const;
+}
+
 function ProductsPageContent() {
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status");
+  const healthFilter = searchParams.get("health");
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,24 +43,27 @@ function ProductsPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.listAnalyses(
-        statusFilter ? { status: statusFilter } : undefined,
-      );
+      const data = await api.listAnalyses({
+        status: statusFilter ?? undefined,
+        health: healthFilter ?? undefined,
+      });
       setAnalyses(data);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, healthFilter]);
 
   useEffect(() => {
     void loadAnalyses();
   }, [loadAnalyses]);
 
-  const filterLabel = statusFilter
-    ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)
-    : "All products";
+  const filterLabel = healthFilter
+    ? `Health: ${healthFilter}`
+    : statusFilter
+      ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)
+      : "All products";
 
   return (
     <div className="space-y-6">
@@ -102,6 +112,7 @@ function ProductsPageContent() {
                   <tr>
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Health</th>
                     <th className="px-4 py-3">Version</th>
                     <th className="px-4 py-3">Total kg CO₂e</th>
                     <th className="px-4 py-3">Primary data share</th>
@@ -116,6 +127,11 @@ function ProductsPageContent() {
                       <td className="px-4 py-3">
                         <Badge variant={statusBadgeVariant(analysis.status)}>
                           {analysis.status ?? "saved"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={healthBadgeVariant(analysis.health_status)}>
+                          {analysis.health_status ?? "healthy"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 tabular-nums">{analysis.version ?? 1}</td>

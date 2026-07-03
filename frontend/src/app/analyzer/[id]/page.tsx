@@ -31,7 +31,8 @@ import { HotspotBar } from "@/components/data/HotspotBar";
 import { MetricCard } from "@/components/data/MetricCard";
 import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
-import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, ScenarioSummary, api } from "@/lib/api";
+import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, api } from "@/lib/api";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
 import { formatKg, formatPct } from "@/lib/utils";
 
@@ -46,12 +47,26 @@ function dataSourceBadgeVariant(dataSource: string | null | undefined) {
   return "outline" as const;
 }
 
+function formatLineDqr(item: AnalysisLineItem) {
+  if (
+    item.technological_dqr == null &&
+    item.geographical_dqr == null &&
+    item.temporal_dqr == null
+  ) {
+    return null;
+  }
+  return `T${item.technological_dqr ?? "—"}/G${item.geographical_dqr ?? "—"}/Y${item.temporal_dqr ?? "—"}`;
+}
+
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
   const [pactPayload, setPactPayload] = useState<Record<string, unknown> | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
@@ -64,6 +79,14 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
   const [applyResult, setApplyResult] = useState<ApplyPrimaryDataResponse | null>(null);
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [creatingScenario, setCreatingScenario] = useState(false);
+  const [provenance, setProvenance] = useState<FootprintProvenance | null>(null);
+  const [provenanceLoading, setProvenanceLoading] = useState(false);
+
+  useEffect(() => {
+    createSupabaseBrowserClient()
+      .auth.getSession()
+      .then(({ data }) => setCurrentUserId(data.session?.user.id ?? null));
+  }, []);
 
   useEffect(() => {
     getAnalysisFromSupabase(params.id)
@@ -79,6 +102,36 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       .then(setScenarios)
       .catch(() => setScenarios([]));
   }, [analysis?.product_id]);
+
+  useEffect(() => {
+    if (!analysis?.product_id) return;
+    setProvenanceLoading(true);
+    api
+      .fetchProvenance(analysis.product_id)
+      .then((data) => setProvenance(data as FootprintProvenance))
+      .catch(() => setProvenance(null))
+      .finally(() => setProvenanceLoading(false));
+  }, [analysis?.product_id]);
+
+  async function downloadProvenance(format: "json" | "markdown") {
+    if (!analysis) return;
+    setError(null);
+    try {
+      const data = await api.fetchProvenance(analysis.product_id, format);
+      const blob = new Blob(
+        [typeof data === "string" ? data : JSON.stringify(data, null, 2)],
+        { type: format === "markdown" ? "text/markdown" : "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `footprint-${analysis.product_id}-provenance.${format === "markdown" ? "md" : "json"}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function exportCsv() {
     if (!analysis) return;
@@ -99,16 +152,17 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     }
   }
 
-  async function publishFootprint() {
+  async function submitForReview() {
     if (!analysis) return;
     setPublishing(true);
     setError(null);
     try {
-      const response = await api.publishAnalysis(analysis.product_id);
+      const response = await api.submitForReview(analysis.product_id);
       setAnalysis({
         ...analysis,
         status: response.status,
-        published_at: response.published_at,
+        submitted_for_review_by: response.submitted_for_review_by,
+        submitted_at: response.submitted_at,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -116,6 +170,50 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       setPublishing(false);
     }
   }
+
+  async function approveReview() {
+    if (!analysis) return;
+    setReviewActionLoading(true);
+    setError(null);
+    try {
+      const response = await api.approveReview(analysis.product_id);
+      setAnalysis({
+        ...analysis,
+        status: response.status,
+        reviewed_by: response.reviewed_by,
+        reviewed_at: response.reviewed_at,
+        published_at: response.published_at,
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewActionLoading(false);
+    }
+  }
+
+  async function rejectReview() {
+    if (!analysis || !rejectComment.trim()) return;
+    setReviewActionLoading(true);
+    setError(null);
+    try {
+      const response = await api.rejectReview(analysis.product_id, rejectComment.trim());
+      setAnalysis({
+        ...analysis,
+        status: response.status,
+        review_comment: response.review_comment,
+      });
+      setRejectComment("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReviewActionLoading(false);
+    }
+  }
+
+  const isSubmitter =
+    analysis?.submitted_for_review_by != null &&
+    currentUserId != null &&
+    analysis.submitted_for_review_by === currentUserId;
 
   async function createScenario() {
     if (!analysis) return;
@@ -256,10 +354,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                     <Download className="h-4 w-4" />
                     {exportLoading ? "Loading..." : "Export PACT payload"}
                   </Button>
-                  <Button disabled={publishing} onClick={publishFootprint} type="button">
-                    {publishing ? "Publishing..." : "Publish"}
+                  <Button disabled={publishing} onClick={submitForReview} type="button">
+                    {publishing ? "Submitting..." : "Submit for review"}
                   </Button>
                 </>
+              ) : analysis.status === "under_review" ? (
+                <Badge variant="outline">Awaiting review</Badge>
               ) : analysis.status === "published" ? (
                 <Button disabled type="button" variant="outline">
                   Published — read-only
@@ -418,6 +518,83 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </Alert>
           ) : null}
 
+          {analysis.status === "under_review" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Review panel</CardTitle>
+                <CardDescription>
+                  A different org member must approve before this footprint is published.
+                  {analysis.submitted_at
+                    ? ` Submitted ${new Date(analysis.submitted_at).toLocaleString()}.`
+                    : null}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isSubmitter ? (
+                  <p className="text-small text-muted-foreground">
+                    You submitted this footprint for review and cannot approve or reject it.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={reviewActionLoading}
+                        onClick={approveReview}
+                        type="button"
+                      >
+                        {reviewActionLoading ? "Working..." : "Approve & publish"}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reject-comment">Rejection comment</Label>
+                      <Textarea
+                        id="reject-comment"
+                        placeholder="Explain what needs to change before approval"
+                        value={rejectComment}
+                        onChange={(event) => setRejectComment(event.target.value)}
+                      />
+                      <Button
+                        disabled={reviewActionLoading || !rejectComment.trim()}
+                        onClick={rejectReview}
+                        type="button"
+                        variant="outline"
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {analysis.review_comment ? (
+                  <p className="text-small text-muted-foreground">
+                    Last review comment: {analysis.review_comment}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {analysis.reviewed_by || analysis.submitted_for_review_by ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lifecycle</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-small text-muted-foreground">
+                {analysis.submitted_for_review_by ? (
+                  <p>Submitted by: {analysis.submitted_for_review_by.slice(0, 8)}…</p>
+                ) : null}
+                {analysis.submitted_at ? (
+                  <p>Submitted at: {new Date(analysis.submitted_at).toLocaleString()}</p>
+                ) : null}
+                {analysis.reviewed_by ? (
+                  <p>Reviewed by: {analysis.reviewed_by.slice(0, 8)}…</p>
+                ) : null}
+                {analysis.reviewed_at ? (
+                  <p>Reviewed at: {new Date(analysis.reviewed_at).toLocaleString()}</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <section className="grid gap-4 md:grid-cols-4">
             <MetricCard
               label="Total footprint"
@@ -438,6 +615,84 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               hint="Share of footprint from supplier-specific data"
             />
           </section>
+
+          {analysis.technological_dqr != null ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Data quality</CardTitle>
+                <CardDescription>
+                  PACT Data Quality Rating (1 = best, 5 = worst): technological, geographical,
+                  temporal.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-3">
+                <MetricCard
+                  label="Technological DQR"
+                  value={analysis.technological_dqr}
+                  hint="Primary data = 1; secondary by EF confidence"
+                />
+                <MetricCard
+                  label="Geographical DQR"
+                  value={analysis.geographical_dqr ?? "—"}
+                  hint="Country-specific activity data vs global fallback"
+                />
+                <MetricCard
+                  label="Temporal DQR"
+                  value={analysis.temporal_dqr ?? "—"}
+                  hint="Reporting period vs Open CEDA 2025 vintage"
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Provenance / methodology</CardTitle>
+              <CardDescription>
+                Auditor-facing traceability: method statement, per-line citations, and version
+                lineage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {provenanceLoading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : provenance ? (
+                <>
+                  <p className="text-small text-muted-foreground">
+                    {provenance.method_statement.summary}
+                  </p>
+                  <p className="text-small">
+                    {provenance.version_lineage.length} version(s) in lineage · PDS{" "}
+                    {formatPct((provenance.primary_data_share ?? 0) * 100)}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => void downloadProvenance("json")}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download methodology (.json)
+                    </Button>
+                    <Button
+                      onClick={() => void downloadProvenance("markdown")}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download methodology (.md)
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-small text-muted-foreground">
+                  Provenance unavailable for this footprint.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -480,7 +735,12 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                       <span className="truncate text-caption text-muted-foreground">
                         {item.matched_sector ?? "unmatched"}
                       </span>
-                      {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
+                      <div className="flex items-center gap-2">
+                        {formatLineDqr(item) ? (
+                          <Badge variant="outline">{formatLineDqr(item)}</Badge>
+                        ) : null}
+                        {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
+                      </div>
                     </div>
                   </div>
                 ))}

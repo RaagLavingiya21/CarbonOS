@@ -18,12 +18,25 @@ export type AnalysisSummary = {
   version?: number | null;
   primary_data_share?: number | null;
   declared_unit?: string | null;
+  technological_dqr?: number | null;
+  geographical_dqr?: number | null;
+  temporal_dqr?: number | null;
+  dqr_computed_at?: string | null;
+  health_status?: string | null;
+  health_reasons?: string[];
+  submitted_for_review_by?: string | null;
+  submitted_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_comment?: string | null;
 };
 
 export type PortfolioSummary = {
   total_kg_co2e: number;
   avg_primary_data_share: number;
   counts_by_status: Record<string, number>;
+  counts_by_health?: Record<string, number>;
+  needs_attention_count?: number;
   open_flags_count: number;
   product_count: number;
 };
@@ -40,10 +53,25 @@ export type AnalysisLineItem = {
   share_pct: number | null;
   flag_status: string;
   data_source?: string | null;
+  ef_confidence?: number | null;
+  country_of_origin?: string | null;
+  technological_dqr?: number | null;
+  geographical_dqr?: number | null;
+  temporal_dqr?: number | null;
 };
 
 export type AnalysisDetail = AnalysisSummary & {
   line_items: AnalysisLineItem[];
+};
+
+export type FootprintProvenance = {
+  product_id: number;
+  metadata: Record<string, unknown>;
+  method_statement: { summary: string; detail: string };
+  primary_data_share: number | null;
+  aggregate_dqr: Record<string, unknown>;
+  line_items: AnalysisLineItem[];
+  version_lineage: Array<Record<string, unknown>>;
 };
 
 export type ScenarioSummary = {
@@ -379,16 +407,38 @@ async function request<T>(
 }
 
 export const api = {
-  listAnalyses: (options?: { status?: string }) => {
-    const params = options?.status ? `?status=${encodeURIComponent(options.status)}` : "";
-    return request<AnalysisSummary[]>(`/api/analyses${params}`);
+  listAnalyses: (options?: { status?: string; health?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.status) params.set("status", options.status);
+    if (options?.health) params.set("health", options.health);
+    const query = params.toString();
+    return request<AnalysisSummary[]>(`/api/analyses${query ? `?${query}` : ""}`);
   },
   getPortfolioSummary: () => request<PortfolioSummary>("/api/analyses/summary"),
-  publishAnalysis: (productId: number) =>
-    request<{ product_id: number; status: string; published_at: string }>(
-      `/api/analyses/${productId}/publish`,
-      { method: "POST" },
-    ),
+  submitForReview: (productId: number) =>
+    request<{
+      product_id: number;
+      status: string;
+      submitted_for_review_by?: string | null;
+      submitted_at?: string | null;
+    }>(`/api/analyses/${productId}/submit-review`, { method: "POST" }),
+  approveReview: (productId: number) =>
+    request<{
+      product_id: number;
+      status: string;
+      reviewed_by?: string | null;
+      reviewed_at?: string | null;
+      published_at?: string | null;
+    }>(`/api/analyses/${productId}/approve-review`, { method: "POST" }),
+  rejectReview: (productId: number, comment: string) =>
+    request<{
+      product_id: number;
+      status: string;
+      review_comment?: string | null;
+    }>(`/api/analyses/${productId}/reject-review`, {
+      method: "POST",
+      body: JSON.stringify({ comment }),
+    }),
   applyPrimaryData: (
     productId: number,
     payload: {
@@ -528,6 +578,25 @@ export const api = {
     }),
   fetchPactPayload: (productId: number) =>
     request<Record<string, unknown>>(`/api/footprints/${productId}/pact`),
+  fetchProvenance: async (productId: number, format: "json" | "markdown" = "json") => {
+    const token = await getAccessToken();
+    const response = await fetch(
+      `${BACKEND_URL}/api/footprints/${productId}/provenance?format=${format}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    if (format === "markdown") {
+      return response.text();
+    }
+    return response.json() as Promise<FootprintProvenance>;
+  },
   chatAdvisor: (
     userMessage: string,
     conversationHistory: Message[],

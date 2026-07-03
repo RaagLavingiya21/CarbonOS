@@ -195,6 +195,14 @@ export default function Home() {
                 hint="Products with flagged line items"
               />
             </Link>
+            <Link href="/products?health=attention">
+              <MetricCard
+                className="transition hover:border-primary/40"
+                label="Needs attention"
+                value={portfolioSummary.needs_attention_count ?? 0}
+                hint="Stale or flagged footprints"
+              />
+            </Link>
             {Object.entries(portfolioSummary.counts_by_status).map(([status, count]) => (
               <Link key={status} href={`/products?status=${encodeURIComponent(status)}`}>
                 <MetricCard

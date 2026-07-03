@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
+from calc.dqr import aggregate_dqr, line_item_dqr
 from calc.footprint import FootprintResult, LineItem
 from calc.pds import compute_primary_data_share
 from db.client import get_user_client
@@ -84,6 +85,17 @@ def save_analysis(
     ]
     insert_data["primary_data_share"] = compute_primary_data_share(pds_rows)
 
+    reporting_year = _reporting_year(reporting_period_start)
+    line_item_rows = [
+        _line_item_row(product_id=0, user_id=user_id, li=li, reporting_year=reporting_year)
+        for li in result.line_items
+    ]
+    aggregate = aggregate_dqr(line_item_rows)
+    insert_data["technological_dqr"] = aggregate["technological"]
+    insert_data["geographical_dqr"] = aggregate["geographical"]
+    insert_data["temporal_dqr"] = aggregate["temporal"]
+    insert_data["dqr_computed_at"] = datetime.now(UTC).isoformat()
+
     client = get_user_client(access_token)
     product_response = (
         client.table("products")
@@ -92,11 +104,42 @@ def save_analysis(
     )
     product_id = product_response.data[0]["product_id"]
 
-    line_item_rows = [_line_item_row(product_id, user_id, li) for li in result.line_items]
+    for row in line_item_rows:
+        row["product_id"] = product_id
     if line_item_rows:
         client.table("line_items").insert(line_item_rows).execute()
 
     return int(product_id)
+
+
+def _reporting_year(reporting_period_start: date | str | None) -> int:
+    if reporting_period_start is None:
+        return date.today().year
+    if isinstance(reporting_period_start, date):
+        return reporting_period_start.year
+    return date.fromisoformat(str(reporting_period_start)[:10]).year
+
+
+def _dqr_fields_for_dict_row(
+    row: dict,
+    *,
+    reporting_year: int,
+) -> dict[str, int | float | str | None]:
+    is_low = "low_confidence" in (row.get("flag_status") or "")
+    dqr = line_item_dqr(
+        ef_confidence=row.get("ef_confidence"),
+        is_low_confidence=is_low,
+        data_source=row.get("data_source") or "secondary",
+        country_of_origin=row.get("country_of_origin"),
+        reporting_year=reporting_year,
+    )
+    return {
+        "ef_confidence": row.get("ef_confidence"),
+        "country_of_origin": row.get("country_of_origin"),
+        "technological_dqr": dqr["technological"],
+        "geographical_dqr": dqr["geographical"],
+        "temporal_dqr": dqr["temporal"],
+    }
 
 
 def publish_analysis(
@@ -105,26 +148,128 @@ def publish_analysis(
     user_id: str,
     access_token: str,
 ) -> None:
-    """Publish an approved footprint. Raises ValueError if not approved."""
+    """Direct publish is disabled — footprints reach published only via approve_review."""
+    raise ValueError(
+        "Direct publish is not permitted. Submit for review and have a different "
+        "org member approve the footprint."
+    )
+
+
+def submit_for_review(
+    product_id: int,
+    *,
+    user_id: str,
+    access_token: str,
+) -> None:
+    """Move an approved footprint to under_review."""
     product = get_product_by_id(product_id, access_token)
     if product is None:
         raise ValueError(f"Product {product_id} not found.")
     if product.get("status") != "approved":
-        raise ValueError("Only approved footprints can be published.")
+        raise ValueError("Only approved footprints can be submitted for review.")
 
-    published_at = datetime.now(UTC).isoformat()
+    submitted_at = datetime.now(UTC).isoformat()
     client = get_user_client(access_token)
     client.table("products").update(
-        {"status": "published", "published_at": published_at}
+        {
+            "status": "under_review",
+            "submitted_for_review_by": user_id,
+            "submitted_at": submitted_at,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "review_comment": None,
+        }
+    ).eq("product_id", product_id).execute()
+
+    append_audit_log(
+        event="submitted_for_review",
+        workflow="footprint_lifecycle",
+        user_id=user_id,
+        access_token=access_token,
+        product_name=product.get("product_name"),
+        status="under_review",
+    )
+
+
+def approve_review(
+    product_id: int,
+    *,
+    reviewer_user_id: str,
+    access_token: str,
+) -> None:
+    """Publish a footprint after review by a different org member."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        raise ValueError(f"Product {product_id} not found.")
+    if product.get("status") != "under_review":
+        raise ValueError("Only footprints under review can be approved.")
+    submitter = product.get("submitted_for_review_by")
+    if submitter is not None and reviewer_user_id == submitter:
+        raise ValueError("review requires a different approver")
+
+    from db.org_store import get_active_org_member_ids
+
+    member_ids = get_active_org_member_ids(access_token, user_id=reviewer_user_id)
+    if member_ids and reviewer_user_id not in member_ids:
+        raise ValueError("Reviewer must be a member of the active organization.")
+
+    reviewed_at = datetime.now(UTC).isoformat()
+    published_at = reviewed_at
+    client = get_user_client(access_token)
+    client.table("products").update(
+        {
+            "status": "published",
+            "reviewed_by": reviewer_user_id,
+            "reviewed_at": reviewed_at,
+            "published_at": published_at,
+        }
     ).eq("product_id", product_id).execute()
 
     append_audit_log(
         event="published",
         workflow="footprint_lifecycle",
-        user_id=user_id,
+        user_id=reviewer_user_id,
         access_token=access_token,
         product_name=product.get("product_name"),
         status="published",
+    )
+
+
+def reject_review(
+    product_id: int,
+    comment: str,
+    *,
+    reviewer_user_id: str,
+    access_token: str,
+) -> None:
+    """Reject a footprint under review, returning it to flagged status."""
+    product = get_product_by_id(product_id, access_token)
+    if product is None:
+        raise ValueError(f"Product {product_id} not found.")
+    if product.get("status") != "under_review":
+        raise ValueError("Only footprints under review can be rejected.")
+    submitter = product.get("submitted_for_review_by")
+    if submitter is not None and reviewer_user_id == submitter:
+        raise ValueError("review requires a different approver")
+
+    reviewed_at = datetime.now(UTC).isoformat()
+    client = get_user_client(access_token)
+    client.table("products").update(
+        {
+            "status": "flagged",
+            "reviewed_by": reviewer_user_id,
+            "reviewed_at": reviewed_at,
+            "review_comment": comment.strip(),
+        }
+    ).eq("product_id", product_id).execute()
+
+    append_audit_log(
+        event="review_rejected",
+        workflow="footprint_lifecycle",
+        user_id=reviewer_user_id,
+        access_token=access_token,
+        product_name=product.get("product_name"),
+        status="flagged",
     )
 
 
@@ -193,28 +338,40 @@ def apply_primary_data(
         "version": new_version,
     }
 
+    reporting_year = _reporting_year(source.get("reporting_period_start"))
+    line_item_rows = []
+    for li in cloned_items:
+        row = {
+            "product_id": 0,
+            "user_id": user_id,
+            "component": li.get("component"),
+            "material": li.get("material"),
+            "spend_usd": li.get("spend_usd"),
+            "matched_sector": li.get("matched_sector"),
+            "emission_factor": li.get("emission_factor"),
+            "ef_source": li.get("ef_source"),
+            "kg_co2e": li.get("kg_co2e"),
+            "share_pct": li.get("share_pct"),
+            "flag_status": li.get("flag_status") or "ok",
+            "data_source": li.get("data_source") or "secondary",
+            "ef_confidence": li.get("ef_confidence"),
+            "country_of_origin": li.get("country_of_origin"),
+        }
+        row.update(_dqr_fields_for_dict_row(row, reporting_year=reporting_year))
+        line_item_rows.append(row)
+
+    aggregate = aggregate_dqr(line_item_rows)
+    insert_data["technological_dqr"] = aggregate["technological"]
+    insert_data["geographical_dqr"] = aggregate["geographical"]
+    insert_data["temporal_dqr"] = aggregate["temporal"]
+    insert_data["dqr_computed_at"] = datetime.now(UTC).isoformat()
+
     client = get_user_client(access_token)
     product_response = client.table("products").insert(insert_data).execute()
     new_product_id = int(product_response.data[0]["product_id"])
 
-    line_item_rows = []
-    for li in cloned_items:
-        line_item_rows.append(
-            {
-                "product_id": new_product_id,
-                "user_id": user_id,
-                "component": li.get("component"),
-                "material": li.get("material"),
-                "spend_usd": li.get("spend_usd"),
-                "matched_sector": li.get("matched_sector"),
-                "emission_factor": li.get("emission_factor"),
-                "ef_source": li.get("ef_source"),
-                "kg_co2e": li.get("kg_co2e"),
-                "share_pct": li.get("share_pct"),
-                "flag_status": li.get("flag_status") or "ok",
-                "data_source": li.get("data_source") or "secondary",
-            }
-        )
+    for row in line_item_rows:
+        row["product_id"] = new_product_id
     if line_item_rows:
         client.table("line_items").insert(line_item_rows).execute()
 
@@ -236,7 +393,13 @@ def apply_primary_data(
     }
 
 
-def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
+def _line_item_row(
+    product_id: int,
+    user_id: str,
+    li: LineItem,
+    *,
+    reporting_year: int,
+) -> dict:
     flags = []
     if li.is_flagged_by_parser:
         flags.append("parser_flagged")
@@ -246,7 +409,7 @@ def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
         flags.append("unmatched")
     flag_status = "|".join(flags) if flags else "ok"
 
-    return {
+    row = {
         "product_id": product_id,
         "user_id": user_id,
         "component": li.component,
@@ -259,4 +422,10 @@ def _line_item_row(product_id: int, user_id: str, li: LineItem) -> dict:
         "share_pct": round(li.share_pct, 4) if li.is_matched else None,
         "flag_status": flag_status,
         "data_source": "secondary",
+        "ef_confidence": round(li.ef_confidence, 4) if li.ef_confidence else None,
+        "country_of_origin": li.country_of_origin,
     }
+    row.update(
+        _dqr_fields_for_dict_row(row, reporting_year=reporting_year)
+    )
+    return row
