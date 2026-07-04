@@ -29,6 +29,7 @@ from api.routes import (
     requests,
     rollup,
     scenarios,
+    scope1,
     shares,
 )
 
@@ -169,6 +170,7 @@ app.include_router(chat.router)
 app.include_router(panels.router)
 app.include_router(org.router)
 app.include_router(scenarios.router)
+app.include_router(scope1.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
