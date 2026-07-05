@@ -30,14 +30,14 @@ Effort: S≈days, M≈1–2wk, L≈3–5wk, XL≈6wk+ (one small squad).
 | **A** | Corporate 15-cat inventory backbone | JTBD-2 defensible number | Near | XL | — (foundation) | `ef_lookup` classifier, `footprint` calc, versioning, `rollup` | ✅ `04` |
 | **B** | Inbound request → questionnaire answer | JTBD-1 answer the customer | Near | L–XL | **A** | `pcf_requests` inbox, gap-analyzer categories, RAG advisor | ✅ `05` |
 | **C** | Driver & obligation front door | JTBD-0 is this my problem | Near | M–L | A (only C4) | gap-analyzer `CompanyProfile`+`assess_materiality`, RAG advisor | ✅ `06` |
-| **D** | SBTi + FLAG target-setting | JTBD-4 targets accepted | Mid | L | **A** | inventory as coverage denominator; Target entity | roadmap `03` |
-| **E** | Progress tracking + base-year recalc | JTBD-7 prove it was real | Mid | M–L | A, D | product versioning/recalc, hotspots | roadmap `03` |
-| **F** | Supplier engagement at program scale | JTBD-5 move the supply chain | Mid | M | existing copilot loop (+A) | `copilot` primary-data loop, supplier ranking | roadmap `03` |
+| **D** | SBTi + FLAG target-setting | JTBD-4 targets accepted | Mid | L | **A** (+ Epic C readiness) | inventory as coverage denominator; Target entity | ✅ `07` |
+| **E** | Progress tracking + base-year recalc | JTBD-7 prove it was real | Mid | M–L | A, D | product versioning/recalc, hotspots | ✅ `08` |
+| **F** | Supplier engagement at program scale | JTBD-5 move the supply chain | Mid | M | existing copilot loop (+A) | `copilot` primary-data loop, supplier ranking | ✅ `09` |
 | **G** | Formal disclosure (ESRS/SB253/iXBRL) | JTBD-6 the one artifact | Long | L–XL | **A** | inventory, `audit_log`/citations lineage | roadmap `03` |
 | **H** | Cat-11 use-phase + category depth | product depth | Long | L | product PCF (+A) | BOM/SKU model, scenario engine | roadmap `03` |
 | **I** | Levers / MAC / claims / decisions | JTBD-3 + decisions | Long | L | A, H | product scenario engine, supplier ranking | roadmap `03` |
 
-Detailed build-ready plans exist for the near-term trio (A/B/C). D–I are specified at epic granularity in `03`; promote each to a full plan when it's next in the queue.
+Detailed build-ready plans exist for the near-term trio (A/B/C) and the mid-term layer (D/E/F). G–I are specified at epic granularity in `03`; promote each to a full plan when it's next in the queue.
 
 ---
 
@@ -112,5 +112,6 @@ These are forks the plans deliberately do **not** settle — resolve before the 
 
 - ✅ Gap analysis complete (`01`–`03`).
 - ✅ Near-term MVP trio planned build-ready (`04` A, `05` B, `06` C), committed on `feature/scope3-mvp`.
-- ⏳ Mid/long epics (D–I) specified at epic granularity in `03`; promote to full plans as they reach the queue.
-- 🔜 Suggested next planning targets: **D → E → F** (mid-term, the annual-system-of-record layer).
+- ✅ Mid-term layer planned build-ready (`07` D, `08` E, `09` F) — targets, progress, supplier scale.
+- ⏳ Long-term epics (G–I) specified at epic granularity in `03`; promote to full plans as they reach the queue.
+- 🔜 Suggested next planning targets: **G → H → I** (long-term: formal disclosure, category depth, levers/claims).
