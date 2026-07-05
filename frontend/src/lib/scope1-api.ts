@@ -144,6 +144,22 @@ export type S1CollectionStatus = {
   notes?: string | null;
 };
 
+export type S1Evidence = {
+  id: string;
+  file_name?: string | null;
+  hash_sha256: string;
+  storage_uri?: string;
+  byte_size?: number | null;
+};
+
+export type S1AuditEntry = {
+  action: string;
+  entity_table?: string;
+  entity_id?: string;
+  created_at?: string;
+  actor_id?: string | null;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
@@ -205,10 +221,33 @@ export const scope1Api = {
       body: JSON.stringify(body),
     }),
 
+  uploadEvidence: async (
+    file: File,
+    inventoryId: string | null,
+    documentType = "utility_invoice",
+  ): Promise<S1Evidence> => {
+    const form = new FormData();
+    form.append("file", file);
+    if (inventoryId) form.append("inventory_id", inventoryId);
+    form.append("document_type", documentType);
+    const response = await fetch(`${BACKEND_URL}/api/scope1/evidence`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await accessToken()}` }, // no Content-Type: browser sets multipart boundary
+      body: form,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<S1Evidence>;
+  },
+
   readiness: (inventoryId: string) =>
     request<S1Readiness>(`/api/scope1/inventories/${inventoryId}/readiness`),
   report: (inventoryId: string, arVersion = "AR5") =>
     request<S1Report>(`/api/scope1/inventories/${inventoryId}/report?ar_version=${arVersion}`),
   recordTrace: (recordId: string, arVersion = "AR5") =>
     request<S1Trace>(`/api/scope1/records/${recordId}/trace?ar_version=${arVersion}`),
+  recordAudit: (recordId: string) =>
+    request<S1AuditEntry[]>(`/api/scope1/records/${recordId}/audit`),
 };

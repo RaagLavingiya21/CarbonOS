@@ -7,8 +7,13 @@ plain dicts (mirroring db.reader). See supabase/migrations/030-036.
 
 from __future__ import annotations
 
-from db.client import get_user_client
+import hashlib
+from uuid import uuid4
+
+from db.client import get_service_client, get_user_client
 from db.org_store import get_active_org
+
+EVIDENCE_BUCKET = "s1-evidence"
 
 
 class NoActiveOrgError(RuntimeError):
@@ -241,7 +246,90 @@ def list_collection_status(
 
 # --- Evidence ---------------------------------------------------------------
 
-def create_evidence(data: dict, *, access_token: str, user_id: str) -> dict:
+def evidence_row(
+    file_bytes: bytes,
+    *,
+    file_name: str,
+    content_type: str | None,
+    document_type: str,
+    org_id: str,
+    inventory_id: str | None,
+    user_id: str,
+) -> dict:
+    """Pure: build the evidence-document row with a server-computed SHA-256 and a
+    tenant-scoped storage path. No I/O, so it is unit-testable."""
+    digest = hashlib.sha256(file_bytes).hexdigest()
+    storage_uri = f"{org_id}/{inventory_id or 'unassigned'}/{uuid4().hex}-{file_name}"
+    return {
+        "org_id": org_id,
+        "inventory_id": inventory_id,
+        "document_type": document_type,
+        "file_name": file_name,
+        "storage_uri": storage_uri,
+        "content_type": content_type,
+        "byte_size": len(file_bytes),
+        "hash_sha256": digest,
+        "uploaded_by": user_id,
+    }
+
+
+def _put_object(path: str, data: bytes, content_type: str | None) -> None:
+    """Upload bytes to the private s1-evidence bucket (service role)."""
+    get_service_client().storage.from_(EVIDENCE_BUCKET).upload(
+        path, data, {"content-type": content_type or "application/octet-stream"}
+    )
+
+
+def upload_evidence(
+    file_bytes: bytes,
+    *,
+    file_name: str,
+    content_type: str | None,
+    document_type: str,
+    inventory_id: str | None,
+    access_token: str,
+    user_id: str,
+) -> dict:
+    """Store an evidence file: hash it, put the bytes in Storage, insert the row."""
     org_id, client = _org_and_client(access_token, user_id)
-    row = {"org_id": org_id, "uploaded_by": user_id, **data}
+    row = evidence_row(
+        file_bytes, file_name=file_name, content_type=content_type,
+        document_type=document_type, org_id=org_id, inventory_id=inventory_id,
+        user_id=user_id,
+    )
+    _put_object(row["storage_uri"], file_bytes, content_type)
     return client.table("s1_evidence_document").insert(row).execute().data[0]
+
+
+# --- Append-only change log (immutable audit trail) -------------------------
+
+def log_change(
+    entity_table: str,
+    entity_id: str,
+    action: str,
+    *,
+    field_changes: dict | None = None,
+    access_token: str,
+    user_id: str,
+) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {
+        "org_id": org_id,
+        "entity_table": entity_table,
+        "entity_id": entity_id,
+        "action": action,
+        "field_changes": field_changes,
+        "actor_id": user_id,
+    }
+    return client.table("s1_change_log").insert(row).execute().data[0]
+
+
+def list_change_log(
+    entity_table: str, entity_id: str, *, access_token: str, user_id: str
+) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_change_log").select("*")
+        .eq("org_id", org_id).eq("entity_table", entity_table).eq("entity_id", entity_id)
+        .order("created_at").execute().data
+    )

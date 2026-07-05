@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { scope1Api, type S1Report, type S1Trace } from "@/lib/scope1-api";
+import { scope1Api, type S1AuditEntry, type S1Report, type S1Trace } from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "../_lib";
 
@@ -32,6 +32,7 @@ export default function Scope1ReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [traceId, setTraceId] = useState("");
   const [trace, setTrace] = useState<S1Trace | null>(null);
+  const [audit, setAudit] = useState<S1AuditEntry[]>([]);
 
   const load = useCallback(async () => {
     if (!activeId) {
@@ -66,7 +67,12 @@ export default function Scope1ReportPage() {
   async function lookupTrace() {
     if (!traceId.trim()) return;
     try {
-      setTrace(await scope1Api.recordTrace(traceId.trim(), arVersion));
+      const [tr, au] = await Promise.all([
+        scope1Api.recordTrace(traceId.trim(), arVersion),
+        scope1Api.recordAudit(traceId.trim()),
+      ]);
+      setTrace(tr);
+      setAudit(au);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -233,11 +239,27 @@ export default function Scope1ReportPage() {
                   <tr>
                     <td colSpan={4} className="pt-2 text-caption text-muted-foreground">
                       {trace.ef_source} · tier {trace.ef_tier}
+                      {trace.evidence_document_id ? ` · evidence ${trace.evidence_document_id.slice(0, 8)}…` : " · no evidence attached"}
                     </td>
                   </tr>
                 </tfoot>
               ) : null}
             </table>
+          ) : null}
+          {trace && audit.length > 0 ? (
+            <div className="mt-3 border-t pt-3">
+              <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
+                Audit trail
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {audit.map((entry, index) => (
+                  <li key={index} className="text-caption text-muted-foreground">
+                    {entry.action}
+                    {entry.created_at ? ` · ${new Date(entry.created_at).toLocaleString()}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
         </CardContent>
       </Card>

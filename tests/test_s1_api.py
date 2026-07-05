@@ -50,6 +50,7 @@ def test_stationary_record_computes_gas_masses(monkeypatch) -> None:
 
     monkeypatch.setattr("db.scope1_store.create_record", fake_create_record)
     monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
+    monkeypatch.setattr("db.scope1_store.log_change", lambda *a, **k: {})
     resp = client.post(
         "/api/scope1/records/stationary",
         json={
@@ -189,6 +190,7 @@ def test_set_collection_status(monkeypatch) -> None:
 def test_record_creation_auto_advances_collection(monkeypatch) -> None:
     advanced: dict = {}
     monkeypatch.setattr("db.scope1_store.create_record", lambda row, **k: {"id": "rec1", **row})
+    monkeypatch.setattr("db.scope1_store.log_change", lambda *a, **k: {})
 
     def fake_upsert(row, **k):
         advanced.update(row)
@@ -226,3 +228,87 @@ def test_readiness_counts_completeness(monkeypatch) -> None:
     assert body["complete"] == 2          # entered + verified
     assert body["completeness_pct"] == 50.0
     assert body["by_status"]["missing"] == 1
+
+
+# --- Evidence + audit trail -------------------------------------------------
+
+def test_evidence_row_computes_sha256() -> None:
+    """Pure hashing/pathing — the tamper-evidence backbone."""
+    import hashlib
+
+    from db.scope1_store import evidence_row
+
+    data = b"utility invoice bytes"
+    row = evidence_row(
+        data, file_name="bill.pdf", content_type="application/pdf",
+        document_type="utility_invoice", org_id="org1", inventory_id="inv1", user_id="u1",
+    )
+    assert row["hash_sha256"] == hashlib.sha256(data).hexdigest()
+    assert row["byte_size"] == len(data)
+    assert row["storage_uri"].startswith("org1/inv1/")
+    assert row["storage_uri"].endswith("-bill.pdf")
+    assert row["document_type"] == "utility_invoice"
+
+
+def test_upload_evidence_route(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_upload(data, *, file_name, content_type, document_type, inventory_id, **k):
+        captured.update(data=data, file_name=file_name, document_type=document_type)
+        return {"id": "ev1", "file_name": file_name, "hash_sha256": "deadbeef"}
+
+    monkeypatch.setattr("db.scope1_store.upload_evidence", fake_upload)
+    resp = client.post(
+        "/api/scope1/evidence",
+        files={"file": ("bill.pdf", b"PDFBYTES", "application/pdf")},
+        data={"inventory_id": "inv1", "document_type": "utility_invoice"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "ev1"
+    assert captured["data"] == b"PDFBYTES"
+    assert captured["document_type"] == "utility_invoice"
+
+
+def test_record_create_writes_audit(monkeypatch) -> None:
+    logged: dict = {}
+    monkeypatch.setattr("db.scope1_store.create_record", lambda row, **k: {"id": "rec9", **row})
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
+
+    def fake_log(entity_table, entity_id, action, **k):
+        logged.update(table=entity_table, id=entity_id, action=action)
+        return {}
+
+    monkeypatch.setattr("db.scope1_store.log_change", fake_log)
+    resp = client.post(
+        "/api/scope1/records/stationary",
+        json={"inventory_id": "inv1", "emission_source_id": "src1",
+              "period_start": "2025-01-01", "period_end": "2025-12-31",
+              "fuel_or_activity": "natural_gas", "activity_value": 1000, "activity_unit": "therms"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert logged == {"table": "s1_emission_record", "id": "rec9", "action": "create"}
+
+
+def test_lock_writes_audit(monkeypatch) -> None:
+    logged: dict = {}
+    monkeypatch.setattr("db.scope1_store.lock_inventory", lambda inv, **k: {"id": inv, "locked": True})
+    monkeypatch.setattr(
+        "db.scope1_store.log_change",
+        lambda table, entity_id, action, **k: logged.update(table=table, action=action) or {},
+    )
+    resp = client.post("/api/scope1/inventories/inv1/lock", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert logged["table"] == "s1_inventory"
+    assert logged["action"] == "lock"
+
+
+def test_record_audit_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.scope1_store.list_change_log",
+        lambda table, entity_id, **k: [{"action": "create", "entity_id": entity_id}],
+    )
+    resp = client.get("/api/scope1/records/rec1/audit", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()[0]["action"] == "create"

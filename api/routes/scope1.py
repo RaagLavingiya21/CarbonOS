@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
@@ -112,8 +112,10 @@ def list_inventories(user: CurrentUser = Depends(get_current_user)) -> list[dict
 
 @router.post("/inventories/{inventory_id}/lock")
 def lock_inventory(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> dict:
-    return _guard(store.lock_inventory, inventory_id,
-                  access_token=user.access_token, user_id=user.user_id)
+    inv = _guard(store.lock_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "lock", user, entity_table="s1_inventory")
+    return inv
 
 
 @router.post("/consolidation/preview", response_model=ConsolidationPreviewResponse)
@@ -182,8 +184,11 @@ def list_sources(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
 @router.post("/sources/{source_id}/exclude")
 def exclude_source(source_id: str, req: ExcludeSourceRequest,
                    user: CurrentUser = Depends(get_current_user)) -> dict:
-    return _guard(store.exclude_source, source_id, req.rationale,
-                  access_token=user.access_token, user_id=user.user_id)
+    src = _guard(store.exclude_source, source_id, req.rationale,
+                 access_token=user.access_token, user_id=user.user_id)
+    _log(source_id, "exclude", user, entity_table="s1_emission_source",
+         field_changes={"rationale": req.rationale})
+    return src
 
 
 # --- Intake (records) -------------------------------------------------------
@@ -203,6 +208,7 @@ def create_stationary_record(req: StationaryRecordRequest,
     record = _guard(store.create_record, row,
                     access_token=user.access_token, user_id=user.user_id)
     _advance_collection(req, user)
+    _log(record["id"], "create", user)
     return record
 
 
@@ -223,7 +229,36 @@ def create_mobile_record(req: MobileRecordRequest,
     record = _guard(store.create_record, row,
                     access_token=user.access_token, user_id=user.user_id)
     _advance_collection(req, user)
+    _log(record["id"], "create", user)
     return record
+
+
+# --- Evidence + audit trail -------------------------------------------------
+
+@router.post("/evidence")
+async def upload_evidence(
+    file: UploadFile = File(...),
+    inventory_id: str | None = Form(None),
+    document_type: str = Form("manual_note"),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Upload a source document: SHA-256 computed server-side, bytes stored in the
+    private s1-evidence bucket. Returns the evidence id to attach to a record."""
+    data = await file.read()
+    return _guard(
+        store.upload_evidence, data,
+        file_name=file.filename or "evidence",
+        content_type=file.content_type,
+        document_type=document_type,
+        inventory_id=inventory_id,
+        access_token=user.access_token, user_id=user.user_id,
+    )
+
+
+@router.get("/records/{record_id}/audit")
+def record_audit(record_id: str, user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    return _guard(store.list_change_log, "s1_emission_record", record_id,
+                  access_token=user.access_token, user_id=user.user_id)
 
 
 # --- Data-collection orchestration ------------------------------------------
@@ -376,6 +411,22 @@ def _advance_collection(req, user: CurrentUser) -> None:
         },
         access_token=user.access_token,
         user_id=user.user_id,
+    )
+
+
+def _log(
+    entity_id: str,
+    action: str,
+    user: CurrentUser,
+    *,
+    entity_table: str = "s1_emission_record",
+    field_changes: dict | None = None,
+) -> None:
+    """Append an immutable audit-trail entry (best-effort; never fails the write)."""
+    store.log_change(
+        entity_table, entity_id, action,
+        field_changes=field_changes,
+        access_token=user.access_token, user_id=user.user_id,
     )
 
 

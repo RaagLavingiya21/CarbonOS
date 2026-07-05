@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   scope1Api,
+  type S1Evidence,
   type S1Record,
   type S1Source,
   type S1Trace,
@@ -248,6 +249,7 @@ function StationaryForm({
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("therms");
   const [tier, setTier] = useState("4");
+  const [evidence, setEvidence] = useState<S1Evidence | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit() {
@@ -263,6 +265,7 @@ function StationaryForm({
         activity_value: Number(value),
         activity_unit: unit,
         data_quality_tier: Number(tier),
+        evidence_document_id: evidence?.id ?? null,
       });
       onResult(record);
     } catch (err) {
@@ -300,11 +303,52 @@ function StationaryForm({
             <Selectable value={tier} onChange={setTier} options={["1", "2", "3", "4", "5"].map((t) => ({ value: t, label: `Tier ${t}` }))} />
           </Field>
         </div>
+        <EvidenceUploader inventoryId={inventoryId} evidence={evidence} onUploaded={setEvidence} onError={onError} />
         <Button type="button" onClick={submit} disabled={saving || !sourceId || !value}>
           Compute &amp; save
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function EvidenceUploader({
+  inventoryId,
+  evidence,
+  onUploaded,
+  onError,
+}: {
+  inventoryId: string;
+  evidence: S1Evidence | null;
+  onUploaded: (evidence: S1Evidence) => void;
+  onError: (message: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      onUploaded(await scope1Api.uploadEvidence(file, inventoryId));
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-small">
+      <Label className="shrink-0">Evidence (optional)</Label>
+      <input type="file" onChange={handleFile} disabled={uploading} className="text-caption" />
+      {uploading ? <span className="text-muted-foreground">Uploading…</span> : null}
+      {evidence ? (
+        <span className="text-muted-foreground">
+          Attached: {evidence.file_name} · sha256 {evidence.hash_sha256.slice(0, 12)}…
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -326,6 +370,7 @@ function MobileForm({
   const [unit, setUnit] = useState("gal");
   const [miles, setMiles] = useState("");
   const [modelYear, setModelYear] = useState("");
+  const [evidence, setEvidence] = useState<S1Evidence | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit() {
@@ -343,6 +388,7 @@ function MobileForm({
         miles: miles ? Number(miles) : null,
         model_year: modelYear ? Number(modelYear) : null,
         distance_activity: miles ? "gasoline_passenger_car" : null,
+        evidence_document_id: evidence?.id ?? null,
       });
       onResult(record);
     } catch (err) {
@@ -381,6 +427,7 @@ function MobileForm({
             <Input type="number" value={modelYear} onChange={(e) => setModelYear(e.target.value)} />
           </Field>
         </div>
+        <EvidenceUploader inventoryId={inventoryId} evidence={evidence} onUploaded={setEvidence} onError={onError} />
         <Button type="button" onClick={submit} disabled={saving || !sourceId || !quantity}>
           Compute &amp; save
         </Button>
