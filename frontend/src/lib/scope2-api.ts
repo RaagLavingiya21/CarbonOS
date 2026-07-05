@@ -6,10 +6,7 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ??
   "http://localhost:8000";
 
-export type Scope2Health = {
-  status: string;
-  module: string;
-};
+export type Scope2Health = { status: string; module: string };
 
 export type SiteTemplate = {
   site_type: string;
@@ -21,6 +18,76 @@ export type SiteTemplate = {
   typical_utilities: string[];
 };
 
+export type Site = {
+  site_id: number;
+  name: string;
+  site_type: string;
+  address: string | null;
+  zip: string | null;
+  country: string | null;
+  egrid_subregion: string | null;
+  iea_country: string | null;
+  ownership: string | null;
+  lease_type: string | null;
+  franchise_flag: boolean;
+  consolidation_approach: string | null;
+  status: string | null;
+};
+
+export type CreateSitePayload = {
+  name: string;
+  site_type: string;
+  address?: string;
+  zip?: string;
+  country?: string;
+  egrid_subregion?: string;
+  ownership?: string;
+  lease_type?: string;
+  franchise_flag?: boolean;
+};
+
+export type CsvBillPreview = {
+  site_ref: string;
+  period_start: string;
+  period_end: string;
+  canonical_mwh: number | null;
+  cost_usd: number | null;
+  is_cost_only: boolean;
+  is_estimated_read: boolean;
+  conversion_note: string | null;
+};
+
+export type CsvPreview = {
+  total_rows: number;
+  valid_count: number;
+  error_count: number;
+  bills: CsvBillPreview[];
+  errors: { row_index: number; message: string }[];
+};
+
+export type Calculation = {
+  calc_id: number;
+  reporting_year: number;
+  scope: string;
+  site_id: number | null;
+  location_based_kg_co2e: number;
+  market_based_kg_co2e: number;
+  consumption_mwh: number | null;
+  market_tier: string | null;
+  market_fallback_flagged: boolean;
+  created_at: string | null;
+};
+
+export type RunCalculationResult = {
+  calc_id: number;
+  reporting_year: number;
+  location_based_kg_co2e: number;
+  market_based_kg_co2e: number;
+  consumption_mwh: number;
+  site_count: number;
+  market_fallback_site_count: number;
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -28,20 +95,52 @@ async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-async function request<T>(path: string): Promise<T> {
+async function request<T>(
+  path: string,
+  options: { method?: string; body?: unknown } = {},
+): Promise<T> {
   const headers = new Headers({ "Content-Type": "application/json" });
   const token = await getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`${BACKEND_URL}${path}`, { headers });
+  const response = await fetch(`${BACKEND_URL}${path}`, {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
   if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
+    let detail = response.statusText;
+    try {
+      detail = (await response.json())?.detail ?? detail;
+    } catch {
+      /* non-JSON error body */
+    }
     throw new Error(`Scope 2 API ${response.status}: ${detail}`);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export const scope2Api = {
   health: () => request<Scope2Health>("/api/scope2/health"),
   siteTemplates: () => request<SiteTemplate[]>("/api/scope2/site-templates"),
+
+  listSites: () => request<Site[]>("/api/scope2/sites"),
+  createSite: (payload: CreateSitePayload) =>
+    request<Site>("/api/scope2/sites", { method: "POST", body: payload }),
+  deleteSite: (siteId: number) =>
+    request<void>(`/api/scope2/sites/${siteId}`, { method: "DELETE" }),
+
+  previewCsv: (csvText: string, mapping: Record<string, string>) =>
+    request<CsvPreview>("/api/scope2/bills/preview-csv", {
+      method: "POST",
+      body: { csv_text: csvText, mapping },
+    }),
+
+  runCalculation: (reportingYear: number) =>
+    request<RunCalculationResult>("/api/scope2/calculations", {
+      method: "POST",
+      body: { reporting_year: reportingYear },
+    }),
+  listCalculations: () => request<Calculation[]>("/api/scope2/calculations"),
 };
