@@ -29,6 +29,8 @@ from api.routes import (
     requests,
     rollup,
     scenarios,
+    scope2_calc,
+    scope2_ingestion,
     scope2_sites,
     shares,
 )
@@ -173,6 +175,8 @@ app.include_router(scenarios.router)
 
 # Scope 2 ("Grid") module — isolated; shares only auth + app instance.
 app.include_router(scope2_sites.router)
+app.include_router(scope2_ingestion.router)
+app.include_router(scope2_calc.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
