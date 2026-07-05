@@ -1,0 +1,116 @@
+# Scope 3 Platform — Program Overview & Build Sequencing
+
+**Branch:** `feature/scope3-mvp`
+**Role:** Top-level map over the whole `scope3-gap-analysis/` bundle. Read this first; it ties the gap analysis, the roadmap, and the per-epic implementation plans into one dependency-ordered build program.
+
+---
+
+## 1. The bundle (reading order)
+
+| Doc | What it answers |
+|---|---|
+| **00-program-overview.md** *(this)* | The whole program on one screen: epics, dependencies, critical path, sequencing. |
+| `01-executive-gap-summary.md` | What CarbonOS is vs. the research blueprint, and the headline finding (right engines, wrong altitude). |
+| `02-coverage-matrix.md` | The 63 research units, unit-by-unit: Have / Partial / Gap, with code evidence. |
+| `03-enhancement-roadmap.md` | The 9 enhancement epics (A–I) with reuse, effort, and the phased path. |
+| `04-epic-a-implementation-plan.md` | **Build-ready:** corporate 15-category inventory backbone. |
+| `05-epic-b-implementation-plan.md` | **Build-ready:** inbound request → questionnaire answer. |
+| `06-epic-c-implementation-plan.md` | **Build-ready:** driver & obligation front door. |
+
+The one-line thesis carried through all of them: **CarbonOS already owns the hard, defensible product-level engines (spend→factor classifier, supplier primary-data loop, versioned auditable model, PACT publish, Cat-1 rollup); the program builds the corporate Scope 3 backbone *underneath* them — reuse, not rebuild.**
+
+---
+
+## 2. The program on one screen
+
+Effort: S≈days, M≈1–2wk, L≈3–5wk, XL≈6wk+ (one small squad).
+
+| Epic | Name | Serves (JTBD) | Phase | Effort | Depends on | Reuses (existing CarbonOS) | Plan |
+|---|---|---|---|---|---|---|---|
+| **A** | Corporate 15-cat inventory backbone | JTBD-2 defensible number | Near | XL | — (foundation) | `ef_lookup` classifier, `footprint` calc, versioning, `rollup` | ✅ `04` |
+| **B** | Inbound request → questionnaire answer | JTBD-1 answer the customer | Near | L–XL | **A** | `pcf_requests` inbox, gap-analyzer categories, RAG advisor | ✅ `05` |
+| **C** | Driver & obligation front door | JTBD-0 is this my problem | Near | M–L | A (only C4) | gap-analyzer `CompanyProfile`+`assess_materiality`, RAG advisor | ✅ `06` |
+| **D** | SBTi + FLAG target-setting | JTBD-4 targets accepted | Mid | L | **A** | inventory as coverage denominator; Target entity | roadmap `03` |
+| **E** | Progress tracking + base-year recalc | JTBD-7 prove it was real | Mid | M–L | A, D | product versioning/recalc, hotspots | roadmap `03` |
+| **F** | Supplier engagement at program scale | JTBD-5 move the supply chain | Mid | M | existing copilot loop (+A) | `copilot` primary-data loop, supplier ranking | roadmap `03` |
+| **G** | Formal disclosure (ESRS/SB253/iXBRL) | JTBD-6 the one artifact | Long | L–XL | **A** | inventory, `audit_log`/citations lineage | roadmap `03` |
+| **H** | Cat-11 use-phase + category depth | product depth | Long | L | product PCF (+A) | BOM/SKU model, scenario engine | roadmap `03` |
+| **I** | Levers / MAC / claims / decisions | JTBD-3 + decisions | Long | L | A, H | product scenario engine, supplier ranking | roadmap `03` |
+
+Detailed build-ready plans exist for the near-term trio (A/B/C). D–I are specified at epic granularity in `03`; promote each to a full plan when it's next in the queue.
+
+---
+
+## 3. Cross-epic critical path (the dependency spine)
+
+```
+        ┌──────────────── Phase 0 (inside A): shared data model + EF library + versioning
+        ▼
+   A: corporate inventory ──┬──► B: questionnaire answer   ┐
+   (XL, 🔴 spend classifier)│    (L–XL, 🔴 detect + map)   ├─► MVP WIN CONDITION
+                            │                              ┘   (request → baseline → submitted answer, <2wk)
+   C: obligation front door │  (M–L; C1–C3 parallel, C4 needs A)
+                            │
+                            ├──► D: targets ──► E: progress/recalc
+                            ├──► G: formal disclosure
+                            └──► H: category depth ──► I: levers/claims
+
+   F: supplier program scale  ── mostly parallel (reuses the existing copilot loop; A sharpens corporate hotspots)
+```
+
+- **The MVP is A + B** (with C as the funnel on top). Everything mid/long-term hangs off A's corporate inventory.
+- **Three 🔴 classifiers sit on the critical path** and are the schedule risk: A3 (spend→category), B3 (framework detection), B4 (question→datapoint mapping). **Prototype all three against labeled data before their surrounding UI** — this is the research's standing instruction and it's repeated in each plan.
+- **C1–C3, F, and H can start in parallel** with A/B — they don't block the MVP and use largely independent code.
+
+---
+
+## 4. Phasing & win conditions
+
+| Phase | Epics | Delivers | Win condition |
+|---|---|---|---|
+| **Near-term** | A, B, C | The research's true MVP | *A 2-person team goes from a retailer/CDP/EcoVadis request to a submitted, credible answer in <2 weeks, no consultant* (`research/synthesis.md`). |
+| **Mid-term** | D, E, F | Annual system of record | Targets set, progress tracked year-over-year, supplier data compounding — the platform becomes the thing they renew. |
+| **Long-term** | G, H, I | Full-platform parity + differentiation | Audited disclosure output, product/use-phase depth, and decision/claims support — competes head-on with Watershed/Sweep while keeping the product-PCF moat. |
+
+---
+
+## 5. Cross-cutting engineering concerns (apply across epics)
+
+1. **Prototype the 🔴 classifiers first.** A3, B3, B4 — labeled eval fixtures before UI. Product trust = classifier accuracy.
+2. **Numbers are looked up, never generated.** The no-fabrication discipline (Epic B §1, Epic C §1) applies everywhere the LLM touches a figure — extends the existing advisor "no fabricated numbers" rubric to every output. Narrative is generated + grounded; numbers are resolved from datapoints with citations.
+3. **Moving standards are data, not code, and staffed.** Three drift surfaces need an ongoing maintenance cadence, not a one-time build: the **obligation ruleset** (C — dated versioned YAML), the **questionnaire framework templates** (B — yearly format drift), and the **disclosure formats** (G — SB253 final reg ~end-2026, ESRS taxonomy). Each records the version it used.
+4. **Honest uncertainty.** Where the research says "unconfirmed / in flux" (SBTi V2.0 net-zero %, SB253 Scope 3 format, SB261 injunction, EU GCD suspended), the product surfaces a watch-item — never a fabricated fixed value. Enforced as eval invariants.
+5. **Build-vs-buy (from `research/build-plan.md`).** BUY/license the EF datasets and grid factors; INTEGRATE CDP/EcoVadis/ERP connectors and an iXBRL tagging lib; BUY cascade-exposure enrichment data. **BUILD the classifiers** (A3, B3, B4) — that's the defensible IP.
+6. **Shared foundation is built once.** The corporate data model (SpendRecord, InventoryVersion, Target, Customer/Request) and the EF library/versioning layer underpin every epic — Epic A stands most of it up; later epics extend, don't duplicate.
+
+---
+
+## 6. Team-shaped sequencing (small squad)
+
+1. **Weeks 1–6:** Epic A foundation — data model + EF library + spend ingestion (A1–A2), and **prototype the A3 spend classifier against a labeled GL set** (the make-or-break). In parallel, start Epic C's independent front-door pieces (C1–C3).
+2. **Weeks 6–12:** finish A (calc + Cat-1 reconciliation + lock/versioning, A4–A5) → a working corporate inventory. Begin Epic B and **prototype B3/B4 classifiers**.
+3. **Weeks 12–18:** finish B (assembly → export) → ship the MVP: request → baseline → submitted answer. **Win condition met.** Wire C4 (SBTi readiness) onto the now-real inventory.
+4. **Mid-term:** D (targets) → E (progress), and scale F (supplier program) off the existing loop.
+5. **Long-term:** G (disclosure), H (Cat-11/category depth), then I (levers/MAC/claims — claims last, given EmpCo legal exposure live 27 Sep 2026).
+
+---
+
+## 7. Decisions that gate the program (owner: product)
+
+These are forks the plans deliberately do **not** settle — resolve before the dependent epic:
+
+| Decision | Gates | Note |
+|---|---|---|
+| Spend-only vs. add an activity-based path | H (and P.2.3.b) | A/B/C are spend-based and unaffected. "Screen then deepen" implies *some* activity path eventually; decide before H. |
+| Reverse the "no corporate inventory / no compliance report" non-goals | A, G | Full-platform aspiration requires this; already implicitly accepted by planning A and G. Confirm it's a deliberate GTM move. |
+| Green-claims scope | I | EmpCo in force 27 Sep 2026; GCD suspended; FTC 2012. Research says build carefully and last — recommend deferring I's claims features. |
+| Standards-currency staffing | C, B, G | Ongoing maintenance headcount for the three drift surfaces (§5.3), not a one-time cost. |
+
+---
+
+## 8. Status
+
+- ✅ Gap analysis complete (`01`–`03`).
+- ✅ Near-term MVP trio planned build-ready (`04` A, `05` B, `06` C), committed on `feature/scope3-mvp`.
+- ⏳ Mid/long epics (D–I) specified at epic granularity in `03`; promote to full plans as they reach the queue.
+- 🔜 Suggested next planning targets: **D → E → F** (mid-term, the annual-system-of-record layer).
