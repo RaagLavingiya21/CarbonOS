@@ -89,6 +89,22 @@ class ExcludeSourceRequest(BaseModel):
     rationale: str
 
 
+# --- Data-collection orchestration ------------------------------------------
+
+class AssignOwnerRequest(BaseModel):
+    data_owner_id: str
+
+
+class CollectionStatusRequest(BaseModel):
+    inventory_id: str
+    emission_source_id: str
+    period_start: str
+    period_end: str
+    status: str                        # missing|requested|in_progress|received|entered|verified
+    data_owner_id: str | None = None
+    notes: str | None = None
+
+
 # --- Intake (records) -------------------------------------------------------
 
 class StationaryRecordRequest(BaseModel):

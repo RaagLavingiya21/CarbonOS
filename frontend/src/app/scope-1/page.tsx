@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Database, Flame, Settings2, FileText } from "lucide-react";
+import { Database, Flame, ListChecks, Settings2, FileText } from "lucide-react";
 
 import { MetricCard } from "@/components/data/MetricCard";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
@@ -81,6 +81,12 @@ export default function Scope1Dashboard() {
           <Link href="/scope-1/setup">
             <Settings2 className="h-4 w-4" />
             Set up inventory
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/scope-1/collection">
+            <ListChecks className="h-4 w-4" />
+            Data collection
           </Link>
         </Button>
         <Button asChild variant="outline">

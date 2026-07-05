@@ -71,6 +71,22 @@ def create_data_owner(data: dict, *, access_token: str, user_id: str) -> dict:
     return client.table("s1_data_owner").insert(row).execute().data[0]
 
 
+def list_data_owners(*, access_token: str, user_id: str) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_data_owner").select("*")
+        .eq("org_id", org_id).order("created_at").execute().data
+    )
+
+
+def list_source_data_owners(*, access_token: str, user_id: str) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_source_data_owner").select("*")
+        .eq("org_id", org_id).execute().data
+    )
+
+
 def assign_source_owner(
     emission_source_id: str, data_owner_id: str, *, access_token: str, user_id: str
 ) -> dict:

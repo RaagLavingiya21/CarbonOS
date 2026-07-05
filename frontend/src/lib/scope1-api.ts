@@ -127,6 +127,23 @@ export type S1Trace = {
   evidence_document_id?: string | null;
 };
 
+export type S1DataOwner = {
+  id: string;
+  name: string;
+  email?: string | null;
+  role_title?: string | null;
+  owner_type?: string;
+};
+
+export type S1CollectionStatus = {
+  emission_source_id: string;
+  status: string;
+  data_owner_id?: string | null;
+  period_start?: string;
+  period_end?: string;
+  notes?: string | null;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
@@ -137,6 +154,24 @@ export const scope1Api = {
   listFacilities: () => request<S1Facility[]>("/api/scope1/facilities"),
   createFacility: (body: Record<string, unknown>) =>
     request<S1Facility>("/api/scope1/facilities", { method: "POST", body: JSON.stringify(body) }),
+
+  listDataOwners: () => request<S1DataOwner[]>("/api/scope1/data-owners"),
+  createDataOwner: (body: Record<string, unknown>) =>
+    request<S1DataOwner>("/api/scope1/data-owners", { method: "POST", body: JSON.stringify(body) }),
+  assignOwner: (sourceId: string, dataOwnerId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/sources/${sourceId}/assign-owner`, {
+      method: "POST",
+      body: JSON.stringify({ data_owner_id: dataOwnerId }),
+    }),
+  initCollection: (inventoryId: string) =>
+    request<S1CollectionStatus[]>(`/api/scope1/inventories/${inventoryId}/collection/init`, {
+      method: "POST",
+    }),
+  setCollectionStatus: (body: Record<string, unknown>) =>
+    request<S1CollectionStatus>("/api/scope1/collection/status", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   listInventories: () => request<S1Inventory[]>("/api/scope1/inventories"),
   createInventory: (body: Record<string, unknown>) =>

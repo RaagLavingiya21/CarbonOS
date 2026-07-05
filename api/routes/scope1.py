@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
+    AssignOwnerRequest,
+    CollectionStatusRequest,
     ConsolidationPreviewRequest,
     ConsolidationPreviewResponse,
     CreateDataOwnerRequest,
@@ -80,6 +82,18 @@ def list_facilities(user: CurrentUser = Depends(get_current_user)) -> list[dict]
 @router.post("/data-owners")
 def create_data_owner(req: CreateDataOwnerRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
     return _guard(store.create_data_owner, req.model_dump(exclude_none=True),
+                  access_token=user.access_token, user_id=user.user_id)
+
+
+@router.get("/data-owners")
+def list_data_owners(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    return _guard(store.list_data_owners, access_token=user.access_token, user_id=user.user_id)
+
+
+@router.post("/sources/{source_id}/assign-owner")
+def assign_owner(source_id: str, req: AssignOwnerRequest,
+                 user: CurrentUser = Depends(get_current_user)) -> dict:
+    return _guard(store.assign_source_owner, source_id, req.data_owner_id,
                   access_token=user.access_token, user_id=user.user_id)
 
 
@@ -186,8 +200,10 @@ def create_stationary_record(req: StationaryRecordRequest,
     except MissingEmissionFactor as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = _record_row(req, result, req.activity_value, req.activity_unit)
-    return _guard(store.create_record, row,
-                  access_token=user.access_token, user_id=user.user_id)
+    record = _guard(store.create_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _advance_collection(req, user)
+    return record
 
 
 @router.post("/records/mobile")
@@ -204,7 +220,53 @@ def create_mobile_record(req: MobileRecordRequest,
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = _record_row(req, result, req.fuel_quantity, req.fuel_unit)
-    return _guard(store.create_record, row,
+    record = _guard(store.create_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _advance_collection(req, user)
+    return record
+
+
+# --- Data-collection orchestration ------------------------------------------
+
+@router.post("/inventories/{inventory_id}/collection/init")
+def init_collection(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    """Create 'missing' collection rows for every in-scope source in the inventory period."""
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+    sources = _guard(store.list_sources, access_token=user.access_token, user_id=user.user_id)
+    existing = {
+        s["emission_source_id"]
+        for s in _guard(store.list_collection_status, inventory_id,
+                        access_token=user.access_token, user_id=user.user_id)
+    }
+    created: list[dict] = []
+    for src in sources:
+        if src.get("is_excluded") or src["id"] in existing:
+            continue
+        created.append(
+            _guard(
+                store.upsert_collection_status,
+                {
+                    "inventory_id": inventory_id,
+                    "emission_source_id": src["id"],
+                    "period_start": inv["period_start"],
+                    "period_end": inv["period_end"],
+                    "status": "missing",
+                },
+                access_token=user.access_token,
+                user_id=user.user_id,
+            )
+        )
+    return created
+
+
+@router.post("/collection/status")
+def set_collection_status(
+    req: CollectionStatusRequest, user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    return _guard(store.upsert_collection_status, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
 
@@ -300,6 +362,22 @@ def record_trace(
 
 
 # --- Internal helpers -------------------------------------------------------
+
+def _advance_collection(req, user: CurrentUser) -> None:
+    """Auto-advance a source-period's collection status to 'entered' after a
+    record is saved, so the readiness meter reflects data as it arrives."""
+    store.upsert_collection_status(
+        {
+            "inventory_id": req.inventory_id,
+            "emission_source_id": req.emission_source_id,
+            "period_start": req.period_start,
+            "period_end": req.period_end,
+            "status": "entered",
+        },
+        access_token=user.access_token,
+        user_id=user.user_id,
+    )
+
 
 def _record_row(req, result, activity_value: float, activity_unit: str) -> dict:
     gm = result.gas_masses

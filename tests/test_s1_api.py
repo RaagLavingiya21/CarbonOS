@@ -49,6 +49,7 @@ def test_stationary_record_computes_gas_masses(monkeypatch) -> None:
         return {"id": "rec1", **row}
 
     monkeypatch.setattr("db.scope1_store.create_record", fake_create_record)
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
     resp = client.post(
         "/api/scope1/records/stationary",
         json={
@@ -121,3 +122,107 @@ def test_report_applies_consolidation_multiplier(monkeypatch) -> None:
     assert resp.status_code == 200
     # 1000 kg CO2 x 0.40 = 0.4 tCO2e
     assert resp.json()["total_scope1_tco2e"] == 0.4
+
+
+# --- Data-collection orchestration ------------------------------------------
+
+def test_assign_owner(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.scope1_store.assign_source_owner",
+        lambda source_id, owner_id, **k: {"emission_source_id": source_id, "data_owner_id": owner_id},
+    )
+    resp = client.post(
+        "/api/scope1/sources/src1/assign-owner",
+        json={"data_owner_id": "owner1"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data_owner_id"] == "owner1"
+
+
+def test_collection_init_only_covers_in_scope_untracked_sources(monkeypatch) -> None:
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        "db.scope1_store.get_inventory",
+        lambda inv, **k: {"id": inv, "period_start": "2025-01-01", "period_end": "2025-12-31"},
+    )
+    monkeypatch.setattr(
+        "db.scope1_store.list_sources",
+        lambda **k: [
+            {"id": "src1", "is_excluded": False},
+            {"id": "src2", "is_excluded": True},          # excluded -> skipped
+            {"id": "src3", "is_excluded": False},          # already tracked -> skipped
+        ],
+    )
+    monkeypatch.setattr(
+        "db.scope1_store.list_collection_status",
+        lambda inv, **k: [{"emission_source_id": "src3", "status": "missing"}],
+    )
+
+    def fake_upsert(row, **k):
+        captured.append(row)
+        return row
+
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", fake_upsert)
+
+    resp = client.post("/api/scope1/inventories/inv1/collection/init", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert [r["emission_source_id"] for r in captured] == ["src1"]
+    assert captured[0]["status"] == "missing"
+
+
+def test_set_collection_status(monkeypatch) -> None:
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
+    resp = client.post(
+        "/api/scope1/collection/status",
+        json={
+            "inventory_id": "inv1", "emission_source_id": "src1",
+            "period_start": "2025-01-01", "period_end": "2025-12-31",
+            "status": "received", "data_owner_id": "owner1",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "received"
+
+
+def test_record_creation_auto_advances_collection(monkeypatch) -> None:
+    advanced: dict = {}
+    monkeypatch.setattr("db.scope1_store.create_record", lambda row, **k: {"id": "rec1", **row})
+
+    def fake_upsert(row, **k):
+        advanced.update(row)
+        return row
+
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", fake_upsert)
+    resp = client.post(
+        "/api/scope1/records/stationary",
+        json={
+            "inventory_id": "inv1", "emission_source_id": "src1",
+            "period_start": "2025-01-01", "period_end": "2025-12-31",
+            "fuel_or_activity": "natural_gas", "activity_value": 1000, "activity_unit": "therms",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert advanced["status"] == "entered"
+    assert advanced["emission_source_id"] == "src1"
+
+
+def test_readiness_counts_completeness(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.scope1_store.list_collection_status",
+        lambda inv, **k: [
+            {"emission_source_id": "s1", "status": "entered"},
+            {"emission_source_id": "s2", "status": "verified"},
+            {"emission_source_id": "s3", "status": "missing"},
+            {"emission_source_id": "s4", "status": "requested"},
+        ],
+    )
+    resp = client.get("/api/scope1/inventories/inv1/readiness", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 4
+    assert body["complete"] == 2          # entered + verified
+    assert body["completeness_pct"] == 50.0
+    assert body["by_status"]["missing"] == 1
