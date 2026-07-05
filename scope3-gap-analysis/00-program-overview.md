@@ -33,11 +33,11 @@ Effort: S≈days, M≈1–2wk, L≈3–5wk, XL≈6wk+ (one small squad).
 | **D** | SBTi + FLAG target-setting | JTBD-4 targets accepted | Mid | L | **A** (+ Epic C readiness) | inventory as coverage denominator; Target entity | ✅ `07` |
 | **E** | Progress tracking + base-year recalc | JTBD-7 prove it was real | Mid | M–L | A, D | product versioning/recalc, hotspots | ✅ `08` |
 | **F** | Supplier engagement at program scale | JTBD-5 move the supply chain | Mid | M | existing copilot loop (+A) | `copilot` primary-data loop, supplier ranking | ✅ `09` |
-| **G** | Formal disclosure (ESRS/SB253/iXBRL) | JTBD-6 the one artifact | Long | L–XL | **A** | inventory, `audit_log`/citations lineage | roadmap `03` |
-| **H** | Cat-11 use-phase + category depth | product depth | Long | L | product PCF (+A) | BOM/SKU model, scenario engine | roadmap `03` |
-| **I** | Levers / MAC / claims / decisions | JTBD-3 + decisions | Long | L | A, H | product scenario engine, supplier ranking | roadmap `03` |
+| **G** | Formal disclosure (ESRS/SB253/iXBRL) | JTBD-6 the one artifact | Long | L–XL | **A** | inventory, `audit_log`/citations lineage, `exchange/` serialize | ✅ `10` |
+| **H** | Cat-11 use-phase + category depth | product depth | Long | L | product PCF (+A) | BOM/SKU model, scenario engine | ✅ `11` |
+| **I** | Levers / MAC / claims / decisions | JTBD-3 + decisions | Long | L | A, H | product scenario engine, supplier ranking | ✅ `12` |
 
-Detailed build-ready plans exist for the near-term trio (A/B/C) and the mid-term layer (D/E/F). G–I are specified at epic granularity in `03`; promote each to a full plan when it's next in the queue.
+All nine epics (A–I) now have detailed build-ready plans (`04`–`12`). The program is fully specified end-to-end.
 
 ---
 
@@ -113,5 +113,6 @@ These are forks the plans deliberately do **not** settle — resolve before the 
 - ✅ Gap analysis complete (`01`–`03`).
 - ✅ Near-term MVP trio planned build-ready (`04` A, `05` B, `06` C), committed on `feature/scope3-mvp`.
 - ✅ Mid-term layer planned build-ready (`07` D, `08` E, `09` F) — targets, progress, supplier scale.
-- ⏳ Long-term epics (G–I) specified at epic granularity in `03`; promote to full plans as they reach the queue.
-- 🔜 Suggested next planning targets: **G → H → I** (long-term: formal disclosure, category depth, levers/claims).
+- ✅ Long-term layer planned build-ready (`10` G, `11` H, `12` I) — disclosure, category depth, levers/claims.
+- 🟢 **All nine epics (A–I) are specified.** The program is planning-complete end-to-end.
+- 🔜 Next steps are execution, not planning: prototype the three 🔴 classifiers (A3, B3, B4); resolve the §7 gating decisions; begin Epic A. (And the pending `.docx` conversion of gap docs `01`–`03`.)
