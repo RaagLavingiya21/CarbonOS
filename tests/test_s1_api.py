@@ -312,3 +312,48 @@ def test_record_audit_endpoint(monkeypatch) -> None:
     resp = client.get("/api/scope1/records/rec1/audit", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()[0]["action"] == "create"
+
+
+# --- CSV bulk intake --------------------------------------------------------
+
+def test_csv_bulk_intake(monkeypatch) -> None:
+    created: list[dict] = []
+    monkeypatch.setattr(
+        "db.scope1_store.get_inventory",
+        lambda inv, **k: {"id": inv, "period_start": "2025-01-01", "period_end": "2025-12-31"},
+    )
+    monkeypatch.setattr(
+        "db.scope1_store.list_sources",
+        lambda **k: [
+            {"id": "srcA", "source_name": "Boiler 1"},
+            {"id": "srcB", "source_name": "Van"},
+        ],
+    )
+
+    def fake_create(row, **k):
+        created.append(row)
+        return {"id": f"rec{len(created)}", **row}
+
+    monkeypatch.setattr("db.scope1_store.create_record", fake_create)
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
+    monkeypatch.setattr("db.scope1_store.log_change", lambda *a, **k: {})
+
+    csv_text = (
+        "source_name,category,fuel,amount,unit\n"
+        "Boiler 1,stationary,natural_gas,1000,therms\n"    # ok
+        "Van,mobile,motor_gasoline,400,gal\n"              # ok
+        "Ghost,stationary,natural_gas,10,therms\n"         # unknown source
+        "Boiler 1,stationary,unobtanium,10,mmBtu\n"        # missing EF
+    )
+    resp = client.post(
+        "/api/scope1/records/csv",
+        files={"file": ("data.csv", csv_text.encode(), "text/csv")},
+        data={"inventory_id": "inv1"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created"] == 2
+    assert len(body["row_errors"]) == 2                    # unknown source + missing EF
+    assert created[0]["kg_co2_fossil"] == 5306.0           # NG computed through the shared path
+    assert created[0]["activity_data_source"] == "csv"

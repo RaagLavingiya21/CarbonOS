@@ -23,7 +23,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Ruff lint
-        run: ruff check --ignore E501 evals tests calc parsing factors api llm copilot gap_analyzer rag db observability s1_calc s1_factors s1_consolidation s1_reporting
+        run: ruff check --ignore E501 evals tests calc parsing factors api llm copilot gap_analyzer rag db observability s1_calc s1_factors s1_consolidation s1_reporting s1_intake
 
       - name: Unit tests
         env:

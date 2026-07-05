@@ -35,6 +35,7 @@ from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
+from s1_intake import parse_intake_csv
 from s1_reporting import ReportRecord, build_inventory_report, trace_record
 
 router = APIRouter(prefix="/api/scope1", tags=["scope1"])
@@ -197,40 +198,59 @@ def exclude_source(source_id: str, req: ExcludeSourceRequest,
 def create_stationary_record(req: StationaryRecordRequest,
                              user: CurrentUser = Depends(get_current_user)) -> dict:
     try:
-        result = calculate_stationary(
-            req.fuel_or_activity, req.activity_value, req.activity_unit, _library(),
-            biogenic=req.biogenic, hhv_override=req.hhv_override,
-            data_quality_tier=req.data_quality_tier,
-        )
+        return _persist_stationary(req, user)
     except MissingEmissionFactor as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    row = _record_row(req, result, req.activity_value, req.activity_unit)
-    record = _guard(store.create_record, row,
-                    access_token=user.access_token, user_id=user.user_id)
-    _advance_collection(req, user)
-    _log(record["id"], "create", user)
-    return record
 
 
 @router.post("/records/mobile")
 def create_mobile_record(req: MobileRecordRequest,
                          user: CurrentUser = Depends(get_current_user)) -> dict:
     try:
-        result = calculate_mobile(
-            req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(),
-            miles=req.miles, model_year=req.model_year,
-            distance_activity=req.distance_activity, data_quality_tier=req.data_quality_tier,
-        )
-    except MissingEmissionFactor as exc:
+        return _persist_mobile(req, user)
+    except (MissingEmissionFactor, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    row = _record_row(req, result, req.fuel_quantity, req.fuel_unit)
-    record = _guard(store.create_record, row,
-                    access_token=user.access_token, user_id=user.user_id)
-    _advance_collection(req, user)
-    _log(record["id"], "create", user)
-    return record
+
+
+@router.post("/records/csv")
+async def create_records_csv(
+    inventory_id: str = Form(...),
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Bulk-create records from a CSV. Each row is calculated + persisted with
+    evidence-less Tier data; row-level errors are reported without aborting."""
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+
+    parsed = parse_intake_csv(await file.read())
+    sources = {s["source_name"]: s for s in _guard(
+        store.list_sources, access_token=user.access_token, user_id=user.user_id)}
+
+    created: list[str] = []
+    row_errors: list[dict] = []
+    for r in parsed.rows:
+        if not r.is_valid:
+            row_errors.append({"row": r.row_index, "errors": r.errors})
+            continue
+        src = sources.get(r.source_name)
+        if src is None:
+            row_errors.append({"row": r.row_index, "errors": [f"unknown source '{r.source_name}'"]})
+            continue
+        try:
+            record = _persist_csv_row(r, src["id"], inv, user)
+            created.append(record["id"])
+        except (MissingEmissionFactor, ValueError) as exc:
+            row_errors.append({"row": r.row_index, "errors": [str(exc)]})
+
+    return {
+        "created": len(created),
+        "record_ids": created,
+        "row_errors": row_errors,
+        "file_errors": parsed.file_errors,
+    }
 
 
 # --- Evidence + audit trail -------------------------------------------------
@@ -397,6 +417,65 @@ def record_trace(
 
 
 # --- Internal helpers -------------------------------------------------------
+
+def _persist_stationary(req: StationaryRecordRequest, user: CurrentUser) -> dict:
+    """Calculate + persist one stationary record (shared by single + CSV intake)."""
+    result = calculate_stationary(
+        req.fuel_or_activity, req.activity_value, req.activity_unit, _library(),
+        biogenic=req.biogenic, hhv_override=req.hhv_override,
+        data_quality_tier=req.data_quality_tier,
+    )
+    row = _record_row(req, result, req.activity_value, req.activity_unit)
+    record = _guard(store.create_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _advance_collection(req, user)
+    _log(record["id"], "create", user)
+    return record
+
+
+def _persist_mobile(req: MobileRecordRequest, user: CurrentUser) -> dict:
+    """Calculate + persist one mobile record (shared by single + CSV intake)."""
+    result = calculate_mobile(
+        req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(),
+        miles=req.miles, model_year=req.model_year,
+        distance_activity=req.distance_activity, data_quality_tier=req.data_quality_tier,
+    )
+    row = _record_row(req, result, req.fuel_quantity, req.fuel_unit)
+    record = _guard(store.create_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _advance_collection(req, user)
+    _log(record["id"], "create", user)
+    return record
+
+
+def _persist_csv_row(row, source_id: str, inv: dict, user: CurrentUser) -> dict:
+    """Build the matching record request from a parsed CSV row and persist it."""
+    common = {
+        "inventory_id": inv["id"],
+        "emission_source_id": source_id,
+        "period_start": inv["period_start"],
+        "period_end": inv["period_end"],
+        "data_quality_tier": row.tier,
+        "activity_data_source": "csv",
+    }
+    if row.category == "stationary":
+        return _persist_stationary(
+            StationaryRecordRequest(
+                fuel_or_activity=row.fuel, activity_value=row.amount,
+                activity_unit=row.unit, biogenic=row.biogenic, **common,
+            ),
+            user,
+        )
+    return _persist_mobile(
+        MobileRecordRequest(
+            fuel_or_activity=row.fuel, fuel_quantity=row.amount, fuel_unit=row.unit,
+            miles=row.miles, model_year=row.model_year,
+            distance_activity="gasoline_passenger_car" if row.miles else None,
+            **common,
+        ),
+        user,
+    )
+
 
 def _advance_collection(req, user: CurrentUser) -> None:
     """Auto-advance a source-period's collection status to 'entered' after a

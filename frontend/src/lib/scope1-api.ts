@@ -160,6 +160,13 @@ export type S1AuditEntry = {
   actor_id?: string | null;
 };
 
+export type S1CsvResult = {
+  created: number;
+  record_ids: string[];
+  row_errors: Array<{ row: number; errors: string[] }>;
+  file_errors: string[];
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
@@ -240,6 +247,22 @@ export const scope1Api = {
       throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
     }
     return response.json() as Promise<S1Evidence>;
+  },
+
+  uploadRecordsCsv: async (inventoryId: string, file: File): Promise<S1CsvResult> => {
+    const form = new FormData();
+    form.append("inventory_id", inventoryId);
+    form.append("file", file);
+    const response = await fetch(`${BACKEND_URL}/api/scope1/records/csv`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await accessToken()}` },
+      body: form,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<S1CsvResult>;
   },
 
   readiness: (inventoryId: string) =>

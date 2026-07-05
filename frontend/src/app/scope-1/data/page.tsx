@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   scope1Api,
+  type S1CsvResult,
   type S1Evidence,
   type S1Record,
   type S1Source,
@@ -228,7 +229,75 @@ export default function Scope1DataPage() {
 
       {result ? <ResultPanel record={result} onTrace={showTrace} /> : null}
       {trace ? <TracePanel trace={trace} /> : null}
+
+      {activeId ? <CsvUploadCard inventoryId={activeId} onError={setError} /> : null}
     </div>
+  );
+}
+
+function CsvUploadCard({
+  inventoryId,
+  onError,
+}: {
+  inventoryId: string;
+  onError: (message: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<S1CsvResult | null>(null);
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      setResult(await scope1Api.uploadRecordsCsv(inventoryId, file));
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Bulk upload (CSV)</CardTitle>
+        <CardDescription>
+          Columns: source_name, category (stationary|mobile), fuel, amount, unit — optional
+          miles, model_year, tier, biogenic. Each row is calculated on import.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <input type="file" accept=".csv" onChange={handleFile} disabled={uploading} className="text-small" />
+        {uploading ? <p className="text-small text-muted-foreground">Importing…</p> : null}
+        {result ? (
+          <div className="space-y-2 text-small">
+            <p>
+              <Badge variant="low">{result.created} imported</Badge>
+              {result.row_errors.length > 0 ? (
+                <Badge variant="high" className="ml-2">
+                  {result.row_errors.length} skipped
+                </Badge>
+              ) : null}
+            </p>
+            {result.file_errors.map((e, index) => (
+              <p key={`f${index}`} className="text-data-high">{e}</p>
+            ))}
+            {result.row_errors.length > 0 ? (
+              <ul className="list-disc space-y-0.5 pl-5 text-caption text-muted-foreground">
+                {result.row_errors.map((re) => (
+                  <li key={re.row}>
+                    Row {re.row}: {re.errors.join("; ")}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
