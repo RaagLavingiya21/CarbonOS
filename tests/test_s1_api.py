@@ -357,3 +357,74 @@ def test_csv_bulk_intake(monkeypatch) -> None:
     assert len(body["row_errors"]) == 2                    # unknown source + missing EF
     assert created[0]["kg_co2_fossil"] == 5306.0           # NG computed through the shared path
     assert created[0]["activity_data_source"] == "csv"
+
+
+# --- OCR review queue -------------------------------------------------------
+
+def test_ocr_extract_route(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "api.routes.scope1.start_ocr",
+        lambda sid, dk, b64, ct: {
+            "extraction": {"consumption_quantity": {"value": "1000", "confidence": 0.6}},
+            "needs_review": True, "min_confidence": 0.6},
+    )
+    monkeypatch.setattr("db.scope1_store.upload_evidence",
+                        lambda data, **k: {"id": "ev1", "hash_sha256": "abc"})
+    captured: dict = {}
+    monkeypatch.setattr("db.scope1_store.create_ocr_extraction",
+                        lambda row, **k: captured.update(row) or {"id": "ocr1", **row})
+    resp = client.post(
+        "/api/scope1/ocr/extract",
+        files={"file": ("bill.pdf", b"PDFBYTES", "application/pdf")},
+        data={"doc_kind": "utility_bill", "inventory_id": "inv1"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending_review"
+    assert resp.json()["needs_review"] is True
+    assert captured["evidence_document_id"] == "ev1"
+    assert captured["graph_session_id"]
+
+
+def test_ocr_review_approve_creates_record(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.scope1_store.get_ocr_extraction",
+        lambda eid, **k: {"id": eid, "graph_session_id": "s1", "inventory_id": "inv1",
+                          "evidence_document_id": "ev1", "status": "pending_review"},
+    )
+    monkeypatch.setattr("api.routes.scope1.get_ocr_state", lambda sid: None)   # skip graph resume
+    created: dict = {}
+    monkeypatch.setattr("db.scope1_store.create_record",
+                        lambda row, **k: created.update(row) or {"id": "rec1", **row})
+    monkeypatch.setattr("db.scope1_store.upsert_collection_status", lambda row, **k: row)
+    monkeypatch.setattr("db.scope1_store.log_change", lambda *a, **k: {})
+    updated: dict = {}
+    monkeypatch.setattr("db.scope1_store.update_ocr_extraction",
+                        lambda eid, patch, **k: updated.update(patch) or {"id": eid, **patch})
+    resp = client.post(
+        "/api/scope1/ocr/ocr1/review",
+        json={"action": "approve", "emission_source_id": "src1",
+              "fuel_or_activity": "natural_gas", "activity_value": 1000,
+              "activity_unit": "therms", "period_start": "2025-01-01",
+              "period_end": "2025-12-31"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert created["kg_co2_fossil"] == 5306.0
+    assert created["evidence_document_id"] == "ev1"
+    assert created["activity_data_source"] == "ocr"
+    assert updated["status"] == "applied"
+    assert updated["applied_record_id"] == "rec1"
+
+
+def test_ocr_review_reject(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.scope1_store.get_ocr_extraction",
+        lambda eid, **k: {"id": eid, "graph_session_id": "s1", "status": "pending_review"},
+    )
+    monkeypatch.setattr("api.routes.scope1.get_ocr_state", lambda sid: None)
+    monkeypatch.setattr("db.scope1_store.update_ocr_extraction",
+                        lambda eid, patch, **k: {"id": eid, **patch})
+    resp = client.post("/api/scope1/ocr/ocr1/review", json={"action": "reject"}, headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rejected"

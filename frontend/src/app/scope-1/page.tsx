@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Database, Flame, ListChecks, Settings2, FileText } from "lucide-react";
+import { ClipboardCheck, Database, Flame, ListChecks, Settings2, FileText } from "lucide-react";
 
 import { MetricCard } from "@/components/data/MetricCard";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
@@ -93,6 +93,12 @@ export default function Scope1Dashboard() {
           <Link href="/scope-1/data">
             <Database className="h-4 w-4" />
             Add activity data
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/scope-1/review">
+            <ClipboardCheck className="h-4 w-4" />
+            Review queue
           </Link>
         </Button>
         <Button asChild variant="outline">

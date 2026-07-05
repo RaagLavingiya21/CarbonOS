@@ -6,10 +6,13 @@ s1_reporting) -> persist via db.scope1_store (RLS-scoped). No calculations inlin
 
 from __future__ import annotations
 
+import base64
+import uuid
 from collections import Counter
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
+from api.graphs.ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
     AssignOwnerRequest,
@@ -26,6 +29,7 @@ from api.models.scope1_schemas import (
     GasBreakdownDTO,
     InventoryReportResponse,
     MobileRecordRequest,
+    OcrReviewRequest,
     ReadinessResponse,
     StationaryRecordRequest,
     UpsertBoundaryRequest,
@@ -279,6 +283,99 @@ async def upload_evidence(
 def record_audit(record_id: str, user: CurrentUser = Depends(get_current_user)) -> list[dict]:
     return _guard(store.list_change_log, "s1_emission_record", record_id,
                   access_token=user.access_token, user_id=user.user_id)
+
+
+# --- OCR review queue (LangGraph extraction + human review) -----------------
+
+@router.post("/ocr/extract")
+async def ocr_extract(
+    file: UploadFile = File(...),
+    doc_kind: str = Form("utility_bill"),
+    inventory_id: str = Form(...),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Upload a bill/invoice: store it (SHA-256), run the OCR graph, and queue the
+    extraction. High-confidence results are 'approved'; low-confidence 'pending_review'."""
+    data = await file.read()
+    evidence = _guard(
+        store.upload_evidence, data, file_name=file.filename or "document",
+        content_type=file.content_type, document_type=doc_kind,
+        inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
+    )
+    session_id = uuid.uuid4().hex
+    state = start_ocr(session_id, doc_kind, base64.b64encode(data).decode(), file.content_type)
+    row = _guard(
+        store.create_ocr_extraction,
+        {
+            "inventory_id": inventory_id,
+            "evidence_document_id": evidence["id"],
+            "graph_session_id": session_id,
+            "doc_kind": doc_kind,
+            "extracted": state.get("extraction") or {},
+            "min_confidence": state.get("min_confidence"),
+            "status": "pending_review" if state.get("needs_review") else "approved",
+        },
+        access_token=user.access_token, user_id=user.user_id,
+    )
+    return {**row, "needs_review": bool(state.get("needs_review"))}
+
+
+@router.get("/ocr/queue")
+def ocr_queue(
+    status: str = Query("pending_review"), user: CurrentUser = Depends(get_current_user)
+) -> list[dict]:
+    return _guard(store.list_ocr_queue, status=status,
+                  access_token=user.access_token, user_id=user.user_id)
+
+
+@router.post("/ocr/{extraction_id}/review")
+def ocr_review(
+    extraction_id: str, req: OcrReviewRequest, user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """Approve (with corrections -> creates the emission record) or reject a queued extraction."""
+    ext = _guard(store.get_ocr_extraction, extraction_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if ext is None:
+        raise HTTPException(status_code=404, detail="Extraction not found.")
+
+    # Resume the graph if it is paused at the human-review checkpoint.
+    graph_state = get_ocr_state(ext["graph_session_id"])
+    if graph_state and graph_state.get("phase") == "review":
+        review_ocr(ext["graph_session_id"], req.action, req.corrected_fields)
+
+    if req.action == "reject":
+        return _guard(store.update_ocr_extraction, extraction_id, {"status": "rejected"},
+                      access_token=user.access_token, user_id=user.user_id)
+
+    required = (req.emission_source_id, req.fuel_or_activity, req.activity_value,
+                req.activity_unit, req.period_start, req.period_end)
+    if not all(required):
+        raise HTTPException(
+            status_code=422,
+            detail="Approving requires emission_source_id, fuel_or_activity, "
+                   "activity_value, activity_unit, period_start, period_end.",
+        )
+    record_req = StationaryRecordRequest(
+        inventory_id=ext["inventory_id"],
+        emission_source_id=req.emission_source_id,
+        period_start=req.period_start,
+        period_end=req.period_end,
+        fuel_or_activity=req.fuel_or_activity,
+        activity_value=req.activity_value,
+        activity_unit=req.activity_unit,
+        data_quality_tier=req.data_quality_tier,
+        activity_data_source="ocr",
+        evidence_document_id=ext["evidence_document_id"],
+    )
+    try:
+        record = _persist_stationary(record_req, user)
+    except MissingEmissionFactor as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _guard(
+        store.update_ocr_extraction, extraction_id,
+        {"status": "applied", "applied_record_id": record["id"]},
+        access_token=user.access_token, user_id=user.user_id,
+    )
 
 
 # --- Data-collection orchestration ------------------------------------------

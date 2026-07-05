@@ -333,3 +333,40 @@ def list_change_log(
         .eq("org_id", org_id).eq("entity_table", entity_table).eq("entity_id", entity_id)
         .order("created_at").execute().data
     )
+
+
+# --- OCR review queue -------------------------------------------------------
+
+def create_ocr_extraction(data: dict, *, access_token: str, user_id: str) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {"org_id": org_id, "created_by": user_id, **data}
+    return client.table("s1_ocr_extraction").insert(row).execute().data[0]
+
+
+def list_ocr_queue(
+    *, status: str = "pending_review", access_token: str, user_id: str
+) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_ocr_extraction").select("*")
+        .eq("org_id", org_id).eq("status", status)
+        .order("created_at").execute().data
+    )
+
+
+def get_ocr_extraction(extraction_id: str, *, access_token: str, user_id: str) -> dict | None:
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_ocr_extraction").select("*")
+        .eq("org_id", org_id).eq("id", extraction_id).limit(1).execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def update_ocr_extraction(extraction_id: str, patch: dict, *, access_token: str, user_id: str) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_ocr_extraction").update(patch)
+        .eq("org_id", org_id).eq("id", extraction_id).execute()
+    )
+    return resp.data[0]

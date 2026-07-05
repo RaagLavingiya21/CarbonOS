@@ -14,6 +14,7 @@ import {
   scope1Api,
   type S1CsvResult,
   type S1Evidence,
+  type S1OcrExtraction,
   type S1Record,
   type S1Source,
   type S1Trace,
@@ -230,8 +231,87 @@ export default function Scope1DataPage() {
       {result ? <ResultPanel record={result} onTrace={showTrace} /> : null}
       {trace ? <TracePanel trace={trace} /> : null}
 
+      {activeId ? <OcrUploadCard inventoryId={activeId} onError={setError} /> : null}
       {activeId ? <CsvUploadCard inventoryId={activeId} onError={setError} /> : null}
     </div>
+  );
+}
+
+function OcrUploadCard({
+  inventoryId,
+  onError,
+}: {
+  inventoryId: string;
+  onError: (message: string) => void;
+}) {
+  const [docKind, setDocKind] = useState("utility_bill");
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<S1OcrExtraction | null>(null);
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      setResult(await scope1Api.ocrExtract(file, docKind, inventoryId));
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Upload a bill / invoice (OCR)</CardTitle>
+        <CardDescription>
+          Claude reads the document and extracts the fields. Low-confidence extractions go to the
+          review queue; the evidence is stored with a SHA-256 hash.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Selectable
+            value={docKind}
+            onChange={setDocKind}
+            options={[
+              { value: "utility_bill", label: "Utility bill" },
+              { value: "fuel_invoice", label: "Fuel invoice" },
+            ]}
+          />
+          <input type="file" accept=".pdf,image/*" onChange={handleFile} disabled={uploading} className="text-small" />
+          {uploading ? <span className="text-small text-muted-foreground">Reading document…</span> : null}
+        </div>
+        {result ? (
+          <Alert>
+            <AlertDescription>
+              {result.status === "pending_review" ? (
+                <>
+                  <Badge variant="medium">Needs review</Badge>{" "}
+                  Low-confidence fields — verify it in the{" "}
+                  <Link href="/scope-1/review" className="font-medium underline-offset-4 hover:underline">
+                    review queue
+                  </Link>
+                  .
+                </>
+              ) : (
+                <>
+                  <Badge variant="low">Extracted</Badge>{" "}
+                  High confidence — approve it in the{" "}
+                  <Link href="/scope-1/review" className="font-medium underline-offset-4 hover:underline">
+                    review queue
+                  </Link>{" "}
+                  to create the record.
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

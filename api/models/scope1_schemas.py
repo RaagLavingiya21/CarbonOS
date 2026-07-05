@@ -105,6 +105,21 @@ class CollectionStatusRequest(BaseModel):
     notes: str | None = None
 
 
+# --- OCR review queue -------------------------------------------------------
+
+class OcrReviewRequest(BaseModel):
+    action: str                            # approve | reject
+    corrected_fields: dict[str, str] | None = None
+    # Required for approve — the reviewed fields become an emission record:
+    emission_source_id: str | None = None
+    fuel_or_activity: str | None = None
+    activity_value: float | None = None
+    activity_unit: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    data_quality_tier: int = 3             # OCR + human review = Tier 3 (research/2.3 B4)
+
+
 # --- Intake (records) -------------------------------------------------------
 
 class StationaryRecordRequest(BaseModel):

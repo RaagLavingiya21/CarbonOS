@@ -32,15 +32,18 @@ def use_memory_checkpointer(monkeypatch: pytest.MonkeyPatch) -> None:
     from langgraph.checkpoint.memory import MemorySaver
 
     import api.graphs.gap_analyzer_graph as gap_graph
+    import api.graphs.ocr_graph as ocr_graph
     import api.graphs.supplier_copilot_graph as copilot_graph
 
     memory = MemorySaver()
     monkeypatch.setattr("api.graphs.checkpointer.get_checkpointer", lambda: memory)
     monkeypatch.setattr(gap_graph, "get_checkpointer", lambda: memory)
     monkeypatch.setattr(copilot_graph, "get_checkpointer", lambda: memory)
+    monkeypatch.setattr(ocr_graph, "get_checkpointer", lambda: memory)
     gap_graph._gap_analyzer_graph = None
     copilot_graph._email_draft_graph = None
     copilot_graph._response_routing_graph = None
+    ocr_graph._ocr_graph = None
 
 
 @pytest.fixture(autouse=True)

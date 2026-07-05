@@ -167,6 +167,19 @@ export type S1CsvResult = {
   file_errors: string[];
 };
 
+export type S1OcrField = { value: string | null; confidence: number };
+
+export type S1OcrExtraction = {
+  id: string;
+  inventory_id: string | null;
+  evidence_document_id: string | null;
+  doc_kind: string;
+  extracted: Record<string, S1OcrField>;
+  min_confidence: number | null;
+  status: string;
+  needs_review?: boolean;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
@@ -264,6 +277,34 @@ export const scope1Api = {
     }
     return response.json() as Promise<S1CsvResult>;
   },
+
+  ocrExtract: async (
+    file: File,
+    docKind: string,
+    inventoryId: string,
+  ): Promise<S1OcrExtraction> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("doc_kind", docKind);
+    form.append("inventory_id", inventoryId);
+    const response = await fetch(`${BACKEND_URL}/api/scope1/ocr/extract`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await accessToken()}` },
+      body: form,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<S1OcrExtraction>;
+  },
+  ocrQueue: (status = "pending_review") =>
+    request<S1OcrExtraction[]>(`/api/scope1/ocr/queue?status=${status}`),
+  ocrReview: (extractionId: string, body: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/scope1/ocr/${extractionId}/review`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   readiness: (inventoryId: string) =>
     request<S1Readiness>(`/api/scope1/inventories/${inventoryId}/readiness`),
