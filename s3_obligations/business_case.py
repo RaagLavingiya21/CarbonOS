@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from obligations.cascade import CascadeSignal
-from obligations.models import EvaluationResult
+from s3_obligations.cascade import CascadeSignal
+from s3_obligations.models import EvaluationResult
 
 
 @dataclass

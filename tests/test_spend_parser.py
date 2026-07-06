@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from parsing.spend_parser import parse_spend_csv
+from s3_measure.spend_parser import parse_spend_csv
 
 _SAMPLE = Path(__file__).parent.parent / "sample_gl" / "company_gl_sample.csv"
 

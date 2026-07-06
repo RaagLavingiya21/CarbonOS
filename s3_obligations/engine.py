@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from obligations.models import DueItem, EvaluationResult, Obligation, ObligationProfile
-from obligations.ruleset import evaluate_condition, load_ruleset
+from s3_obligations.models import DueItem, EvaluationResult, Obligation, ObligationProfile
+from s3_obligations.ruleset import evaluate_condition, load_ruleset
 
 
 def evaluate(profile: ObligationProfile, version: str = "v2026-07") -> EvaluationResult:

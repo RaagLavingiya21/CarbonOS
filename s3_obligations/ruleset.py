@@ -15,7 +15,7 @@ from typing import Optional
 
 import yaml
 
-_RULES_DIR = Path(__file__).parent.parent / "data" / "obligation_rules"
+_RULES_DIR = Path(__file__).parent / "data" / "obligation_rules"
 
 # Three-valued logic: True / False / None(=unknown).
 Ternary = Optional[bool]

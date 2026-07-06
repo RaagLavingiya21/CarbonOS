@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from obligations.models import ObligationProfile
+from s3_obligations.models import ObligationProfile
 
 _CAT_A_REVENUE_USD = 1_000_000_000
 _CAT_A_EMPLOYEES = 500

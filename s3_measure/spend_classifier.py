@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from factors.ef_lookup import (
+from s3_factors.ef_lookup import (
     CONFIDENCE_MATCH,
     EFMatch,
     lookup_ef,

@@ -18,9 +18,9 @@ from pathlib import Path
 
 import yaml
 
-from obligations.models import ObligationProfile
+from s3_obligations.models import ObligationProfile
 
-_BUYERS_PATH = Path(__file__).parent.parent / "data" / "regulated_buyers.yaml"
+_BUYERS_PATH = Path(__file__).parent / "data" / "regulated_buyers.yaml"
 
 
 @dataclass

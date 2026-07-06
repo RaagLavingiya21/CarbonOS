@@ -7,8 +7,8 @@ that the V2.0 net-zero % is never hardcoded.
 
 from __future__ import annotations
 
-from obligations.models import ObligationProfile
-from obligations.sbti_readiness import assess_sbti_readiness, classify_category
+from s3_obligations.models import ObligationProfile
+from s3_obligations.sbti_readiness import assess_sbti_readiness, classify_category
 
 # A CPG-style Scope 3 profile: Cat 1 dominant, Cat 4/11 material, Cat 6 tiny.
 _INV = {1: 700.0, 4: 120.0, 6: 30.0, 11: 150.0}  # total 1000; pcts 70/12/3/15

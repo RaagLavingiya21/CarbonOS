@@ -21,7 +21,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from factors.spend_classifier import classify_spend_line
+from s3_measure.spend_classifier import classify_spend_line
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "spend_classification_cases.json"
 _ADVERSARIAL = Path(__file__).parent / "fixtures" / "spend_classification_adversarial.json"

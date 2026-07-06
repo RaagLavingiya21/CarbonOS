@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from obligations.engine import evaluate
-from obligations.models import ObligationProfile
-from obligations.ruleset import RulesetError, load_ruleset
+from s3_obligations.engine import evaluate
+from s3_obligations.models import ObligationProfile
+from s3_obligations.ruleset import RulesetError, load_ruleset
 
 # A typical ICP: US consumer brand, large by revenue, sells to Walmart, no EU
 # nexus. eu_turnover_eur=0 is a KNOWN zero (not None/unknown) so CSRD resolves to

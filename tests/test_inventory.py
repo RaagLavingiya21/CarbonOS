@@ -9,8 +9,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from calc.inventory import build_inventory_from_spend
-from parsing.spend_parser import parse_spend_csv
+from s3_measure.inventory import build_inventory_from_spend
+from s3_measure.spend_parser import parse_spend_csv
 
 _SAMPLE = Path(__file__).parent.parent / "sample_gl" / "company_gl_sample.csv"
 

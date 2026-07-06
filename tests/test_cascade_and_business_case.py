@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from obligations.business_case import build_business_case
-from obligations.cascade import detect_cascade
-from obligations.engine import evaluate
-from obligations.models import ObligationProfile
+from s3_obligations.business_case import build_business_case
+from s3_obligations.cascade import detect_cascade
+from s3_obligations.engine import evaluate
+from s3_obligations.models import ObligationProfile
 
 _ICP = ObligationProfile(
     annual_revenue_usd=1_500_000_000,

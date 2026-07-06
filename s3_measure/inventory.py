@@ -25,12 +25,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from factors.spend_classifier import (
+from s3_measure.spend_classifier import (
     SCOPE3_CATEGORY_NAMES,
     SpendClassification,
     classify_spend_line,
 )
-from parsing.spend_parser import ParsedSpend, SpendLine
+from s3_measure.spend_parser import ParsedSpend, SpendLine
 
 
 @dataclass
