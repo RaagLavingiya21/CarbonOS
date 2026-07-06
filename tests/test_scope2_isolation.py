@@ -36,6 +36,11 @@ FORBIDDEN_TOP_LEVEL = {
     "mcp_server",
 }
 
+# Sibling scope modules — Scope 2 must stay independent of Scope 1 / Scope 3 too,
+# not just Carbon OS. Any import of an s1_*/s3_* package (or db.s1_*/db.s3_* store)
+# is a cross-module coupling and fails the build.
+FORBIDDEN_SCOPE_PREFIXES = ("s1_", "s3_")
+
 # Shared-infra db modules Scope 2 routes/stores may import (besides db.s2_*).
 ALLOWED_DB_SUBMODULES = {"client", "org_store"}
 
@@ -77,10 +82,12 @@ def test_scope2_does_not_import_carbon_os() -> None:
         for module in _imported_modules(path):
             parts = module.split(".")
             top = parts[0]
-            if top in FORBIDDEN_TOP_LEVEL:
+            if top in FORBIDDEN_TOP_LEVEL or top.startswith(FORBIDDEN_SCOPE_PREFIXES):
                 violations.append(f"{rel} imports '{module}'")
             elif top == "db" and len(parts) >= 2:
                 sub = parts[1]
-                if sub not in ALLOWED_DB_SUBMODULES and not sub.startswith("s2_"):
+                if sub.startswith(FORBIDDEN_SCOPE_PREFIXES):
+                    violations.append(f"{rel} imports sibling-scope store '{module}'")
+                elif sub not in ALLOWED_DB_SUBMODULES and not sub.startswith("s2_"):
                     violations.append(f"{rel} imports non-shared store '{module}'")
     assert not violations, "Scope 2 isolation breached:\n" + "\n".join(violations)

@@ -271,3 +271,53 @@ Result: Scope 2 can be feature-flagged on/off, developed, tested, and (later) ex
 3. Scaffold `s2_*` packages + empty routers + `/scope-2` shell + import-lint test.
 4. Apply migration `040_s2_sites.sql` to a **Supabase branch DB** and verify RLS with two org fixtures.
 5. Seed `s2_factor_library` and stand up the dual-method engine against a golden test portfolio (M0 exit).
+
+---
+
+## 12. Parallel-module integration contract (Scope 1 / 2 / 3)
+
+Three module branches are built concurrently against the same trunk:
+`feature/scope1-mvp-phase1`, `feature/scope2-mvp`, `feature/scope3-mvp`. The `s1_*`/
+`s2_*`/`s3_*` namespacing keeps module code from ever colliding; the rules below
+govern the few shared touchpoints so parallel merges stay trivial.
+
+### Reserved migration bands (do NOT cross)
+| Module | Range | Notes |
+|---|---|---|
+| Scope 1 | `030–039` | ships `030_s1_*` … `036_s1_rls` |
+| Scope 2 | `040–049` | this module |
+| Scope 3 | `050–059` | confirm the S3 worktree numbers here, not `030`/`040` |
+
+### Shared touchpoints (all additive)
+`api/main.py` (router includes), `frontend/src/components/app-shell.tsx` (nav array),
+`requirements.txt` / `package.json` (deps). Each branch **appends**; the 2nd/3rd
+merger re-adds its line during rebase. Never renumber or reorder another module's
+entries.
+
+### Golden rule: add, don't modify shared logic
+Modules may **add** files and **append** to the shared touchpoints above, but must
+not modify shared infrastructure (`api/middleware/auth`, `db/client`, `org_store`,
+`shares_org_with`, the `app-shell` layout, shared `components/ui/*`). If a shared
+change is genuinely needed, land it as its own small PR to `main` first, then all
+three branches pull it — this prevents three branches editing the same shared code.
+
+### Cross-module isolation (enforced)
+Each module's isolation lint forbids importing the *other* scope modules, not just
+Carbon OS. `tests/test_scope2_isolation.py` fails on any `s1_*`/`s3_*` import (and
+`db.s1_*`/`db.s3_*` store). The S1 and S3 branches should carry the symmetric guard.
+
+### Merge sequence
+1. Each branch rebases/merges latest `main` first (shared base; Scope 1 must catch
+   up on the UX commits it forked before).
+2. Merge one branch at a time via PR — order is arbitrary; first is clean.
+3. Each subsequent branch rebases onto the new `main`, clears the 3–4 trivial
+   shared-file conflicts, re-runs CI.
+4. Apply that branch's migration band to **every** environment, in order.
+5. Release is decoupled from merge via feature flags
+   (`NEXT_PUBLIC_SCOPE{1,2,3}_ENABLED`) — merge dark, flip per module when GA-ready.
+
+### Shared-DB / migration discipline
+All modules add tables to the same Supabase project. Migrations are applied
+manually today, so prod can drift (e.g. have S2 tables but not S1). Track applied
+migrations per environment (or adopt the Supabase migration CLI so `db push`
+applies all bands deterministically) to keep code merges and DB state in lockstep.
