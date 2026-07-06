@@ -1,0 +1,7 @@
+factor_type,region_code,vintage_year,publish_year,kg_co2e_per_mwh,gwp_set,source_citation
+egrid,RFCE,2024,2024,320,AR6-GWP100,SAMPLE — replace with official EPA eGRID subregion output emission rate
+egrid,CAMX,2024,2024,210,AR6-GWP100,SAMPLE — replace with official EPA eGRID subregion output emission rate
+egrid,ERCT,2024,2024,390,AR6-GWP100,SAMPLE — replace with official EPA eGRID subregion output emission rate
+iea,US,2024,2024,370,AR6-GWP100,SAMPLE — replace with official IEA country electricity factor
+greene_residual,US,2024,2024,560,AR6-GWP100,SAMPLE — replace with official Green-e US residual mix
+aib_residual,US,2024,2024,560,AR6-GWP100,SAMPLE — placeholder residual mix for non-eGRID US sites
