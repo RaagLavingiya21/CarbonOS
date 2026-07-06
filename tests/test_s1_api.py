@@ -428,3 +428,73 @@ def test_ocr_review_reject(monkeypatch) -> None:
     resp = client.post("/api/scope1/ocr/ocr1/review", json={"action": "reject"}, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["status"] == "rejected"
+
+
+# --- Bayou parser (feeds the same review queue) -----------------------------
+
+class _FakeBayou:
+    configured = True
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    @property
+    def is_configured(self):
+        return self.configured
+
+    def submit_bill(self, pdf, file_name="bill.pdf"):
+        return "bill123"
+
+    def get_bill(self, bill_id):
+        from s1_intake.bayou import BayouBill
+        return BayouBill(bill_id=bill_id, status="parsed", gas_consumption=1000.0,
+                         gas_consumption_unit="therms", billing_period_from="2025-01-01",
+                         billing_period_to="2025-01-31", gas_amount=120.0, account_number="A1")
+
+
+def test_bayou_extract_submits(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope1.BayouClient", _FakeBayou)
+    monkeypatch.setattr("db.scope1_store.upload_evidence", lambda data, **k: {"id": "ev1"})
+    captured: dict = {}
+    monkeypatch.setattr("db.scope1_store.create_ocr_extraction",
+                        lambda row, **k: captured.update(row) or {"id": "ocr9", **row})
+    resp = client.post(
+        "/api/scope1/ocr/extract",
+        files={"file": ("bill.pdf", b"PDFBYTES", "application/pdf")},
+        data={"doc_kind": "utility_bill", "inventory_id": "inv1", "parser": "bayou"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert captured["parser"] == "bayou"
+    assert captured["bayou_bill_id"] == "bill123"
+    assert captured["status"] == "parsing"
+
+
+def test_bayou_extract_not_configured_returns_503(monkeypatch) -> None:
+    class _Unconfigured(_FakeBayou):
+        configured = False
+
+    monkeypatch.setattr("api.routes.scope1.BayouClient", _Unconfigured)
+    monkeypatch.setattr("db.scope1_store.upload_evidence", lambda data, **k: {"id": "ev1"})
+    resp = client.post(
+        "/api/scope1/ocr/extract",
+        files={"file": ("bill.pdf", b"PDF", "application/pdf")},
+        data={"inventory_id": "inv1", "parser": "bayou"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 503
+
+
+def test_bayou_refresh_fills_extraction(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope1.BayouClient", _FakeBayou)
+    monkeypatch.setattr(
+        "db.scope1_store.get_ocr_extraction",
+        lambda eid, **k: {"id": eid, "parser": "bayou", "bayou_bill_id": "bill123", "status": "parsing"},
+    )
+    updated: dict = {}
+    monkeypatch.setattr("db.scope1_store.update_ocr_extraction",
+                        lambda eid, patch, **k: updated.update(patch) or {"id": eid, **patch})
+    resp = client.post("/api/scope1/ocr/ocr9/refresh", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert updated["status"] == "approved"                    # Bayou parsed -> Tier-2 trusted
+    assert updated["extracted"]["consumption_quantity"]["value"] == "1000.0"

@@ -245,6 +245,7 @@ function OcrUploadCard({
   onError: (message: string) => void;
 }) {
   const [docKind, setDocKind] = useState("utility_bill");
+  const [parser, setParser] = useState("claude");
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<S1OcrExtraction | null>(null);
 
@@ -254,7 +255,7 @@ function OcrUploadCard({
     setUploading(true);
     setResult(null);
     try {
-      setResult(await scope1Api.ocrExtract(file, docKind, inventoryId));
+      setResult(await scope1Api.ocrExtract(file, docKind, inventoryId, parser));
     } catch (err) {
       onError((err as Error).message);
     } finally {
@@ -282,31 +283,38 @@ function OcrUploadCard({
               { value: "fuel_invoice", label: "Fuel invoice" },
             ]}
           />
+          <Selectable
+            value={parser}
+            onChange={setParser}
+            options={[
+              { value: "claude", label: "Claude OCR (any doc)" },
+              { value: "bayou", label: "Bayou (US gas bill · Tier 2)" },
+            ]}
+          />
           <input type="file" accept=".pdf,image/*" onChange={handleFile} disabled={uploading} className="text-small" />
           {uploading ? <span className="text-small text-muted-foreground">Reading document…</span> : null}
         </div>
         {result ? (
           <Alert>
             <AlertDescription>
-              {result.status === "pending_review" ? (
+              {result.status === "parsing" ? (
+                <>
+                  <Badge variant="info">Parsing at Bayou</Badge>{" "}
+                </>
+              ) : result.status === "pending_review" ? (
                 <>
                   <Badge variant="medium">Needs review</Badge>{" "}
-                  Low-confidence fields — verify it in the{" "}
-                  <Link href="/scope-1/review" className="font-medium underline-offset-4 hover:underline">
-                    review queue
-                  </Link>
-                  .
                 </>
               ) : (
                 <>
                   <Badge variant="low">Extracted</Badge>{" "}
-                  High confidence — approve it in the{" "}
-                  <Link href="/scope-1/review" className="font-medium underline-offset-4 hover:underline">
-                    review queue
-                  </Link>{" "}
-                  to create the record.
                 </>
               )}
+              Sent to the{" "}
+              <Link href="/scope-1/review" className="font-medium underline-offset-4 hover:underline">
+                review queue
+              </Link>
+              {result.status === "parsing" ? " — refresh it there once Bayou finishes." : " to verify and create the record."}
             </AlertDescription>
           </Alert>
         ) : null}

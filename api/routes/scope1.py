@@ -40,6 +40,7 @@ from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
 from s1_intake import parse_intake_csv
+from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_reporting import ReportRecord, build_inventory_report, trace_record
 
 router = APIRouter(prefix="/api/scope1", tags=["scope1"])
@@ -292,16 +293,20 @@ async def ocr_extract(
     file: UploadFile = File(...),
     doc_kind: str = Form("utility_bill"),
     inventory_id: str = Form(...),
+    parser: str = Form("claude"),          # claude (Vision-LLM) | bayou (trained parser)
     user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Upload a bill/invoice: store it (SHA-256), run the OCR graph, and queue the
-    extraction. High-confidence results are 'approved'; low-confidence 'pending_review'."""
+    """Upload a bill/invoice: store it (SHA-256), parse it, and queue the extraction.
+    parser=claude runs the OCR graph; parser=bayou submits to Bayou (poll to refresh)."""
     data = await file.read()
     evidence = _guard(
         store.upload_evidence, data, file_name=file.filename or "document",
         content_type=file.content_type, document_type=doc_kind,
         inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
     )
+    if parser == "bayou":
+        return _bayou_submit(data, file.filename or "bill.pdf", doc_kind, inventory_id, evidence["id"], user)
+
     session_id = uuid.uuid4().hex
     state = start_ocr(session_id, doc_kind, base64.b64encode(data).decode(), file.content_type)
     row = _guard(
@@ -311,6 +316,7 @@ async def ocr_extract(
             "evidence_document_id": evidence["id"],
             "graph_session_id": session_id,
             "doc_kind": doc_kind,
+            "parser": "claude",
             "extracted": state.get("extraction") or {},
             "min_confidence": state.get("min_confidence"),
             "status": "pending_review" if state.get("needs_review") else "approved",
@@ -318,6 +324,63 @@ async def ocr_extract(
         access_token=user.access_token, user_id=user.user_id,
     )
     return {**row, "needs_review": bool(state.get("needs_review"))}
+
+
+def _bayou_submit(pdf_bytes, file_name, doc_kind, inventory_id, evidence_id, user: CurrentUser) -> dict:
+    client = BayouClient()
+    if not client.is_configured:
+        raise HTTPException(status_code=503, detail="Bayou is not configured (set BAYOU_API_KEY).")
+    try:
+        bill_id = client.submit_bill(pdf_bytes, file_name)
+    except BayouError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    row = _guard(
+        store.create_ocr_extraction,
+        {
+            "inventory_id": inventory_id,
+            "evidence_document_id": evidence_id,
+            "graph_session_id": bill_id,      # no LangGraph run for Bayou
+            "doc_kind": doc_kind,
+            "parser": "bayou",
+            "bayou_bill_id": bill_id,
+            "extracted": {},
+            "status": "parsing",
+        },
+        access_token=user.access_token, user_id=user.user_id,
+    )
+    return {**row, "needs_review": True}
+
+
+@router.post("/ocr/{extraction_id}/refresh")
+def ocr_refresh(extraction_id: str, user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Poll Bayou for a parsing bill; when parsed, fill the extraction (Tier-2, approved)."""
+    ext = _guard(store.get_ocr_extraction, extraction_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if ext is None:
+        raise HTTPException(status_code=404, detail="Extraction not found.")
+    if ext.get("parser") != "bayou" or not ext.get("bayou_bill_id"):
+        raise HTTPException(status_code=400, detail="Refresh only applies to Bayou extractions.")
+
+    client = BayouClient()
+    if not client.is_configured:
+        raise HTTPException(status_code=503, detail="Bayou is not configured (set BAYOU_API_KEY).")
+    try:
+        bill = client.get_bill(ext["bayou_bill_id"])
+    except BayouError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if bill.status != "parsed":
+        return ext                                     # still parsing
+    extraction = bayou_bill_to_extraction(bill)
+    return _guard(
+        store.update_ocr_extraction, extraction_id,
+        {
+            "extracted": extraction.to_dict(),
+            "min_confidence": extraction.min_confidence,
+            "status": "approved",                      # trained parser -> trusted Tier 2
+        },
+        access_token=user.access_token, user_id=user.user_id,
+    )
 
 
 @router.get("/ocr/queue")
@@ -355,6 +418,7 @@ def ocr_review(
             detail="Approving requires emission_source_id, fuel_or_activity, "
                    "activity_value, activity_unit, period_start, period_end.",
         )
+    is_bayou = ext.get("parser") == "bayou"
     record_req = StationaryRecordRequest(
         inventory_id=ext["inventory_id"],
         emission_source_id=req.emission_source_id,
@@ -363,8 +427,8 @@ def ocr_review(
         fuel_or_activity=req.fuel_or_activity,
         activity_value=req.activity_value,
         activity_unit=req.activity_unit,
-        data_quality_tier=req.data_quality_tier,
-        activity_data_source="ocr",
+        data_quality_tier=2 if is_bayou else req.data_quality_tier,   # Bayou = Tier 2
+        activity_data_source="bayou" if is_bayou else "ocr",
         evidence_document_id=ext["evidence_document_id"],
     )
     try:

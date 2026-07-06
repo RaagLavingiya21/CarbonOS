@@ -39,8 +39,13 @@ export default function Scope1ReviewPage() {
     setLoading(true);
     setError(null);
     try {
-      const [q, s] = await Promise.all([scope1Api.ocrQueue(), scope1Api.listSources()]);
-      setQueue(q);
+      const [parsing, pending, approved, s] = await Promise.all([
+        scope1Api.ocrQueue("parsing"),        // Bayou, awaiting parse
+        scope1Api.ocrQueue("pending_review"), // Claude low-confidence
+        scope1Api.ocrQueue("approved"),       // ready to map + apply
+        scope1Api.listSources(),
+      ]);
+      setQueue([...parsing, ...pending, ...approved]);
       setSources(s);
     } catch (err) {
       setError((err as Error).message);
@@ -92,11 +97,56 @@ export default function Scope1ReviewPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        queue.map((ext) => (
-          <ReviewCard key={ext.id} ext={ext} sources={sources} onDone={load} onError={setError} />
-        ))
+        queue.map((ext) =>
+          ext.status === "parsing" ? (
+            <ParsingCard key={ext.id} ext={ext} onDone={load} onError={setError} />
+          ) : (
+            <ReviewCard key={ext.id} ext={ext} sources={sources} onDone={load} onError={setError} />
+          ),
+        )
       )}
     </div>
+  );
+}
+
+function ParsingCard({
+  ext,
+  onDone,
+  onError,
+}: {
+  ext: S1OcrExtraction;
+  onDone: () => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setBusy(true);
+    try {
+      await scope1Api.ocrRefresh(ext.id);
+      onDone();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-h3">
+          {ext.doc_kind.replace(/_/g, " ")}
+          <Badge variant="info">Parsing at Bayou</Badge>
+        </CardTitle>
+        <CardDescription>Bayou is parsing this bill. Refresh to check if it&apos;s ready.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button type="button" variant="outline" onClick={refresh} disabled={busy}>
+          Refresh
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

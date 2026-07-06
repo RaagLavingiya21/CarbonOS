@@ -282,11 +282,13 @@ export const scope1Api = {
     file: File,
     docKind: string,
     inventoryId: string,
+    parser = "claude",
   ): Promise<S1OcrExtraction> => {
     const form = new FormData();
     form.append("file", file);
     form.append("doc_kind", docKind);
     form.append("inventory_id", inventoryId);
+    form.append("parser", parser);
     const response = await fetch(`${BACKEND_URL}/api/scope1/ocr/extract`, {
       method: "POST",
       headers: { Authorization: `Bearer ${await accessToken()}` },
@@ -300,6 +302,8 @@ export const scope1Api = {
   },
   ocrQueue: (status = "pending_review") =>
     request<S1OcrExtraction[]>(`/api/scope1/ocr/queue?status=${status}`),
+  ocrRefresh: (extractionId: string) =>
+    request<S1OcrExtraction>(`/api/scope1/ocr/${extractionId}/refresh`, { method: "POST" }),
   ocrReview: (extractionId: string, body: Record<string, unknown>) =>
     request<Record<string, unknown>>(`/api/scope1/ocr/${extractionId}/review`, {
       method: "POST",
