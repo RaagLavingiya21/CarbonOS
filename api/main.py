@@ -29,6 +29,7 @@ from api.routes import (
     requests,
     rollup,
     scenarios,
+    scope3_inventory,
     shares,
 )
 
@@ -169,6 +170,8 @@ app.include_router(chat.router)
 app.include_router(panels.router)
 app.include_router(org.router)
 app.include_router(scenarios.router)
+# Scope 3 lane — ships dark behind NEXT_PUBLIC_SCOPE3_ENABLED (nav hidden until GA).
+app.include_router(scope3_inventory.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
