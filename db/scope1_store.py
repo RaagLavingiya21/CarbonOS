@@ -370,3 +370,60 @@ def update_ocr_extraction(extraction_id: str, patch: dict, *, access_token: str,
         .eq("org_id", org_id).eq("id", extraction_id).execute()
     )
     return resp.data[0]
+
+
+# --- Member roles -----------------------------------------------------------
+
+def _default_role(org_member_role: str) -> str:
+    """Org 'admin' -> Scope-1 admin; any other org member -> editor."""
+    return "admin" if org_member_role == "admin" else "editor"
+
+
+def get_scope1_role(*, access_token: str, user_id: str) -> str:
+    """Resolve the caller's Scope-1 role in their active org (explicit row, else default)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    explicit = (
+        client.table("s1_member_role").select("role")
+        .eq("org_id", org_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if explicit.data:
+        return explicit.data[0]["role"]
+    org_member = (
+        client.table("org_members").select("role")
+        .eq("org_id", org_id).eq("user_id", user_id).limit(1).execute()
+    )
+    return _default_role(org_member.data[0]["role"] if org_member.data else "member")
+
+
+def list_member_roles(*, access_token: str, user_id: str) -> list[dict]:
+    """Org members with their resolved Scope-1 role (explicit row, else default)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    members = (
+        client.table("org_members").select("user_id, role")
+        .eq("org_id", org_id).execute().data
+    )
+    explicit = {
+        r["user_id"]: r["role"]
+        for r in client.table("s1_member_role").select("user_id, role")
+        .eq("org_id", org_id).execute().data
+    }
+    out = []
+    for member in members:
+        override = explicit.get(member["user_id"])
+        out.append({
+            "user_id": member["user_id"],
+            "role": override or _default_role(member["role"]),
+            "explicit": override is not None,
+        })
+    return out
+
+
+def set_member_role(target_user_id: str, role: str, *, access_token: str, user_id: str) -> dict:
+    """Upsert an explicit Scope-1 role for a member of the caller's active org."""
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {"org_id": org_id, "user_id": target_user_id, "role": role, "updated_by": user_id}
+    return (
+        client.table("s1_member_role")
+        .upsert(row, on_conflict="org_id,user_id")
+        .execute().data[0]
+    )

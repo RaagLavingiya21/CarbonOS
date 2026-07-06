@@ -29,12 +29,15 @@ from api.models.scope1_schemas import (
     FacilityBreakdownDTO,
     GasBreakdownDTO,
     InventoryReportResponse,
+    InviteMemberRequest,
     MobileRecordRequest,
     OcrReviewRequest,
     ReadinessResponse,
+    SetRoleRequest,
     StationaryRecordRequest,
     UpsertBoundaryRequest,
 )
+from db import org_store
 from db import scope1_store as store
 from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
@@ -69,10 +72,71 @@ def _guard(func, *args, **kwargs):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# --- Role enforcement (app-layer; RLS handles org tenancy) ------------------
+
+_ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
+
+
+def require_scope1_role(min_role: str):
+    """Dependency: 403 unless the caller's resolved Scope-1 role >= min_role."""
+    def _dependency(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        role = _guard(store.get_scope1_role, access_token=user.access_token, user_id=user.user_id)
+        if _ROLE_RANK.get(role, 0) < _ROLE_RANK[min_role]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Requires Scope 1 '{min_role}' role (you are '{role}').",
+            )
+        return user
+    return _dependency
+
+
+require_editor = require_scope1_role("editor")
+require_admin = require_scope1_role("admin")
+
+
+# --- Members & roles --------------------------------------------------------
+
+@router.get("/members")
+def list_members(user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Org members with their resolved Scope-1 role, plus the caller's own role."""
+    members = _guard(store.list_member_roles, access_token=user.access_token, user_id=user.user_id)
+    your_role = _guard(store.get_scope1_role, access_token=user.access_token, user_id=user.user_id)
+    return {
+        "your_role": your_role,
+        "members": [{**m, "is_you": m["user_id"] == user.user_id} for m in members],
+    }
+
+
+@router.post("/members/{member_id}/role")
+def update_member_role(
+    member_id: str, req: SetRoleRequest, user: CurrentUser = Depends(require_admin)
+) -> dict:
+    if req.role not in _ROLE_RANK:
+        raise HTTPException(status_code=422, detail="role must be admin, editor, or viewer.")
+    return _guard(store.set_member_role, member_id, req.role,
+                  access_token=user.access_token, user_id=user.user_id)
+
+
+@router.post("/members/invite")
+def invite_member(req: InviteMemberRequest, user: CurrentUser = Depends(require_admin)) -> dict:
+    """Add a user to the org (reusing the platform invite) and set their Scope-1 role."""
+    if req.role not in _ROLE_RANK:
+        raise HTTPException(status_code=422, detail="role must be admin, editor, or viewer.")
+    target_id = org_store.find_user_id_by_email(req.email)
+    if target_id is None:
+        raise HTTPException(status_code=404, detail=f"No user found with email '{req.email}'.")
+    org = org_store.get_active_org(user.access_token, user_id=user.user_id)
+    if org is None:
+        raise HTTPException(status_code=400, detail="No active organization.")
+    org_store.add_member(target_id, org.id, access_token=user.access_token, role="member")
+    return _guard(store.set_member_role, target_id, req.role,
+                  access_token=user.access_token, user_id=user.user_id)
+
+
 # --- Entities / facilities / data owners ------------------------------------
 
 @router.post("/entities")
-def create_entity(req: CreateEntityRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def create_entity(req: CreateEntityRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.create_entity, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -83,7 +147,7 @@ def list_entities(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
 
 
 @router.post("/facilities")
-def create_facility(req: CreateFacilityRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def create_facility(req: CreateFacilityRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.create_facility, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -94,7 +158,7 @@ def list_facilities(user: CurrentUser = Depends(get_current_user)) -> list[dict]
 
 
 @router.post("/data-owners")
-def create_data_owner(req: CreateDataOwnerRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def create_data_owner(req: CreateDataOwnerRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.create_data_owner, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -106,7 +170,7 @@ def list_data_owners(user: CurrentUser = Depends(get_current_user)) -> list[dict
 
 @router.post("/sources/{source_id}/assign-owner")
 def assign_owner(source_id: str, req: AssignOwnerRequest,
-                 user: CurrentUser = Depends(get_current_user)) -> dict:
+                 user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.assign_source_owner, source_id, req.data_owner_id,
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -114,7 +178,7 @@ def assign_owner(source_id: str, req: AssignOwnerRequest,
 # --- Inventory + consolidation ----------------------------------------------
 
 @router.post("/inventories")
-def create_inventory(req: CreateInventoryRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def create_inventory(req: CreateInventoryRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.create_inventory, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -125,7 +189,7 @@ def list_inventories(user: CurrentUser = Depends(get_current_user)) -> list[dict
 
 
 @router.post("/inventories/{inventory_id}/lock")
-def lock_inventory(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> dict:
+def lock_inventory(inventory_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
     inv = _guard(store.lock_inventory, inventory_id,
                  access_token=user.access_token, user_id=user.user_id)
     _log(inventory_id, "lock", user, entity_table="s1_inventory")
@@ -150,7 +214,7 @@ def consolidation_preview(req: ConsolidationPreviewRequest) -> ConsolidationPrev
 
 
 @router.post("/boundary")
-def upsert_boundary(req: UpsertBoundaryRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def upsert_boundary(req: UpsertBoundaryRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     """Compute the entity's multiplier from the inventory approach + control flags, then store it."""
     inv = _guard(store.get_inventory, req.inventory_id,
                  access_token=user.access_token, user_id=user.user_id)
@@ -185,7 +249,7 @@ def upsert_boundary(req: UpsertBoundaryRequest, user: CurrentUser = Depends(get_
 # --- Sources ----------------------------------------------------------------
 
 @router.post("/sources")
-def create_source(req: CreateSourceRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+def create_source(req: CreateSourceRequest, user: CurrentUser = Depends(require_editor)) -> dict:
     return _guard(store.create_source, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -197,7 +261,7 @@ def list_sources(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
 
 @router.post("/sources/{source_id}/exclude")
 def exclude_source(source_id: str, req: ExcludeSourceRequest,
-                   user: CurrentUser = Depends(get_current_user)) -> dict:
+                   user: CurrentUser = Depends(require_editor)) -> dict:
     src = _guard(store.exclude_source, source_id, req.rationale,
                  access_token=user.access_token, user_id=user.user_id)
     _log(source_id, "exclude", user, entity_table="s1_emission_source",
@@ -209,7 +273,7 @@ def exclude_source(source_id: str, req: ExcludeSourceRequest,
 
 @router.post("/records/stationary")
 def create_stationary_record(req: StationaryRecordRequest,
-                             user: CurrentUser = Depends(get_current_user)) -> dict:
+                             user: CurrentUser = Depends(require_editor)) -> dict:
     try:
         return _persist_stationary(req, user)
     except MissingEmissionFactor as exc:
@@ -218,7 +282,7 @@ def create_stationary_record(req: StationaryRecordRequest,
 
 @router.post("/records/mobile")
 def create_mobile_record(req: MobileRecordRequest,
-                         user: CurrentUser = Depends(get_current_user)) -> dict:
+                         user: CurrentUser = Depends(require_editor)) -> dict:
     try:
         return _persist_mobile(req, user)
     except (MissingEmissionFactor, ValueError) as exc:
@@ -229,7 +293,7 @@ def create_mobile_record(req: MobileRecordRequest,
 async def create_records_csv(
     inventory_id: str = Form(...),
     file: UploadFile = File(...),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_editor),
 ) -> dict:
     """Bulk-create records from a CSV. Each row is calculated + persisted with
     evidence-less Tier data; row-level errors are reported without aborting."""
@@ -273,7 +337,7 @@ async def upload_evidence(
     file: UploadFile = File(...),
     inventory_id: str | None = Form(None),
     document_type: str = Form("manual_note"),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_editor),
 ) -> dict:
     """Upload a source document: SHA-256 computed server-side, bytes stored in the
     private s1-evidence bucket. Returns the evidence id to attach to a record."""
@@ -302,7 +366,7 @@ async def ocr_extract(
     doc_kind: str = Form("utility_bill"),
     inventory_id: str = Form(...),
     parser: str = Form("claude"),          # claude (Vision-LLM) | bayou (trained parser)
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_editor),
 ) -> dict:
     """Upload a bill/invoice: store it (SHA-256), parse it, and queue the extraction.
     parser=claude runs the OCR graph; parser=bayou submits to Bayou (poll to refresh)."""
@@ -360,7 +424,7 @@ def _bayou_submit(pdf_bytes, file_name, doc_kind, inventory_id, evidence_id, use
 
 
 @router.post("/ocr/{extraction_id}/refresh")
-def ocr_refresh(extraction_id: str, user: CurrentUser = Depends(get_current_user)) -> dict:
+def ocr_refresh(extraction_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
     """Poll Bayou for a parsing bill; when parsed, fill the extraction (Tier-2, approved)."""
     ext = _guard(store.get_ocr_extraction, extraction_id,
                  access_token=user.access_token, user_id=user.user_id)
@@ -401,7 +465,7 @@ def ocr_queue(
 
 @router.post("/ocr/{extraction_id}/review")
 def ocr_review(
-    extraction_id: str, req: OcrReviewRequest, user: CurrentUser = Depends(get_current_user)
+    extraction_id: str, req: OcrReviewRequest, user: CurrentUser = Depends(require_editor)
 ) -> dict:
     """Approve (with corrections -> creates the emission record) or reject a queued extraction."""
     ext = _guard(store.get_ocr_extraction, extraction_id,
@@ -453,7 +517,7 @@ def ocr_review(
 # --- Data-collection orchestration ------------------------------------------
 
 @router.post("/inventories/{inventory_id}/collection/init")
-def init_collection(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+def init_collection(inventory_id: str, user: CurrentUser = Depends(require_editor)) -> list[dict]:
     """Create 'missing' collection rows for every in-scope source in the inventory period."""
     inv = _guard(store.get_inventory, inventory_id,
                  access_token=user.access_token, user_id=user.user_id)
@@ -488,7 +552,7 @@ def init_collection(inventory_id: str, user: CurrentUser = Depends(get_current_u
 
 @router.post("/collection/status")
 def set_collection_status(
-    req: CollectionStatusRequest, user: CurrentUser = Depends(get_current_user)
+    req: CollectionStatusRequest, user: CurrentUser = Depends(require_editor)
 ) -> dict:
     return _guard(store.upsert_collection_status, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)

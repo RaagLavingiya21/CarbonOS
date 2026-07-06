@@ -89,6 +89,17 @@ class ExcludeSourceRequest(BaseModel):
     rationale: str
 
 
+# --- Member roles -----------------------------------------------------------
+
+class SetRoleRequest(BaseModel):
+    role: str                              # admin | editor | viewer
+
+
+class InviteMemberRequest(BaseModel):
+    email: str
+    role: str = "editor"                   # admin | editor | viewer
+
+
 # --- Data-collection orchestration ------------------------------------------
 
 class AssignOwnerRequest(BaseModel):

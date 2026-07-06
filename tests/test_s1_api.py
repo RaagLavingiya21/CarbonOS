@@ -6,12 +6,20 @@ so no live Supabase is needed (same pattern as tests/test_api.py).
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
 from tests.conftest import AUTH_HEADERS
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _default_scope1_role(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Write routes require editor+; default the resolved role so these handler
+    tests run. Role gating itself is covered in tests/test_s1_roles.py."""
+    monkeypatch.setattr("db.scope1_store.get_scope1_role", lambda **k: "admin")
 
 
 def test_consolidation_preview_is_pure() -> None:

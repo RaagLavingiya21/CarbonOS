@@ -196,6 +196,9 @@ export type S1OcrExtraction = {
   needs_review?: boolean;
 };
 
+export type S1Member = { user_id: string; role: string; explicit: boolean; is_you: boolean };
+export type S1Members = { your_role: string; members: S1Member[] };
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
@@ -344,4 +347,16 @@ export const scope1Api = {
     request<S1Trace>(`/api/scope1/records/${recordId}/trace?ar_version=${arVersion}`),
   recordAudit: (recordId: string) =>
     request<S1AuditEntry[]>(`/api/scope1/records/${recordId}/audit`),
+
+  listMembers: () => request<S1Members>("/api/scope1/members"),
+  setMemberRole: (memberId: string, role: string) =>
+    request<S1Member>(`/api/scope1/members/${memberId}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+  inviteMember: (email: string, role: string) =>
+    request<S1Member>("/api/scope1/members/invite", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
 };
