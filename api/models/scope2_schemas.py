@@ -7,6 +7,7 @@ are shared at the app level.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
@@ -275,6 +276,64 @@ class ReportResponse(BaseModel):
     reporting_year: int
     rows: list[ReportRow]
     csv: str
+
+
+# --- Inbound buyer/CDP request queue (PRD 5.5) ------------------------------
+
+ReportDestinationKey = Literal["standard", "cdp", "amazon"]
+BuyerRequestStatus = Literal["open", "answered", "declined"]
+
+
+class CreateBuyerRequest(BaseModel):
+    buyer_name: str
+    destination: ReportDestinationKey = "standard"
+    reporting_year: int | None = None
+    due_date: str | None = None  # ISO date
+    notes: str | None = None
+
+
+class UpdateBuyerRequest(BaseModel):
+    status: BuyerRequestStatus | None = None
+    destination: ReportDestinationKey | None = None
+    due_date: str | None = None
+    calc_id: int | None = None
+    notes: str | None = None
+
+
+class BuyerRequestDTO(BaseModel):
+    request_id: int
+    buyer_name: str
+    destination: str
+    reporting_year: int | None = None
+    due_date: str | None = None
+    status: str
+    calc_id: int | None = None
+    answered_at: str | None = None
+    notes: str | None = None
+    is_overdue: bool = False
+    created_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "BuyerRequestDTO":
+        due = row.get("due_date")
+        is_overdue = bool(
+            row.get("status") == "open"
+            and due
+            and date.fromisoformat(str(due)) < date.today()
+        )
+        return cls(
+            request_id=int(row["request_id"]),
+            buyer_name=row["buyer_name"],
+            destination=row.get("destination", "standard"),
+            reporting_year=row.get("reporting_year"),
+            due_date=due,
+            status=row.get("status", "open"),
+            calc_id=int(row["calc_id"]) if row.get("calc_id") is not None else None,
+            answered_at=row.get("answered_at"),
+            notes=row.get("notes"),
+            is_overdue=is_overdue,
+            created_at=row.get("created_at"),
+        )
 
 
 # --- Leased-site landlord data-requests (PRD 5.2) ---------------------------

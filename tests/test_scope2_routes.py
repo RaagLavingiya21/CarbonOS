@@ -370,6 +370,86 @@ def test_get_report_bad_destination_422(monkeypatch) -> None:
     assert resp.status_code == 422
 
 
+# --- inbound buyer request queue -------------------------------------------
+
+
+def _buyer_row(**kw) -> dict:
+    r = {
+        "request_id": 5,
+        "org_id": "org-1",
+        "buyer_name": "Walmart",
+        "destination": "cdp",
+        "reporting_year": 2024,
+        "due_date": None,
+        "status": "open",
+        "calc_id": None,
+        "answered_at": None,
+        "notes": None,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+    }
+    r.update(kw)
+    return r
+
+
+def test_create_buyer_request(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_reports.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr(
+        "db.s2_buyer_request_store.create_request",
+        lambda payload, *, org_id, user_id, access_token: 5,
+    )
+    monkeypatch.setattr(
+        "db.s2_buyer_request_store.get_request", lambda rid, token: _buyer_row()
+    )
+    resp = client.post(
+        "/api/scope2/buyer-requests",
+        headers=AUTH_HEADERS,
+        json={"buyer_name": "Walmart", "destination": "cdp"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["buyer_name"] == "Walmart"
+
+
+def test_list_buyer_requests_flags_overdue(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.s2_buyer_request_store.list_requests",
+        lambda token: [_buyer_row(due_date="2000-01-01", status="open")],
+    )
+    resp = client.get("/api/scope2/buyer-requests", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()[0]["is_overdue"] is True
+
+
+def test_answer_buyer_request_stamps_time(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        "db.s2_buyer_request_store.get_request",
+        lambda rid, token: _buyer_row(status="open", answered_at=None),
+    )
+
+    def _update(rid, updates, *, access_token):
+        captured["updates"] = updates
+        return _buyer_row(status="answered")
+
+    monkeypatch.setattr("db.s2_buyer_request_store.update_request", _update)
+    resp = client.patch(
+        "/api/scope2/buyer-requests/5",
+        headers=AUTH_HEADERS,
+        json={"status": "answered"},
+    )
+    assert resp.status_code == 200
+    assert "answered_at" in captured["updates"]
+
+
+def test_delete_buyer_request_404(monkeypatch) -> None:
+    def _raise(rid, *, access_token):
+        raise ValueError("nope")
+
+    monkeypatch.setattr("db.s2_buyer_request_store.delete_request", _raise)
+    resp = client.delete("/api/scope2/buyer-requests/999", headers=AUTH_HEADERS)
+    assert resp.status_code == 404
+
+
 # --- coverage scoring ------------------------------------------------------
 
 

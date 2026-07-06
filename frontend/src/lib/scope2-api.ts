@@ -138,6 +138,28 @@ export type Report = {
   csv: string;
 };
 
+export type BuyerRequest = {
+  request_id: number;
+  buyer_name: string;
+  destination: string;
+  reporting_year: number | null;
+  due_date: string | null;
+  status: string;
+  calc_id: number | null;
+  answered_at: string | null;
+  notes: string | null;
+  is_overdue: boolean;
+  created_at: string | null;
+};
+
+export type CreateBuyerRequestPayload = {
+  buyer_name: string;
+  destination?: string;
+  reporting_year?: number;
+  due_date?: string;
+  notes?: string;
+};
+
 export type Coverage = {
   total_mwh: number;
   coverage_fraction: number;
@@ -224,6 +246,21 @@ export const scope2Api = {
     request<Report>(
       `/api/scope2/calculations/${calcId}/report?destination=${destination}`,
     ),
+
+  listBuyerRequests: () =>
+    request<BuyerRequest[]>("/api/scope2/buyer-requests"),
+  createBuyerRequest: (payload: CreateBuyerRequestPayload) =>
+    request<BuyerRequest>("/api/scope2/buyer-requests", {
+      method: "POST",
+      body: payload,
+    }),
+  updateBuyerRequest: (requestId: number, updates: Record<string, unknown>) =>
+    request<BuyerRequest>(`/api/scope2/buyer-requests/${requestId}`, {
+      method: "PATCH",
+      body: updates,
+    }),
+  deleteBuyerRequest: (requestId: number) =>
+    request<void>(`/api/scope2/buyer-requests/${requestId}`, { method: "DELETE" }),
 
   listLandlordRequests: () =>
     request<LandlordRequest[]>("/api/scope2/landlord-requests"),
