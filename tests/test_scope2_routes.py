@@ -297,6 +297,79 @@ def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
     assert "Store 1" in data["unresolved_site_refs"]
 
 
+# --- leased-site landlord workflow -----------------------------------------
+
+
+def _landlord_row(**kw) -> dict:
+    row = {
+        "request_id": 7,
+        "site_id": 1,
+        "site_name": "Store 1",
+        "landlord_contact": "mgr@example.com",
+        "method": "email",
+        "status": "draft",
+        "sent_at": None,
+        "responded_at": None,
+        "reminder_cadence_days": 14,
+        "returned_data_ref": None,
+        "notes": None,
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    row.update(kw)
+    return row
+
+
+def test_create_landlord_request(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_landlord.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr(
+        "db.s2_landlord_store.create_request",
+        lambda payload, *, org_id, user_id, access_token: 7,
+    )
+    monkeypatch.setattr(
+        "db.s2_landlord_store.get_request", lambda rid, token: _landlord_row()
+    )
+    resp = client.post(
+        "/api/scope2/landlord-requests",
+        headers=AUTH_HEADERS,
+        json={"site_id": 1, "landlord_contact": "mgr@example.com"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["request_id"] == 7
+    assert resp.json()["status"] == "draft"
+
+
+def test_update_landlord_status_sent_stamps_time(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        "db.s2_landlord_store.get_request",
+        lambda rid, token: _landlord_row(status="draft", sent_at=None),
+    )
+
+    def _update(rid, updates, *, access_token):
+        captured["updates"] = updates
+        return _landlord_row(status="sent", sent_at=updates.get("sent_at"))
+
+    monkeypatch.setattr("db.s2_landlord_store.update_request", _update)
+    resp = client.patch(
+        "/api/scope2/landlord-requests/7",
+        headers=AUTH_HEADERS,
+        json={"status": "sent"},
+    )
+    assert resp.status_code == 200
+    # Transition to 'sent' auto-stamps sent_at.
+    assert "sent_at" in captured["updates"]
+    assert resp.json()["status"] == "sent"
+
+
+def test_delete_landlord_request_404(monkeypatch) -> None:
+    def _raise(rid, *, access_token):
+        raise ValueError("not found")
+
+    monkeypatch.setattr("db.s2_landlord_store.delete_request", _raise)
+    resp = client.delete("/api/scope2/landlord-requests/999", headers=AUTH_HEADERS)
+    assert resp.status_code == 404
+
+
 def test_run_calculation_missing_factor_is_422(monkeypatch) -> None:
     monkeypatch.setattr("api.routes.scope2_calc.resolve_org_id", lambda cu: "org-1")
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])

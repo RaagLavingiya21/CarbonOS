@@ -7,6 +7,8 @@ are shared at the app level.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, field_validator
 
 from s2_sites.geomap import EGRID_SUBREGIONS, is_valid_subregion
@@ -219,3 +221,58 @@ class RunCalculationResponse(BaseModel):
     consumption_mwh: float
     site_count: int
     market_fallback_site_count: int
+
+
+# --- Leased-site landlord data-requests (PRD 5.2) ---------------------------
+
+LandlordMethod = Literal["email", "portal", "phone"]
+LandlordStatus = Literal["draft", "sent", "responded", "declined", "overdue"]
+
+
+class CreateLandlordRequest(BaseModel):
+    site_id: int
+    landlord_contact: str | None = None
+    method: LandlordMethod = "email"
+    reminder_cadence_days: int = 14
+    notes: str | None = None
+
+
+class UpdateLandlordRequest(BaseModel):
+    status: LandlordStatus | None = None
+    landlord_contact: str | None = None
+    method: LandlordMethod | None = None
+    reminder_cadence_days: int | None = None
+    returned_data_ref: str | None = None
+    notes: str | None = None
+
+
+class LandlordRequestDTO(BaseModel):
+    request_id: int
+    site_id: int
+    site_name: str | None = None
+    landlord_contact: str | None = None
+    method: str
+    status: str
+    sent_at: str | None = None
+    responded_at: str | None = None
+    reminder_cadence_days: int
+    returned_data_ref: str | None = None
+    notes: str | None = None
+    created_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "LandlordRequestDTO":
+        return cls(
+            request_id=int(row["request_id"]),
+            site_id=int(row["site_id"]),
+            site_name=row.get("site_name"),
+            landlord_contact=row.get("landlord_contact"),
+            method=row.get("method", "email"),
+            status=row.get("status", "draft"),
+            sent_at=row.get("sent_at"),
+            responded_at=row.get("responded_at"),
+            reminder_cadence_days=int(row.get("reminder_cadence_days", 14)),
+            returned_data_ref=row.get("returned_data_ref"),
+            notes=row.get("notes"),
+            created_at=row.get("created_at"),
+        )

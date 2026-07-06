@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, Calculator, Upload, Zap } from "lucide-react";
+import { ArrowRight, Building2, Calculator, Mail, Upload, Zap } from "lucide-react";
 
 import { KpiStrip } from "@/components/portfolio/KpiStrip";
 import { ErrorState } from "@/components/ui/error-state";
@@ -28,6 +28,12 @@ const ENTRIES = [
     icon: Calculator,
     title: "Calculate & report",
     body: "Run a dual-method (location + market-based) Scope 2 inventory with a full audit trail.",
+  },
+  {
+    href: "/scope-2/landlord",
+    icon: Mail,
+    title: "Leased-site data requests",
+    body: "Request whole-building or sub-metered data from landlords for leased sites — the gap no incumbent fills.",
   },
 ];
 

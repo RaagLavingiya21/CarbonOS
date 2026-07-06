@@ -97,6 +97,29 @@ export type RunCalculationResult = {
   market_fallback_site_count: number;
 };
 
+export type LandlordRequest = {
+  request_id: number;
+  site_id: number;
+  site_name: string | null;
+  landlord_contact: string | null;
+  method: string;
+  status: string;
+  sent_at: string | null;
+  responded_at: string | null;
+  reminder_cadence_days: number;
+  returned_data_ref: string | null;
+  notes: string | null;
+  created_at: string | null;
+};
+
+export type CreateLandlordPayload = {
+  site_id: number;
+  landlord_contact?: string;
+  method?: string;
+  reminder_cadence_days?: number;
+  notes?: string;
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -160,4 +183,21 @@ export const scope2Api = {
       body: { reporting_year: reportingYear },
     }),
   listCalculations: () => request<Calculation[]>("/api/scope2/calculations"),
+
+  listLandlordRequests: () =>
+    request<LandlordRequest[]>("/api/scope2/landlord-requests"),
+  createLandlordRequest: (payload: CreateLandlordPayload) =>
+    request<LandlordRequest>("/api/scope2/landlord-requests", {
+      method: "POST",
+      body: payload,
+    }),
+  updateLandlordRequest: (requestId: number, updates: Record<string, unknown>) =>
+    request<LandlordRequest>(`/api/scope2/landlord-requests/${requestId}`, {
+      method: "PATCH",
+      body: updates,
+    }),
+  deleteLandlordRequest: (requestId: number) =>
+    request<void>(`/api/scope2/landlord-requests/${requestId}`, {
+      method: "DELETE",
+    }),
 };
