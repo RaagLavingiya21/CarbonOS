@@ -39,7 +39,7 @@ Each becomes a dated rule with a predicate over the company profile, a due date,
 
 ---
 
-## 3. New data model (migrations `038`–`039`)
+## 3. New data model (migrations `058`–`059`)
 
 | Table | Purpose | Key columns |
 |---|---|---|
@@ -81,13 +81,13 @@ The **ruleset itself is a versioned file**, not a table: `data/obligation_rules/
 
 ### C1 — Company profile intake & store
 - **Goal:** A persisted, org-level company profile with the fields the engine needs.
-- **Files:** migration `038_company_profiles.sql`; `db/obligation_store.py` (profile CRUD); `POST/GET /api/company-profile`.
+- **Files:** migration `058_company_profiles.sql`; `db/obligation_store.py` (profile CRUD); `POST/GET /api/company-profile`.
 - **Verify:** Branch DB. Save a profile (revenue, employees, EU turnover, customers); read back org-scoped.
-- **Prompt:** *Read §3. Create `038_company_profiles.sql` (RLS org-scoped like `027`). Extend the gap-analyzer `CompanyProfile` fields with `annual_revenue_usd`, `eu_turnover_eur`, `eu_subsidiary`, `employee_count`, `listed_status`, `key_customers`. Add profile CRUD to `db/obligation_store.py` and the `/api/company-profile` routes.*
+- **Prompt:** *Read §3. Create `058_company_profiles.sql` (RLS org-scoped like `027`). Extend the gap-analyzer `CompanyProfile` fields with `annual_revenue_usd`, `eu_turnover_eur`, `eu_subsidiary`, `employee_count`, `listed_status`, `key_customers`. Add profile CRUD to `db/obligation_store.py` and the `/api/company-profile` routes.*
 
 ### C2 — Obligation ruleset + engine  (P.1.1.b/.c)  ⭐ currency-critical
 - **Goal:** A dated ruleset file and an engine that evaluates a profile into ranked, cited obligations with a timeline.
-- **Files:** `data/obligation_rules/v2026-07.yaml` (seed from §2); `obligations/ruleset.py`; `obligations/engine.py`; migration `039_obligations.sql`; `POST /evaluate`, `GET /api/obligations`; `evals/fixtures/obligation_cases.json`.
+- **Files:** `data/obligation_rules/v2026-07.yaml` (seed from §2); `obligations/ruleset.py`; `obligations/engine.py`; migration `059_obligations.sql`; `POST /evaluate`, `GET /api/obligations`; `evals/fixtures/obligation_cases.json`.
 - **Verify:** Seed rules match §2 exactly. A >$1B / >500-emp US consumer brand → SB253 (Scope 3 2027) + SBTi Category A (Scope 3 mandatory). Uncertain items (SB253 format, SB261 injunction) returned as `uncertain/watch`, not fixed. Determinism; `ruleset_version` recorded.
 - **Prompt:** *Read §1, §2, §3. Create `data/obligation_rules/v2026-07.yaml` encoding the §2 table (predicate, due date, assurance, citation, confidence/status per rule). Create `obligations/ruleset.py` (schema-validated loader) and `obligations/engine.py` (evaluate a profile → ranked obligations + timeline, stamping `ruleset_version`). Encode the §1 uncertainty rule: unconfirmed/in-flux items return `applies: uncertain`, never a fabricated fixed value. Wire `POST /evaluate` and `GET /api/obligations`. Assert §7 invariants in `evals/fixtures/obligation_cases.json`.*
 

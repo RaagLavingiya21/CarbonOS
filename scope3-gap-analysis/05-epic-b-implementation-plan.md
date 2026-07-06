@@ -38,7 +38,7 @@ Handoff in: Epic C's request-signal capture (P.1.2) routes a captured request he
 
 ---
 
-## 3. New data model (migrations `034`–`037`)
+## 3. New data model (migrations `054`–`057`)
 
 Extends the existing inbound-inbox pattern in `027_pcf_requests.sql` (which handles *product-footprint share* requests) to *questionnaire* requests. RLS mirrors `pcf_requests` (org-member scoped).
 
@@ -86,9 +86,9 @@ Follows the BOM analyzer's human-in-the-loop checkpoint pattern (detect → map 
 
 ### B1 — Data model & store
 - **Goal:** 4 tables + store; no detection/mapping yet.
-- **Files:** migrations `034`–`037`; `db/questionnaire_store.py`.
+- **Files:** migrations `054`–`057`; `db/questionnaire_store.py`.
 - **Verify:** Branch DB. Create a request, add questions, read back org-scoped. RLS blocks cross-org.
-- **Prompt:** *Read §3. Create migrations 034–037 following the RLS pattern in `027_pcf_requests.sql`. Create `db/questionnaire_store.py` mirroring `db/request_store.py`. No AI logic yet.*
+- **Prompt:** *Read §3. Create migrations 054–057 following the RLS pattern in `027_pcf_requests.sql`. Create `db/questionnaire_store.py` mirroring `db/request_store.py`. No AI logic yet.*
 
 ### B2 — Inbound request intake  (P.1.2.a/.b/.c)
 - **Goal:** Capture a questionnaire request (upload or manual), set a deadline/task, accept a handoff from Epic C.

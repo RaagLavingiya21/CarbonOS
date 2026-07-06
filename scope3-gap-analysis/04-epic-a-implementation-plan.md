@@ -35,7 +35,7 @@ GL / ERP spend  ──►  classify each line  ──►  category totals (spend
 
 ---
 
-## 2. New data model (migrations `030`–`033`)
+## 2. New data model (migrations `050`–`053`)
 
 Follows the existing migration conventions (`supabase/migrations/`, `BIGSERIAL` PKs, RLS with `shares_org_with()`, org visibility mirroring `product_volumes` in `028`).
 
@@ -89,9 +89,9 @@ Style matches `IMPLEMENTATION_PLAN.md` / `PLATFORM_CHAT_AGENT_PLAN.md`: **Goal �
 
 ### A1 — Data model & store
 - **Goal:** The 4 tables exist with RLS; a store layer can CRUD them. No classifier yet.
-- **Files:** `supabase/migrations/030_inventory_versions.sql`, `031_spend_records.sql`, `032_spend_classifications.sql`, `033_inventory_category_results.sql` (+ RLS mirroring `028`); `db/inventory_store.py`.
+- **Files:** `supabase/migrations/050_inventory_versions.sql`, `051_spend_records.sql`, `052_spend_classifications.sql`, `053_inventory_category_results.sql` (+ RLS mirroring `028`); `db/inventory_store.py`.
 - **Verify:** Run migrations against a **branch** database (never the demo DB — per CLAUDE.md). Create an inventory version, insert spend records, read them back org-scoped. Confirm RLS blocks cross-user reads.
-- **Prompt:** *Read `scope3-gap-analysis/04-epic-a-implementation-plan.md` §2 and §3. Create migrations 030–033 for `inventory_versions`, `spend_records`, `spend_classifications`, `inventory_category_results`, following the column specs in §2 and the RLS pattern in `supabase/migrations/028_product_volumes.sql` (owner + `shares_org_with`). Then create `db/inventory_store.py` with CRUD following `db/rollup_store.py` patterns (`get_user_client`, org-scoped reads). No classifier or calc logic yet.*
+- **Prompt:** *Read `scope3-gap-analysis/04-epic-a-implementation-plan.md` §2 and §3. Create migrations 050–053 for `inventory_versions`, `spend_records`, `spend_classifications`, `inventory_category_results`, following the column specs in §2 and the RLS pattern in `supabase/migrations/028_product_volumes.sql` (owner + `shares_org_with`). Then create `db/inventory_store.py` with CRUD following `db/rollup_store.py` patterns (`get_user_client`, org-scoped reads). No classifier or calc logic yet.*
 
 ### A2 — Spend ingestion
 - **Goal:** Upload a GL/ERP CSV, get normalized `spend_records` with flags.
@@ -156,7 +156,7 @@ Style matches `IMPLEMENTATION_PLAN.md` / `PLATFORM_CHAT_AGENT_PLAN.md`: **Goal �
 | Category coverage of spend-based | 🟠 | Spend-based naturally covers Cat 1,2,4,5,6,7 (+ parts of others). Cat 11/12/downstream need activity/product data — mark them "screened, deepen later" and hand to **Epic H**. Don't claim false completeness. |
 | Boundary/consolidation depth | 🟢 | Reuse the Scope 1 multiplier concept; MVP assumes single entity, subsidiary structure deferred (flagged). |
 | Spend-only vs activity engine | ✅ resolved | Epic A is spend-based by design — matches CarbonOS's standing decision. **No blocking decision needed.** |
-| Migration safety | 🟢 | Run 030–033 against a branch DB first (CLAUDE.md), never the demo DB. |
+| Migration safety | 🟢 | Run 050–053 against a branch DB first (CLAUDE.md), never the demo DB. |
 
 ---
 

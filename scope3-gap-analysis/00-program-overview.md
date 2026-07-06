@@ -21,6 +21,23 @@ The one-line thesis carried through all of them: **CarbonOS already owns the har
 
 ---
 
+## 1b. Scope-3 module conventions (parallel-build hygiene — SUPERSEDES per-plan naming)
+
+This module is built as an isolated lane on `feature/scope3-mvp` alongside Scope 1 and Scope 2, all landing on `main`. **Plans `04`–`12` were written before the hygiene rules and use pre-namespace names; the conventions below govern and override them.**
+
+| Concern | Convention | Note |
+|---|---|---|
+| **Packages** | `s3_*` only: `s3_factors` (vendored CEDA engine), `s3_measure` (parser/classifier/inventory), `s3_obligations` | No imports of shared business modules (`calc`/`factors`/`parsing`/`gap_analyzer`/`copilot`/`rag`/`exchange`/`llm`) or sibling scopes — enforced by `tests/test_s3_isolation.py`. Where a plan says `factors/ef_lookup.py`, read `s3_factors/ef_lookup.py`. |
+| **Stores** | `db/s3_*_store.py` | Plans saying `db/inventory_store.py` → `db/s3_inventory_store.py`, etc. |
+| **Routes** | `api/routes/scope3_*.py` | Plans saying `api/routes/questionnaire.py` → `api/routes/scope3_questionnaire.py`. |
+| **URLs / API client** | `/scope-3/*` · `lib/scope3-api.ts` | Plans saying `/api/questionnaires` → under `/scope-3`. |
+| **DTOs** | `api/models/scope3_schemas.py` | |
+| **Feature flag** | `NEXT_PUBLIC_SCOPE3_ENABLED` | Ships **dark** — nav hidden, default OFF in prod. |
+| **Migration band** | **`050`–`059`** | MVP fits exactly: Epic A `050`–`053`, Epic B `054`–`057`, Epic C `058`–`059`. **Epics D–I need additional bands coordinated with the integrator — the numbers in plans `07`–`12` are placeholders, not final.** |
+| **Shared files** | append-only (`api/main.py` include_router, app-shell nav entry, `requirements.txt`) | Never modify shared infra (`auth`, `db/client`, `org_store`, `shares_org_with`); a genuine shared change lands as its own PR to `main` first. |
+
+---
+
 ## 2. The program on one screen
 
 Effort: S≈days, M≈1–2wk, L≈3–5wk, XL≈6wk+ (one small squad).
