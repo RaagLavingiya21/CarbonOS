@@ -12,7 +12,11 @@ import os
 from dataclasses import dataclass
 from typing import Callable
 
-BAYOU_BASE_URL = "https://api.bayou.energy"
+BAYOU_BASE_URL = "https://bayou.energy/api/v2"
+
+# Bill "status" values: gas data is available once the bill is unlocked.
+_PARSED_STATUSES = {"unlocked", "unlocked_for_gas", "unlocked_for_electric"}
+_FAILED_STATUSES = {"not_supported"}
 
 
 class BayouError(RuntimeError):
@@ -89,16 +93,28 @@ def _num(value) -> float | None:
 
 
 def _parse_bill(bill_id: str, data: dict) -> BayouBill:
-    """Normalize a Bayou bill response into BayouBill (defensive on field names)."""
-    parsed = bool(data.get("has_been_parsed")) or data.get("gas_consumption") is not None
+    """Normalize a Bayou bill response (v2 schema) into BayouBill."""
+    raw_status = (data.get("status") or "").lower()
+    if raw_status in _PARSED_STATUSES:
+        status = "parsed"
+    elif raw_status in _FAILED_STATUSES:
+        status = "failed"
+    else:
+        status = "parsing"                      # unparsed | locked | partially_unlocked
+    meters = data.get("meters") or []
+    meter_id = (
+        str(meters[0]["id"])
+        if meters and isinstance(meters[0], dict) and meters[0].get("id") is not None
+        else None
+    )
     return BayouBill(
         bill_id=bill_id,
-        status="parsed" if parsed else "parsing",
+        status=status,
         gas_consumption=_num(data.get("gas_consumption")),
         gas_consumption_unit=data.get("gas_consumption_unit"),
         billing_period_from=data.get("billing_period_from"),
         billing_period_to=data.get("billing_period_to"),
         gas_amount=_num(data.get("gas_amount")),
         account_number=data.get("account_number"),
-        meter_id=str(data["meter_id"]) if data.get("meter_id") is not None else None,
+        meter_id=meter_id,
     )

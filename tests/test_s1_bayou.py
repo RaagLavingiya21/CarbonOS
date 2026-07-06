@@ -23,10 +23,10 @@ def test_submit_bill_returns_id() -> None:
 def test_get_bill_parses_fields() -> None:
     def fake_request(method, path, **kwargs):
         return {
-            "has_been_parsed": True,
+            "status": "unlocked",
             "gas_consumption": "1000", "gas_consumption_unit": "therms",
             "billing_period_from": "2025-01-01", "billing_period_to": "2025-01-31",
-            "gas_amount": "120.50", "account_number": "A-1", "meter_id": 42,
+            "gas_amount": "120.50", "account_number": "A-1", "meters": [{"id": 42}],
         }
 
     bill = BayouClient(api_key="k", request=fake_request).get_bill("987")
@@ -37,12 +37,13 @@ def test_get_bill_parses_fields() -> None:
 
 
 def test_get_bill_still_parsing() -> None:
-    bill = BayouClient(api_key="k", request=lambda *a, **k: {"has_been_parsed": False}).get_bill("1")
+    bill = BayouClient(api_key="k", request=lambda *a, **k: {"status": "locked"}).get_bill("1")
     assert bill.status == "parsing"
     assert bill.gas_consumption is None
 
 
-def test_not_configured_raises_before_network() -> None:
+def test_not_configured_raises_before_network(monkeypatch) -> None:
+    monkeypatch.delenv("BAYOU_API_KEY", raising=False)   # isolate from a real .env key
     client = BayouClient(api_key="")           # no key, real transport
     assert client.is_configured is False
     with pytest.raises(BayouError):
