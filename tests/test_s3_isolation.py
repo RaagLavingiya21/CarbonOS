@@ -22,7 +22,7 @@ from pathlib import Path
 _ROOT = Path(__file__).parent.parent
 
 # Scope-3 owns these package dirs + file-name patterns.
-_SCAN_DIRS = ["s3_factors", "s3_measure", "s3_obligations", "s3_targets"]
+_SCAN_DIRS = ["s3_factors", "s3_measure", "s3_obligations", "s3_targets", "s3_questionnaire"]
 _SCAN_GLOBS = ["api/routes/scope3_*.py", "db/s3_*_store.py", "api/models/scope3_schemas.py"]
 
 _FORBIDDEN_BUSINESS = {
