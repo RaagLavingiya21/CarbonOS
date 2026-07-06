@@ -1,0 +1,126 @@
+# Obligation ruleset — dated, versioned DATA (not code), per Epic C plan §1.
+# Seeded from research/reg-status-verified.md (verified 2026-07-04). This is a
+# SNAPSHOT of moving regulation: update by adding a new dated file, never by
+# editing code. The engine stamps every evaluation with `version` below.
+#
+# Rule schema:
+#   id                    machine key
+#   framework             human label
+#   condition             three-valued predicate over ObligationProfile fields
+#                         (all / any / not / {field, op, value}); a leaf over a
+#                         missing (None) field evaluates to UNKNOWN, which makes
+#                         the obligation `uncertain` rather than a false negative
+#   applies_when_matched  yes | uncertain   (uncertain = matched but in legal flux)
+#   confidence            confirmed | partial   (partial = value/format not final)
+#   status                in_force | watch
+#   threshold_detail      why it triggers
+#   due                   list of {what, date, note?}
+#   assurance             assurance requirement, if any
+#   citation              source
+#   priority              higher = surfaced first
+
+version: v2026-07
+as_of: 2026-07-04
+source: research/reg-status-verified.md
+
+rules:
+  - id: ca_sb253
+    framework: California SB 253
+    applies_when_matched: yes
+    confidence: partial            # Scope 3 report FORMAT open until CARB final reg (~end-2026)
+    status: in_force
+    condition:
+      all:
+        - {field: is_us_entity, op: eq, value: true}
+        - {field: does_business_in_ca, op: eq, value: true}
+        - {field: annual_revenue_usd, op: gte, value: 1000000000}
+    threshold_detail: "US entity, >$1B global revenue, doing business in California"
+    due:
+      - {what: "Scope 1 & 2 report", date: 2026-11-10}
+      - {what: "Scope 3 report", date: 2027-01-01, note: "format open until CARB final reg (~end-2026)"}
+    assurance: "Limited assurance over Scope 1&2 from 2027, phasing to reasonable"
+    citation: "CA SB 253; CARB rulemaking (final reg expected end-2026)"
+    priority: 90
+
+  - id: ca_sb261
+    framework: California SB 261
+    applies_when_matched: uncertain   # enforcement under a Ninth-Circuit injunction
+    confidence: partial
+    status: watch
+    condition:
+      all:
+        - {field: is_us_entity, op: eq, value: true}
+        - {field: does_business_in_ca, op: eq, value: true}
+        - {field: annual_revenue_usd, op: gte, value: 500000000}
+    threshold_detail: "US entity, >$500M revenue, doing business in California"
+    due:
+      - {what: "Biennial climate-risk report (TCFD/IFRS-S2-aligned)", date: 2026-01-01, note: "enforcement affected by 9th-Cir injunction — watch"}
+    citation: "CA SB 261 (enforcement contested)"
+    priority: 60
+
+  - id: csrd_esrs_e1
+    framework: CSRD / ESRS E1
+    applies_when_matched: yes
+    confidence: confirmed
+    status: in_force
+    condition:
+      any:
+        - all:   # EU-established large undertaking
+            - {field: employee_count, op: gt, value: 1000}
+            - {field: eu_turnover_eur, op: gt, value: 450000000}
+        - all:   # non-EU group caught via Art. 40a
+            - {field: eu_turnover_eur, op: gt, value: 450000000}
+            - any:
+                - {field: eu_subsidiary, op: eq, value: true}
+                - {field: eu_branch_turnover_eur, op: gt, value: 200000000}
+    threshold_detail: ">1,000 employees AND >€450M EU turnover; OR Art.40a non-EU group (>€450M EU turnover + qualifying EU subsidiary/branch >€200M)"
+    due:
+      - {what: "ESRS E1 disclosure (Scope 1/2/3 + value-chain, iXBRL)", date: 2028-01-01, note: "FY2027, first reports 2028 (post-Omnibus)"}
+    assurance: "Limited assurance (CSRD phases limited→reasonable)"
+    citation: "CSRD; ESRS E1; Omnibus I (in force 18 Mar 2026)"
+    priority: 85
+
+  - id: ifrs_s2
+    framework: IFRS S2 / ISSB
+    applies_when_matched: yes
+    confidence: confirmed
+    status: in_force
+    condition:
+      any:
+        - {field: listed_jurisdictions, op: nonempty, value: true}
+    threshold_detail: "Listed (or foreign-listed parent) in an ISSB-adopting jurisdiction; also hits ICP indirectly as a supplier"
+    due:
+      - {what: "IFRS S2 Scope 3 disclosure (per GHG Protocol)", date: 2027-01-01, note: "jurisdiction-phased; first-year Scope 3 relief"}
+    citation: "IFRS S2 / ISSB (>21 jurisdictions adopting)"
+    priority: 55
+
+  - id: sbti_v2_category_a
+    framework: SBTi Corporate Net-Zero Standard V2.0
+    applies_when_matched: yes
+    confidence: partial              # net-zero (long-term) coverage % UNCONFIRMED — do not hardcode
+    status: in_force
+    condition:
+      any:
+        - {field: annual_revenue_usd, op: gt, value: 1000000000}
+        - {field: employee_count, op: gt, value: 500}
+    threshold_detail: "Category A (revenue >$1B OR >500 employees, high-income) → Scope 3 targets MANDATORY"
+    due:
+      - {what: "Near-term Scope 3 targets: every category ≥5% of Scope 3 covered", date: 2027-01-31, note: "V2.0 effective 31 Jan 2027; mandatory for submissions after 31 Jan 2028"}
+      - {what: "Base-year limited assurance (Scope 1/2/3)", date: 2027-01-31, note: "required for Category A"}
+    assurance: "Base-year limited assurance REQUIRED for Category A; net-zero coverage % unconfirmed — verify vs V2.0 text"
+    citation: "SBTi Corporate Net-Zero Standard V2.0 (released 11 Jun 2026)"
+    priority: 80
+
+  - id: customer_retailer_request
+    framework: Customer / retailer data request
+    applies_when_matched: yes
+    confidence: confirmed
+    status: in_force
+    condition:
+      any:
+        - {field: key_customers, op: intersects, value: [walmart, tesco, target, costco, carrefour, sainsbury, ahold, kroger, cdp, ecovadis]}
+    threshold_detail: "Sells to a major retailer/buyer running a Scope 3 supplier program (Walmart/Tesco/CDP-SC/EcoVadis, etc.)"
+    due:
+      - {what: "Answer the customer/retailer questionnaire", date: null, note: "contract-linked, ad hoc — routes to the questionnaire workflow (Epic B)"}
+    citation: "Retailer supplier programs; CDP Supply Chain; EcoVadis"
+    priority: 95

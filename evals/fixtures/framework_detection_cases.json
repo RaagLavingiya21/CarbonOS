@@ -1,0 +1,48 @@
+{
+  "_comment": "Labeled questionnaire snippets for the Epic B framework detector (P.4.2.1). expected_framework = cdp|ecovadis|walmart|tesco_cdf|generic. confident=true means the detector should be confident (not low-confidence); ambiguous cases set confident=false and must NOT be confidently mislabeled (return generic or low-confidence). Used by evals/test_framework_detection.py to measure accuracy + the safety property BEFORE any UI (mirrors A3).",
+  "cases": [
+    {
+      "name": "cdp_climate",
+      "expected_framework": "cdp",
+      "confident": true,
+      "text": "CDP Climate Change Questionnaire 2026\nC6.1 What were your organization's gross global Scope 1 emissions in metric tons CO2e?\nC6.3 What were your gross global Scope 2 emissions (market-based) in metric tons CO2e?\nC6.5 Account for your organization's gross global Scope 3 emissions.\nC7.1 Does your organization break down Scope 1 emissions by greenhouse gas? Yes/No",
+      "expect_types": ["numeric", "boolean"]
+    },
+    {
+      "name": "ecovadis_assessment",
+      "expected_framework": "ecovadis",
+      "confident": true,
+      "text": "EcoVadis Sustainability Assessment\nEnvironment theme\nPlease describe your environmental management policy and provide supporting documents.\nSustainable Procurement\nLabor and Human Rights\nDo you have a formal code of conduct for suppliers? Yes/No"
+    },
+    {
+      "name": "walmart_gigaton",
+      "expected_framework": "walmart",
+      "confident": true,
+      "text": "Walmart Project Gigaton — THESIS Sustainability Index\nHave you committed to a Gigaton emissions reduction goal? Yes/No\nWhat is your total Scope 3 emissions in tonnes CO2e for the reporting year?\nDescribe your packaging reduction initiatives."
+    },
+    {
+      "name": "tesco_common_data_framework",
+      "expected_framework": "tesco_cdf",
+      "confident": true,
+      "text": "Retailer Common Data Framework — Supplier Disclosure (Tesco)\nSelect your disclosure tier: Foundational / Expanded / Granular\nProvide your product-level carbon footprint for the supplied SKUs.\nWhat is your total purchased-goods emissions in kg CO2e?"
+    },
+    {
+      "name": "generic_supplier_survey",
+      "expected_framework": "generic",
+      "confident": false,
+      "text": "Supplier Sustainability Questionnaire\n1. What is your total annual GHG emissions?\n2. Describe your emissions reduction initiatives.\n3. Do you have a science-based target? Yes/No"
+    },
+    {
+      "name": "ambiguous_low_signal",
+      "expected_framework": "generic",
+      "confident": false,
+      "text": "Emissions data request\nPlease share your latest carbon footprint data at your convenience."
+    },
+    {
+      "name": "customer_email_mentions_cdp_in_passing",
+      "expected_framework": "generic",
+      "confident": false,
+      "text": "Hi team, our buyer asked us to get ready for climate reporting. Can you compile our data? Thanks."
+    }
+  ]
+}

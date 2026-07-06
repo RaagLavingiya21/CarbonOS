@@ -1,0 +1,33 @@
+{
+  "_comment": "Labeled GL/ERP spend lines for the Epic A P.2.2.b spend->category classifier prototype. expected_category = GHG Protocol Scope 3 category (1-15). expect_flag (optional) asserts the line is flagged for human review. Used by evals/test_spend_classification.py to measure per-category accuracy + determinism BEFORE any UI is built (per 04-epic-a-implementation-plan.md A3).",
+  "cases": [
+    {"description": "Cotton knit fabric - 500 yards", "vendor": "Piedmont Textiles", "expected_category": 1},
+    {"description": "Corrugated packaging boxes, double-wall", "vendor": "BoxCo", "expected_category": 1},
+    {"description": "Raw aluminum ingots, 99.7%", "vendor": "AlSupply", "expected_category": 1},
+    {"description": "Legal services retainer - Q3", "vendor": "Baker & Reed LLP", "expected_category": 1},
+    {"description": "Contract printing - product catalogs", "vendor": "PrintWorks", "expected_category": 1},
+    {"description": "Organic cane sugar, bulk", "vendor": "SweetFields", "expected_category": 1},
+
+    {"description": "Dell laptops for staff (50 units)", "vendor": "Dell", "expected_category": 2},
+    {"description": "CNC machining equipment purchase", "vendor": "HaasAuto", "expected_category": 2},
+    {"description": "Office furniture - desks and chairs", "vendor": "Steelcase", "expected_category": 2},
+    {"description": "Delivery van fleet purchase (3 vehicles)", "vendor": "Ford Fleet", "expected_category": 2},
+
+    {"description": "Natural gas supply - Plant 2", "vendor": "PG&E", "expected_category": 3, "expect_flag": "review_scope"},
+    {"description": "Diesel fuel for backup generators", "vendor": "Valero", "expected_category": 3, "expect_flag": "review_scope"},
+
+    {"description": "Freight trucking - inbound raw materials", "vendor": "Werner", "expected_category": 4},
+    {"description": "Ocean freight shipping - container", "vendor": "Maersk", "expected_category": 4},
+    {"description": "Warehousing and storage services", "vendor": "Prologis", "expected_category": 4},
+    {"description": "Courier and parcel delivery", "vendor": "FedEx", "expected_category": 4},
+
+    {"description": "Waste hauling and disposal services", "vendor": "Waste Management Inc", "expected_category": 5},
+    {"description": "Hazardous waste removal - Q2", "vendor": "Clean Earth", "expected_category": 5},
+
+    {"description": "Corporate air travel - Q3", "vendor": "United Airlines", "expected_category": 6},
+    {"description": "Hotel accommodation - sales conference", "vendor": "Marriott", "expected_category": 6},
+    {"description": "Travel booking and reservation fees", "vendor": "Concur", "expected_category": 6},
+
+    {"description": "Miscellaneous sundry expense acct 4471", "vendor": "", "expected_category": 1, "expect_flag": "any"}
+  ]
+}

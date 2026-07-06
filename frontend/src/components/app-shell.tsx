@@ -10,6 +10,7 @@ import {
   Boxes,
   Factory,
   FileSearch,
+  Flame,
   Inbox,
   Leaf,
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
   Plus,
   Search,
   Settings,
+  Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,15 +33,26 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { toggleTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
+// Scope 2 ("Grid") module nav entry — gated so it can ship dark in prod until
+// design-partner pilots. Enable with NEXT_PUBLIC_SCOPE2_ENABLED=true.
+const SCOPE2_ENABLED = process.env.NEXT_PUBLIC_SCOPE2_ENABLED === "true";
+
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, shortcut: "G D" },
   { href: "/chat", label: "Chat", icon: MessageSquare, shortcut: "G C" },
   { href: "/products", label: "Portfolio", icon: Boxes, shortcut: "G P" },
   { href: "/requests", label: "Requests", icon: Inbox, shortcut: "G R" },
   { href: "/rollup", label: "Corporate footprint", icon: BarChart3, shortcut: "G F" },
+  // Scope 1 ships dark: nav hidden unless the feature flag is explicitly on.
+  ...(process.env.NEXT_PUBLIC_SCOPE1_ENABLED === "true"
+    ? [{ href: "/scope-1", label: "Scope 1", icon: Flame, shortcut: "G 1" }]
+    : []),
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch, shortcut: "G G" },
   { href: "/advisor", label: "Advisor", icon: Bot, shortcut: "G V" },
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory, shortcut: "G S" },
+  ...(SCOPE2_ENABLED
+    ? [{ href: "/scope-2", label: "Scope 2", icon: Zap, shortcut: "G 2" }]
+    : []),
   { href: "/settings/org", label: "Settings", icon: Settings, shortcut: "" },
 ];
 
