@@ -37,7 +37,10 @@ const navItems = [
   { href: "/products", label: "Portfolio", icon: Boxes },
   { href: "/requests", label: "Requests", icon: Inbox },
   { href: "/rollup", label: "Corporate footprint", icon: BarChart3 },
-  { href: "/scope-1", label: "Scope 1", icon: Flame },
+  // Scope 1 ships dark: nav hidden unless the feature flag is explicitly on.
+  ...(process.env.NEXT_PUBLIC_SCOPE1_ENABLED === "true"
+    ? [{ href: "/scope-1", label: "Scope 1", icon: Flame }]
+    : []),
   { href: "/gap-analysis", label: "Gap Analysis", icon: FileSearch },
   { href: "/advisor", label: "Advisor", icon: Bot },
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory },

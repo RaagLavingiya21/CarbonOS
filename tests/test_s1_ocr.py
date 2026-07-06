@@ -5,9 +5,23 @@ The Claude vision call is always injected/monkeypatched — no API key needed.
 
 from __future__ import annotations
 
+import pytest
+
 from s1_intake.ocr import extract_document, fields_for, parse_extraction
 from s1_intake.ocr.extract import extraction_tool
 from s1_intake.ocr.models import ExtractedField, Extraction
+
+
+@pytest.fixture(autouse=True)
+def _ocr_memory_checkpointer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Module-local: run the Scope 1 OCR graph on an in-memory checkpointer (no
+    Postgres). Kept out of the shared conftest so nothing of ours lives there."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from api.graphs import scope1_ocr_graph
+
+    monkeypatch.setattr(scope1_ocr_graph, "get_checkpointer", lambda: MemorySaver())
+    scope1_ocr_graph._ocr_graph = None
 
 # --- Pure extraction --------------------------------------------------------
 
@@ -69,7 +83,7 @@ def _fake_extract(fields):
 
 
 def test_graph_low_confidence_pauses_at_review(monkeypatch) -> None:
-    from api.graphs import ocr_graph
+    from api.graphs import scope1_ocr_graph as ocr_graph
 
     monkeypatch.setattr(
         ocr_graph, "extract_document",
@@ -88,7 +102,7 @@ def test_graph_low_confidence_pauses_at_review(monkeypatch) -> None:
 
 
 def test_graph_high_confidence_auto_approves(monkeypatch) -> None:
-    from api.graphs import ocr_graph
+    from api.graphs import scope1_ocr_graph as ocr_graph
 
     monkeypatch.setattr(
         ocr_graph, "extract_document",
@@ -101,7 +115,7 @@ def test_graph_high_confidence_auto_approves(monkeypatch) -> None:
 
 
 def test_graph_reject(monkeypatch) -> None:
-    from api.graphs import ocr_graph
+    from api.graphs import scope1_ocr_graph as ocr_graph
 
     monkeypatch.setattr(
         ocr_graph, "extract_document",

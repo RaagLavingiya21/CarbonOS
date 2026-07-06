@@ -12,7 +12,7 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
-from api.graphs.ocr_graph import get_ocr_state, review_ocr, start_ocr
+from api.graphs.scope1_ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
     AssignOwnerRequest,
