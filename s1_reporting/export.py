@@ -128,7 +128,10 @@ def build_pdf(report: InventoryReport, meta: DisclosureMeta) -> bytes:
         pdf.ln(3)
         _pdf_table(pdf, "Emissions by facility",
                    [("Facility", "tCO2e")]
-                   + [(r.facility_name or "Unassigned", f"{r.tco2e:,.4f}") for r in report.by_facility])
+                   + [
+                       (r.facility_name or "Unassigned", f"{r.tco2e:,.4f}")
+                       for r in report.by_facility
+                   ])
 
     pdf.ln(4)
     pdf.set_font("Helvetica", "I", 9)

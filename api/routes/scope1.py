@@ -147,7 +147,9 @@ def list_entities(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
 
 
 @router.post("/facilities")
-def create_facility(req: CreateFacilityRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+def create_facility(
+    req: CreateFacilityRequest, user: CurrentUser = Depends(require_editor)
+) -> dict:
     return _guard(store.create_facility, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -158,7 +160,9 @@ def list_facilities(user: CurrentUser = Depends(get_current_user)) -> list[dict]
 
 
 @router.post("/data-owners")
-def create_data_owner(req: CreateDataOwnerRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+def create_data_owner(
+    req: CreateDataOwnerRequest, user: CurrentUser = Depends(require_editor)
+) -> dict:
     return _guard(store.create_data_owner, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -178,7 +182,9 @@ def assign_owner(source_id: str, req: AssignOwnerRequest,
 # --- Inventory + consolidation ----------------------------------------------
 
 @router.post("/inventories")
-def create_inventory(req: CreateInventoryRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+def create_inventory(
+    req: CreateInventoryRequest, user: CurrentUser = Depends(require_editor)
+) -> dict:
     return _guard(store.create_inventory, req.model_dump(exclude_none=True),
                   access_token=user.access_token, user_id=user.user_id)
 
@@ -214,8 +220,11 @@ def consolidation_preview(req: ConsolidationPreviewRequest) -> ConsolidationPrev
 
 
 @router.post("/boundary")
-def upsert_boundary(req: UpsertBoundaryRequest, user: CurrentUser = Depends(require_editor)) -> dict:
-    """Compute the entity's multiplier from the inventory approach + control flags, then store it."""
+def upsert_boundary(
+    req: UpsertBoundaryRequest, user: CurrentUser = Depends(require_editor)
+) -> dict:
+    """Compute the entity's multiplier from the inventory approach + control flags,
+    then store it."""
     inv = _guard(store.get_inventory, req.inventory_id,
                  access_token=user.access_token, user_id=user.user_id)
     if inv is None:
@@ -377,7 +386,9 @@ async def ocr_extract(
         inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
     )
     if parser == "bayou":
-        return _bayou_submit(data, file.filename or "bill.pdf", doc_kind, inventory_id, evidence["id"], user)
+        return _bayou_submit(
+            data, file.filename or "bill.pdf", doc_kind, inventory_id, evidence["id"], user
+        )
 
     session_id = uuid.uuid4().hex
     state = start_ocr(session_id, doc_kind, base64.b64encode(data).decode(), file.content_type)
@@ -398,7 +409,9 @@ async def ocr_extract(
     return {**row, "needs_review": bool(state.get("needs_review"))}
 
 
-def _bayou_submit(pdf_bytes, file_name, doc_kind, inventory_id, evidence_id, user: CurrentUser) -> dict:
+def _bayou_submit(
+    pdf_bytes, file_name, doc_kind, inventory_id, evidence_id, user: CurrentUser
+) -> dict:
     client = BayouClient()
     if not client.is_configured:
         raise HTTPException(status_code=503, detail="Bayou is not configured (set BAYOU_API_KEY).")
@@ -561,7 +574,9 @@ def set_collection_status(
 # --- Readiness meter --------------------------------------------------------
 
 @router.get("/inventories/{inventory_id}/readiness", response_model=ReadinessResponse)
-def readiness(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> ReadinessResponse:
+def readiness(
+    inventory_id: str, user: CurrentUser = Depends(get_current_user)
+) -> ReadinessResponse:
     statuses = _guard(store.list_collection_status, inventory_id,
                       access_token=user.access_token, user_id=user.user_id)
     total = len(statuses)
@@ -598,7 +613,9 @@ def inventory_report(
             total_tco2e=report.by_gas.total_tco2e,
         ),
         by_facility=[
-            FacilityBreakdownDTO(facility_id=f.facility_id, facility_name=f.facility_name, tco2e=f.tco2e)
+            FacilityBreakdownDTO(
+                facility_id=f.facility_id, facility_name=f.facility_name, tco2e=f.tco2e
+            )
             for f in report.by_facility
         ],
         record_count=report.record_count,

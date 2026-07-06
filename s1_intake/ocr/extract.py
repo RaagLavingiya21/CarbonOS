@@ -35,7 +35,10 @@ def extraction_tool(doc_kind: str) -> dict:
     field_schema = {
         "type": "object",
         "properties": {
-            "value": {"type": ["string", "null"], "description": "extracted value, or null if absent"},
+            "value": {
+                "type": ["string", "null"],
+                "description": "extracted value, or null if absent",
+            },
             "confidence": {"type": "number", "description": "certainty 0.0-1.0"},
         },
         "required": ["value", "confidence"],
