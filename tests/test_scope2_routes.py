@@ -44,11 +44,14 @@ def _site_row(**kw) -> dict:
 
 
 def test_create_site(monkeypatch) -> None:
+    captured: dict = {}
     monkeypatch.setattr("api.routes.scope2_sites.resolve_org_id", lambda cu: "org-1")
-    monkeypatch.setattr(
-        "db.s2_site_store.create_site",
-        lambda payload, *, org_id, user_id, access_token: 1,
-    )
+
+    def _create(payload, *, org_id, user_id, access_token):
+        captured["payload"] = payload
+        return 1
+
+    monkeypatch.setattr("db.s2_site_store.create_site", _create)
     monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: _site_row())
 
     resp = client.post(
@@ -58,7 +61,11 @@ def test_create_site(monkeypatch) -> None:
     )
     assert resp.status_code == 201
     assert resp.json()["site_id"] == 1
-    assert resp.json()["site_type"] == "retail"
+    # No None values reach the DB (would violate NOT NULL columns), and boundary
+    # fields are filled from the sector template.
+    assert None not in captured["payload"].values()
+    assert captured["payload"]["ownership"]  # from retail template
+    assert captured["payload"]["lease_type"]
 
 
 def test_list_sites(monkeypatch) -> None:

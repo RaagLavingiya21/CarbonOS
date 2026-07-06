@@ -19,6 +19,7 @@ from api.models.scope2_schemas import (
 )
 from api.routes.scope2_deps import resolve_org_id
 from db import s2_site_store
+from s2_sites.templates import get_template
 
 router = APIRouter(prefix="/api/scope2", tags=["scope2"])
 
@@ -45,8 +46,17 @@ def create_site(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> SiteDTO:
     org_id = resolve_org_id(current_user)
+    # Drop None fields so DB defaults apply (an explicit NULL would violate the
+    # NOT NULL columns), then fill boundary fields from the sector template (PRD 5.3).
+    payload = request.model_dump(exclude_none=True)
+    try:
+        template = get_template(request.site_type)
+        payload.setdefault("ownership", template.default_ownership)
+        payload.setdefault("lease_type", template.default_lease_type)
+    except KeyError:
+        pass  # unknown site_type falls to the column CHECK/DEFAULT
     site_id = s2_site_store.create_site(
-        request.model_dump(),
+        payload,
         org_id=org_id,
         user_id=current_user.user_id,
         access_token=current_user.access_token,
