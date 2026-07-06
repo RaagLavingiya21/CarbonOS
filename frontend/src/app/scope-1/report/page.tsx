@@ -104,11 +104,35 @@ export default function Scope1ReportPage() {
         <Button
           type="button"
           variant="outline"
+          disabled={!report || !activeId}
+          onClick={() =>
+            activeId &&
+            scope1Api.downloadSb253Pdf(activeId, arVersion).catch((err) => setError((err as Error).message))
+          }
+        >
+          <Download className="h-4 w-4" />
+          SB 253 disclosure (PDF)
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!report || !activeId}
+          onClick={() =>
+            activeId &&
+            scope1Api.downloadXlsx(activeId, arVersion).catch((err) => setError((err as Error).message))
+          }
+        >
+          <Download className="h-4 w-4" />
+          Export XLSX
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           disabled={!report}
           onClick={() => report && download(JSON.stringify(report, null, 2), `scope1-${active?.reporting_year}-${arVersion}.json`)}
         >
           <Download className="h-4 w-4" />
-          Export (SB 253 / GHG Protocol)
+          JSON
         </Button>
         <Button type="button" variant="outline" disabled={!active || active.locked} onClick={lockInventory}>
           <Lock className="h-4 w-4" />

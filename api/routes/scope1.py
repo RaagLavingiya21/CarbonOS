@@ -11,6 +11,7 @@ import uuid
 from collections import Counter
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 
 from api.graphs.scope1_ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
@@ -41,7 +42,14 @@ from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
 from s1_intake import parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
-from s1_reporting import ReportRecord, build_inventory_report, trace_record
+from s1_reporting import (
+    DisclosureMeta,
+    ReportRecord,
+    build_inventory_report,
+    build_pdf,
+    build_xlsx,
+    trace_record,
+)
 
 router = APIRouter(prefix="/api/scope1", tags=["scope1"])
 
@@ -512,24 +520,7 @@ def inventory_report(
     ar_version: str = Query("AR5"),
     user: CurrentUser = Depends(get_current_user),
 ) -> InventoryReportResponse:
-    records = _guard(store.list_records_for_inventory, inventory_id,
-                     access_token=user.access_token, user_id=user.user_id)
-    sources = {s["id"]: s for s in _guard(
-        store.list_sources, access_token=user.access_token, user_id=user.user_id)}
-    facilities = {f["id"]: f["name"] for f in _guard(
-        store.list_facilities, access_token=user.access_token, user_id=user.user_id)}
-    boundaries = {b["entity_id"]: float(b["consolidation_multiplier"]) for b in _guard(
-        store.list_boundaries, inventory_id,
-        access_token=user.access_token, user_id=user.user_id)}
-
-    report_records = [
-        _report_record(rec, sources, facilities, boundaries) for rec in records
-    ]
-    try:
-        report = build_inventory_report(report_records, ar_version)
-    except KeyError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
+    report = _assemble_report(inventory_id, ar_version, user)
     return InventoryReportResponse(
         ar_version=report.ar_version,
         total_scope1_tco2e=report.total_scope1_tco2e,
@@ -547,6 +538,42 @@ def inventory_report(
             for f in report.by_facility
         ],
         record_count=report.record_count,
+    )
+
+
+@router.get("/inventories/{inventory_id}/report/xlsx")
+def export_report_xlsx(
+    inventory_id: str,
+    ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Structured SB 253 / GHG Protocol disclosure workbook (coversheet + by gas + by facility)."""
+    report = _assemble_report(inventory_id, ar_version, user)
+    meta = _disclosure_meta(inventory_id, ar_version, user)
+    data = build_xlsx(report, meta)
+    filename = f"scope1-{meta.reporting_year}-{ar_version}.xlsx"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/inventories/{inventory_id}/report/sb253.pdf")
+def export_report_pdf(
+    inventory_id: str,
+    ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Human-readable CA SB 253 / GHG Protocol Scope 1 disclosure PDF."""
+    report = _assemble_report(inventory_id, ar_version, user)
+    meta = _disclosure_meta(inventory_id, ar_version, user)
+    data = build_pdf(report, meta)
+    filename = f"scope1-sb253-{meta.reporting_year}-{ar_version}.pdf"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -704,6 +731,43 @@ def _gas_masses(row: dict) -> GasMasses:
         kg_n2o=float(row.get("kg_n2o") or 0.0),
         kg_sf6=float(row.get("kg_sf6") or 0.0),
         kg_nf3=float(row.get("kg_nf3") or 0.0),
+    )
+
+
+def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
+    """Fetch records + sources + facilities + boundaries and roll up the report."""
+    records = _guard(store.list_records_for_inventory, inventory_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    sources = {s["id"]: s for s in _guard(
+        store.list_sources, access_token=user.access_token, user_id=user.user_id)}
+    facilities = {f["id"]: f["name"] for f in _guard(
+        store.list_facilities, access_token=user.access_token, user_id=user.user_id)}
+    boundaries = {b["entity_id"]: float(b["consolidation_multiplier"]) for b in _guard(
+        store.list_boundaries, inventory_id,
+        access_token=user.access_token, user_id=user.user_id)}
+    report_records = [_report_record(rec, sources, facilities, boundaries) for rec in records]
+    try:
+        return build_inventory_report(report_records, ar_version)
+    except KeyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _disclosure_meta(inventory_id: str, ar_version: str, user: CurrentUser) -> DisclosureMeta:
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+    entity = _guard(store.get_entity, inv["reporting_entity_id"],
+                    access_token=user.access_token, user_id=user.user_id) or {}
+    return DisclosureMeta(
+        entity_name=entity.get("name", "-"),
+        jurisdiction=entity.get("jurisdiction", "US"),
+        reporting_year=inv["reporting_year"],
+        period_start=inv["period_start"],
+        period_end=inv["period_end"],
+        consolidation_approach=inv["consolidation_approach"],
+        gwp_version=ar_version,
+        base_year=inv["base_year"],
     )
 
 

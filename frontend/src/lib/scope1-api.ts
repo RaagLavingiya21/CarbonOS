@@ -31,6 +31,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function downloadBinary(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}${path}`, {
+    headers: { Authorization: `Bearer ${await accessToken()}` },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 // --- Types ------------------------------------------------------------------
 
 export type S1Entity = {
@@ -314,6 +330,16 @@ export const scope1Api = {
     request<S1Readiness>(`/api/scope1/inventories/${inventoryId}/readiness`),
   report: (inventoryId: string, arVersion = "AR5") =>
     request<S1Report>(`/api/scope1/inventories/${inventoryId}/report?ar_version=${arVersion}`),
+  downloadXlsx: (inventoryId: string, arVersion = "AR5") =>
+    downloadBinary(
+      `/api/scope1/inventories/${inventoryId}/report/xlsx?ar_version=${arVersion}`,
+      `scope1-${arVersion}.xlsx`,
+    ),
+  downloadSb253Pdf: (inventoryId: string, arVersion = "AR5") =>
+    downloadBinary(
+      `/api/scope1/inventories/${inventoryId}/report/sb253.pdf?ar_version=${arVersion}`,
+      `scope1-sb253-${arVersion}.pdf`,
+    ),
   recordTrace: (recordId: string, arVersion = "AR5") =>
     request<S1Trace>(`/api/scope1/records/${recordId}/trace?ar_version=${arVersion}`),
   recordAudit: (recordId: string) =>

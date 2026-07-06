@@ -7,6 +7,7 @@ line. The same content is the SB 253 disclosure body (research/2.4). Switching
 ar_version recomputes from identical stored masses — no mutation.
 """
 
+from s1_reporting.export import DisclosureMeta, build_pdf, build_xlsx
 from s1_reporting.report import (
     FacilityBreakdown,
     GasBreakdown,
@@ -17,10 +18,13 @@ from s1_reporting.report import (
 )
 
 __all__ = [
+    "DisclosureMeta",
     "FacilityBreakdown",
     "GasBreakdown",
     "InventoryReport",
     "ReportRecord",
     "build_inventory_report",
+    "build_pdf",
+    "build_xlsx",
     "trace_record",
 ]
