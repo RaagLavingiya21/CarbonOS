@@ -1,0 +1,62 @@
+# Regulated-buyer list for cascade-exposure detection (Epic C / P.1.4.b).
+# Curated DATA, dated + versioned like the obligation ruleset. If a company sells
+# to one of these buyers, the buyer's own regulation cascades a Scope 3 data
+# request downstream — so the company is EXPOSED even if not directly regulated.
+#
+# MVP is a maintained list (research build-vs-buy: BUY external obligation
+# enrichment later). `match` values are lower-cased substrings tested against
+# each key_customer. Keep specific to avoid false positives.
+
+version: v2026-07
+as_of: 2026-07-04
+
+buyers:
+  - name: Walmart
+    match: [walmart, "sam's club", sams club]
+    regimes: [CA SB 253]
+    program: Project Gigaton / full-footprint supplier disclosure
+    note: US >$1B revenue, does business in CA → SB253; runs an active Scope 3 supplier program.
+  - name: Target
+    match: [target corporation, "target corp"]
+    regimes: [CA SB 253]
+    note: US >$1B revenue, CA nexus.
+  - name: Costco
+    match: [costco]
+    regimes: [CA SB 253]
+    note: US >$1B revenue, CA nexus.
+  - name: Kroger
+    match: [kroger]
+    regimes: [CA SB 253]
+    note: US >$1B revenue, CA nexus.
+  - name: Amazon
+    match: [amazon]
+    regimes: [CA SB 253, CSRD]
+    note: US >$1B (SB253) and material EU turnover (CSRD).
+  - name: Tesco
+    match: [tesco]
+    regimes: [UK SECR / CSRD-equivalent]
+    note: UK retailer; -60% supply-chain target, requires supplier GHG calc via Tesco tools.
+  - name: Sainsbury's
+    match: [sainsbury]
+    regimes: [UK SECR / CSRD-equivalent]
+    note: UK retailer.
+  - name: Carrefour
+    match: [carrefour]
+    regimes: [CSRD / ESRS E1]
+    note: EU retailer, CSRD-caught.
+  - name: Ahold Delhaize
+    match: [ahold, delhaize]
+    regimes: [CSRD / ESRS E1]
+    note: EU/US grocer, CSRD-caught.
+  - name: Nestlé
+    match: [nestle, "nestlé"]
+    regimes: [CSRD / ESRS E1]
+    note: Large EU-HQ buyer; cascades supplier PCF requests.
+  - name: Unilever
+    match: [unilever]
+    regimes: [CSRD / ESRS E1]
+    note: Large EU-HQ buyer; supplier climate program.
+  - name: PepsiCo
+    match: [pepsico, pepsi]
+    regimes: [CA SB 253, CSRD]
+    note: US >$1B and EU turnover.
