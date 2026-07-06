@@ -139,6 +139,14 @@ class CsvPreviewResponse(BaseModel):
     errors: list[CsvRowErrorDTO]
 
 
+class CsvCommitResponse(BaseModel):
+    total_rows: int
+    committed_count: int
+    error_count: int
+    # site_ref values in the CSV that didn't match any existing site by name.
+    unresolved_site_refs: list[str]
+
+
 # --- Calculations -----------------------------------------------------------
 
 

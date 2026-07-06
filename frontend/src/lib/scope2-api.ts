@@ -65,6 +65,13 @@ export type CsvPreview = {
   errors: { row_index: number; message: string }[];
 };
 
+export type CsvCommit = {
+  total_rows: number;
+  committed_count: number;
+  error_count: number;
+  unresolved_site_refs: string[];
+};
+
 export type Calculation = {
   calc_id: number;
   reporting_year: number;
@@ -133,6 +140,11 @@ export const scope2Api = {
 
   previewCsv: (csvText: string, mapping: Record<string, string>) =>
     request<CsvPreview>("/api/scope2/bills/preview-csv", {
+      method: "POST",
+      body: { csv_text: csvText, mapping },
+    }),
+  commitCsv: (csvText: string, mapping: Record<string, string>) =>
+    request<CsvCommit>("/api/scope2/bills/import-csv", {
       method: "POST",
       body: { csv_text: csvText, mapping },
     }),

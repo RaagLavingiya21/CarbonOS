@@ -201,6 +201,56 @@ def test_run_calculation_excludes_franchise_sites(monkeypatch) -> None:
     assert resp.status_code == 400
 
 
+CSV_BODY = {
+    "csv_text": "Store,From,To,Usage,Unit\nStore 1,2024-01-01,2024-01-31,1500,kWh\n",
+    "mapping": {
+        "site_ref": "Store",
+        "period_start": "From",
+        "period_end": "To",
+        "quantity": "Usage",
+        "unit": "Unit",
+    },
+}
+
+
+def test_commit_csv_persists_bills(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr(
+        "db.s2_site_store.list_sites", lambda token: [_site_row(name="Store 1")]
+    )
+    monkeypatch.setattr(
+        "db.s2_bill_store.get_or_create_account",
+        lambda site_id, carrier, *, org_id, user_id, access_token: 5,
+    )
+
+    def _insert(rows, *, org_id, user_id, access_token):
+        captured["rows"] = rows
+        return len(rows)
+
+    monkeypatch.setattr("db.s2_bill_store.insert_bills", _insert)
+
+    resp = client.post("/api/scope2/bills/import-csv", headers=AUTH_HEADERS, json=CSV_BODY)
+    assert resp.status_code == 200
+    assert resp.json()["committed_count"] == 1
+    assert captured["rows"][0]["account_id"] == 5
+    assert captured["rows"][0]["canonical_mwh"] == pytest.approx(1.5)
+
+
+def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])  # no matching site
+    monkeypatch.setattr(
+        "db.s2_bill_store.insert_bills",
+        lambda rows, *, org_id, user_id, access_token: 0,
+    )
+    resp = client.post("/api/scope2/bills/import-csv", headers=AUTH_HEADERS, json=CSV_BODY)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["committed_count"] == 0
+    assert "Store 1" in data["unresolved_site_refs"]
+
+
 def test_run_calculation_missing_factor_is_422(monkeypatch) -> None:
     monkeypatch.setattr("api.routes.scope2_calc.resolve_org_id", lambda cu: "org-1")
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])

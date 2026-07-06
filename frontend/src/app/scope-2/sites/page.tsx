@@ -27,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  CsvCommit,
   CsvPreview,
   Site,
   SiteTemplate,
@@ -58,6 +59,8 @@ export default function Scope2SitesPage() {
   const [csv, setCsv] = useState(CSV_EXAMPLE);
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const [commitResult, setCommitResult] = useState<CsvCommit | null>(null);
 
   const load = useCallback(() => {
     scope2Api
@@ -104,12 +107,25 @@ export default function Scope2SitesPage() {
 
   async function runPreview() {
     setPreviewing(true);
+    setCommitResult(null);
     try {
       setPreview(await scope2Api.previewCsv(csv, CSV_MAPPING));
     } catch (e) {
       setError(e instanceof Error ? e.message : "CSV preview failed.");
     } finally {
       setPreviewing(false);
+    }
+  }
+
+  async function runCommit() {
+    setCommitting(true);
+    setError(null);
+    try {
+      setCommitResult(await scope2Api.commitCsv(csv, CSV_MAPPING));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "CSV import failed.");
+    } finally {
+      setCommitting(false);
     }
   }
 
@@ -250,9 +266,35 @@ export default function Scope2SitesPage() {
             rows={5}
             className="font-mono text-caption"
           />
-          <Button variant="secondary" size="sm" loading={previewing} onClick={runPreview}>
-            Preview
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" loading={previewing} onClick={runPreview}>
+              Preview
+            </Button>
+            <Button
+              size="sm"
+              loading={committing}
+              disabled={!preview || preview.valid_count === 0}
+              onClick={runCommit}
+            >
+              Import {preview ? preview.valid_count : ""} bills
+            </Button>
+          </div>
+
+          {commitResult ? (
+            <div className="rounded-md border border-data-low/40 bg-data-low-bg/40 p-3 text-small">
+              Imported{" "}
+              <span className="num font-semibold text-data-low">{commitResult.committed_count}</span>{" "}
+              bills.
+              {commitResult.unresolved_site_refs.length > 0 ? (
+                <span className="text-data-medium">
+                  {" "}
+                  {commitResult.unresolved_site_refs.length} row(s) skipped — no site named{" "}
+                  {commitResult.unresolved_site_refs.map((r) => `"${r}"`).join(", ")}. Add the
+                  site first, then re-import.
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           {preview ? (
             <div className="rounded-md border border-border p-3 text-small">
