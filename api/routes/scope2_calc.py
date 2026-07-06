@@ -14,8 +14,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope2_schemas import (
     CalculationDTO,
+    CoverageResponse,
     RunCalculationRequest,
     RunCalculationResponse,
+    SiteCoverageDTO,
 )
 from api.routes.scope2_deps import resolve_org_id
 from db import (
@@ -32,6 +34,7 @@ from s2_calc.mappers import (
     site_profile_from_row,
 )
 from s2_factors.library import FactorLibrary, FactorNotFoundError
+from s2_quality.scoring import compute_coverage
 
 router = APIRouter(prefix="/api/scope2", tags=["scope2"])
 
@@ -127,3 +130,35 @@ def list_calculations(
 ) -> list[CalculationDTO]:
     rows = s2_calc_store.list_calculations(current_user.access_token)
     return [CalculationDTO.from_row(row) for row in rows]
+
+
+@router.get("/coverage", response_model=CoverageResponse)
+def get_coverage(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CoverageResponse:
+    """Portfolio data-completeness: share of consumption backed by actual data
+    vs. documented estimates, plus sites with no data (PRD 5.6 readiness)."""
+    token = current_user.access_token
+    site_ids = [
+        int(site["site_id"])
+        for site in s2_site_store.list_sites(token)
+        if not site.get("franchise_flag")
+    ]
+    coverage = compute_coverage(s2_bill_store.list_active_bills(token), site_ids)
+    return CoverageResponse(
+        total_mwh=coverage.total_mwh,
+        coverage_fraction=coverage.coverage_fraction,
+        estimation_fraction=coverage.estimation_fraction,
+        site_count=coverage.site_count,
+        sites_with_data=coverage.sites_with_data,
+        sites_missing_data=coverage.sites_missing_data,
+        per_site=[
+            SiteCoverageDTO(
+                site_id=s.site_id,
+                total_mwh=s.total_mwh,
+                coverage_fraction=s.coverage_fraction,
+                has_data=s.has_data,
+            )
+            for s in coverage.per_site
+        ],
+    )

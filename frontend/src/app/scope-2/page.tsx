@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Calculation, Site, scope2Api } from "@/lib/scope2-api";
+import { Calculation, Coverage, Site, scope2Api } from "@/lib/scope2-api";
 import { formatKg } from "@/lib/utils";
 
 const ENTRIES = [
@@ -40,13 +40,19 @@ const ENTRIES = [
 export default function Scope2Page() {
   const [sites, setSites] = useState<Site[] | null>(null);
   const [calcs, setCalcs] = useState<Calculation[] | null>(null);
+  const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([scope2Api.listSites(), scope2Api.listCalculations()])
-      .then(([s, c]) => {
+    Promise.all([
+      scope2Api.listSites(),
+      scope2Api.listCalculations(),
+      scope2Api.coverage(),
+    ])
+      .then(([s, c, cov]) => {
         setSites(s);
         setCalcs(c);
+        setCoverage(cov);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load."));
   }, []);
@@ -92,9 +98,14 @@ export default function Scope2Page() {
               hint: latest ? `Reporting year ${latest.reporting_year}` : "No calculation yet",
             },
             {
-              label: "Calculations",
-              value: calcs?.length ?? 0,
-              hint: "Immutable snapshots",
+              label: "Data coverage",
+              value: coverage ? `${Math.round(coverage.coverage_fraction * 100)}%` : "—",
+              bar: coverage ? coverage.coverage_fraction : 0,
+              barTone:
+                coverage && coverage.coverage_fraction >= 0.9 ? "success" : "warning",
+              hint: coverage
+                ? `${coverage.sites_missing_data} site(s) missing data`
+                : "actual vs. estimate",
             },
           ]}
         />

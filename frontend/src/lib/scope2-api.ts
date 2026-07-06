@@ -128,6 +128,21 @@ export type EstimateResult = {
   method_note: string;
 };
 
+export type Coverage = {
+  total_mwh: number;
+  coverage_fraction: number;
+  estimation_fraction: number;
+  site_count: number;
+  sites_with_data: number;
+  sites_missing_data: number;
+  per_site: {
+    site_id: number;
+    total_mwh: number;
+    coverage_fraction: number;
+    has_data: boolean;
+  }[];
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -191,6 +206,7 @@ export const scope2Api = {
       body: { reporting_year: reportingYear },
     }),
   listCalculations: () => request<Calculation[]>("/api/scope2/calculations"),
+  coverage: () => request<Coverage>("/api/scope2/coverage"),
 
   listLandlordRequests: () =>
     request<LandlordRequest[]>("/api/scope2/landlord-requests"),

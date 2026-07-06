@@ -236,6 +236,26 @@ class RunCalculationResponse(BaseModel):
     market_fallback_site_count: int
 
 
+# --- Data-quality / coverage scoring (PRD 5.6) ------------------------------
+
+
+class SiteCoverageDTO(BaseModel):
+    site_id: int
+    total_mwh: float
+    coverage_fraction: float
+    has_data: bool
+
+
+class CoverageResponse(BaseModel):
+    total_mwh: float
+    coverage_fraction: float  # share of consumption backed by actual data (0..1)
+    estimation_fraction: float
+    site_count: int
+    sites_with_data: int
+    sites_missing_data: int
+    per_site: list[SiteCoverageDTO]
+
+
 # --- Leased-site landlord data-requests (PRD 5.2) ---------------------------
 
 LandlordMethod = Literal["email", "portal", "phone"]

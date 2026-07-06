@@ -297,6 +297,38 @@ def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
     assert "Store 1" in data["unresolved_site_refs"]
 
 
+# --- coverage scoring ------------------------------------------------------
+
+
+def test_coverage_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "db.s2_site_store.list_sites",
+        lambda token: [_site_row(site_id=1), _site_row(site_id=2)],
+    )
+    monkeypatch.setattr(
+        "db.s2_bill_store.list_active_bills",
+        lambda token: [
+            {
+                "site_id": 1,
+                "canonical_mwh": 90.0,
+                "is_estimated_read": False,
+                "ingestion_method": "csv",
+            },
+            {
+                "site_id": 1,
+                "canonical_mwh": 10.0,
+                "is_estimated_read": True,
+                "ingestion_method": "estimate",
+            },
+        ],
+    )
+    resp = client.get("/api/scope2/coverage", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["coverage_fraction"] == pytest.approx(0.9)
+    assert data["sites_missing_data"] == 1  # site 2 has no data
+
+
 # --- documented estimation fallback ----------------------------------------
 
 
