@@ -17,10 +17,13 @@ from api.models.scope2_schemas import (
     CsvImportRequest,
     CsvPreviewResponse,
     CsvRowErrorDTO,
+    EstimateRequest,
+    EstimateResponse,
 )
 from api.routes.scope2_deps import resolve_org_id
 from db import s2_bill_store, s2_site_store
 from s2_ingestion.csv_import import ColumnMappingError, import_bills_csv
+from s2_ingestion.estimation import EstimationError, estimate_annual_electricity_mwh
 
 router = APIRouter(prefix="/api/scope2", tags=["scope2"])
 
@@ -121,4 +124,64 @@ def commit_csv(
         committed_count=committed,
         error_count=len(result.errors),
         unresolved_site_refs=sorted(unresolved),
+    )
+
+
+@router.post("/sites/{site_id}/estimate", response_model=EstimateResponse)
+def estimate_site(
+    site_id: int,
+    request: EstimateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> EstimateResponse:
+    """Persist a documented, audit-labeled electricity estimate for a leased site.
+
+    Floor area x sector electricity intensity -> an estimated bill for the reporting
+    year (is_estimated_read=True, ingestion_method='estimate'), with the method +
+    inputs recorded in conversion_note so the calc can flag it and audit it.
+    """
+    org_id = resolve_org_id(current_user)
+    token = current_user.access_token
+    site = s2_site_store.get_site(site_id, token)
+    if site is None:
+        raise HTTPException(status_code=404, detail=f"Site {site_id} not found.")
+
+    try:
+        estimate = estimate_annual_electricity_mwh(
+            site["site_type"], request.floor_area_sqft
+        )
+    except EstimationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    account_id = s2_bill_store.get_or_create_account(
+        site_id,
+        "electricity",
+        org_id=org_id,
+        user_id=current_user.user_id,
+        access_token=token,
+    )
+    s2_bill_store.insert_bills(
+        [
+            {
+                "account_id": account_id,
+                "period_start": f"{request.reporting_year}-01-01",
+                "period_end": f"{request.reporting_year}-12-31",
+                "raw_quantity": None,
+                "raw_unit": None,
+                "canonical_mwh": estimate.annual_mwh,
+                "is_estimated_read": True,
+                "is_cost_only": False,
+                "conversion_note": estimate.method_note,
+                "ingestion_method": "estimate",
+            }
+        ],
+        org_id=org_id,
+        user_id=current_user.user_id,
+        access_token=token,
+    )
+    return EstimateResponse(
+        site_id=site_id,
+        reporting_year=request.reporting_year,
+        annual_mwh=estimate.annual_mwh,
+        intensity_kwh_per_sqft=estimate.intensity_kwh_per_sqft,
+        method_note=estimate.method_note,
     )

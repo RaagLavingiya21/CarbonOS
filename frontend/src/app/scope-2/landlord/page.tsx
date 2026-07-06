@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { LandlordRequest, Site, scope2Api } from "@/lib/scope2-api";
+import { EstimateResult, LandlordRequest, Site, scope2Api } from "@/lib/scope2-api";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -56,6 +56,12 @@ export default function LandlordPage() {
   const [contact, setContact] = useState("");
   const [method, setMethod] = useState("email");
   const [saving, setSaving] = useState(false);
+
+  const [estSite, setEstSite] = useState("");
+  const [estArea, setEstArea] = useState("");
+  const [estYear, setEstYear] = useState(String(new Date().getFullYear() - 1));
+  const [estimating, setEstimating] = useState(false);
+  const [estResult, setEstResult] = useState<EstimateResult | null>(null);
 
   const load = useCallback(() => {
     scope2Api
@@ -108,6 +114,22 @@ export default function LandlordPage() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete.");
+    }
+  }
+
+  async function runEstimate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!estSite || !estArea) return;
+    setEstimating(true);
+    setError(null);
+    try {
+      setEstResult(
+        await scope2Api.estimateSite(Number(estSite), Number(estArea), Number(estYear)),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to estimate.");
+    } finally {
+      setEstimating(false);
     }
   }
 
@@ -250,6 +272,68 @@ export default function LandlordPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-h3">Documented estimation fallback</CardTitle>
+          <CardDescription>
+            When no actual or landlord data is obtainable, estimate from floor area ×
+            sector electricity intensity. Saved as an audit-labeled estimate the
+            calculation flags — never presented as metered.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={runEstimate} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[180px] flex-1 space-y-1.5">
+              <Label>Site</Label>
+              <Select value={estSite} onValueChange={setEstSite}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a site" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites.map((s) => (
+                    <SelectItem key={s.site_id} value={String(s.site_id)}>
+                      {s.name} ({s.site_type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-32 space-y-1.5">
+              <Label htmlFor="est-area">Floor area (sqft)</Label>
+              <Input
+                id="est-area"
+                value={estArea}
+                onChange={(e) => setEstArea(e.target.value)}
+                placeholder="20000"
+              />
+            </div>
+            <div className="w-24 space-y-1.5">
+              <Label htmlFor="est-year">Year</Label>
+              <Input
+                id="est-year"
+                value={estYear}
+                onChange={(e) => setEstYear(e.target.value)}
+              />
+            </div>
+            <Button type="submit" loading={estimating} disabled={!estSite || !estArea}>
+              Estimate
+            </Button>
+          </form>
+
+          {estResult ? (
+            <div className="mt-3 rounded-md border border-data-medium/40 bg-data-medium-bg/40 p-3 text-small">
+              <span className="num font-semibold">
+                {estResult.annual_mwh.toFixed(3)} MWh
+              </span>{" "}
+              estimated for {estResult.reporting_year} and saved (flagged as estimate).
+              <div className="mt-1 text-caption text-muted-foreground">
+                {estResult.method_note}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   );
 }

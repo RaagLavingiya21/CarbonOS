@@ -120,6 +120,14 @@ export type CreateLandlordPayload = {
   notes?: string;
 };
 
+export type EstimateResult = {
+  site_id: number;
+  reporting_year: number;
+  annual_mwh: number;
+  intensity_kwh_per_sqft: number;
+  method_note: string;
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -199,5 +207,11 @@ export const scope2Api = {
   deleteLandlordRequest: (requestId: number) =>
     request<void>(`/api/scope2/landlord-requests/${requestId}`, {
       method: "DELETE",
+    }),
+
+  estimateSite: (siteId: number, floorAreaSqft: number, reportingYear: number) =>
+    request<EstimateResult>(`/api/scope2/sites/${siteId}/estimate`, {
+      method: "POST",
+      body: { floor_area_sqft: floorAreaSqft, reporting_year: reportingYear },
     }),
 };

@@ -174,6 +174,19 @@ class CsvCommitResponse(BaseModel):
     unresolved_site_refs: list[str]
 
 
+class EstimateRequest(BaseModel):
+    floor_area_sqft: float
+    reporting_year: int
+
+
+class EstimateResponse(BaseModel):
+    site_id: int
+    reporting_year: int
+    annual_mwh: float
+    intensity_kwh_per_sqft: float
+    method_note: str
+
+
 # --- Calculations -----------------------------------------------------------
 
 

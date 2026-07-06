@@ -297,6 +297,51 @@ def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
     assert "Store 1" in data["unresolved_site_refs"]
 
 
+# --- documented estimation fallback ----------------------------------------
+
+
+def test_estimate_site_persists_labeled_estimate(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr(
+        "db.s2_site_store.get_site", lambda sid, token: _site_row(site_type="retail")
+    )
+    monkeypatch.setattr(
+        "db.s2_bill_store.get_or_create_account",
+        lambda site_id, carrier, *, org_id, user_id, access_token: 9,
+    )
+
+    def _insert(rows, *, org_id, user_id, access_token):
+        captured["rows"] = rows
+        return len(rows)
+
+    monkeypatch.setattr("db.s2_bill_store.insert_bills", _insert)
+
+    resp = client.post(
+        "/api/scope2/sites/1/estimate",
+        headers=AUTH_HEADERS,
+        json={"floor_area_sqft": 20000, "reporting_year": 2024},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["annual_mwh"] == pytest.approx(280.0)
+    bill = captured["rows"][0]
+    assert bill["is_estimated_read"] is True
+    assert bill["ingestion_method"] == "estimate"
+    assert bill["canonical_mwh"] == pytest.approx(280.0)
+    assert "ESTIMATE" in bill["conversion_note"]
+
+
+def test_estimate_site_404_for_missing_site(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: None)
+    resp = client.post(
+        "/api/scope2/sites/999/estimate",
+        headers=AUTH_HEADERS,
+        json={"floor_area_sqft": 1000, "reporting_year": 2024},
+    )
+    assert resp.status_code == 404
+
+
 # --- leased-site landlord workflow -----------------------------------------
 
 
