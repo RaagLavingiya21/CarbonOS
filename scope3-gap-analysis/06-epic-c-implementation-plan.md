@@ -58,7 +58,7 @@ The **ruleset itself is a versioned file**, not a table: `data/obligation_rules/
 | `obligations/engine.py` | Evaluate a `company_profile` against the ruleset → ranked obligations + timeline; records `ruleset_version` | `obligations/ruleset.py` |
 | `obligations/sbti_readiness.py` | Classify Category A/B; **version-aware** coverage math (V1.x 40%/67%/90% vs V2.0 per-category ≥5%); honest on unconfirmed net-zero % | Epic A `db/inventory_store.py` (`inventory_category_results` for the ≥5% denominator); `s1_consolidation` boundary concept |
 | `obligations/cascade.py` | Detect customers that are themselves regulated → will cascade the request (P.1.4.b) | external enrichment (🔴 data-sourcing) |
-| `db/obligation_store.py` | Persist profile + evaluated obligations | `db/store.py`, `db/org_store.py`, `shares_org_with` |
+| `db/obligation_store.py` | Persist profile + evaluated obligations | `db/store.py`, `db/org_store.py`, `is_org_member(org_id)` |
 
 **Reuse:** company intake extends `gap_analyzer/models.py` `CompanyProfile` (add revenue/employees/EU-turnover/customers, persist it). Priority scoring (P.1.4.a) reuses gap_analyzer `assess_materiality`. Business-case narrative (P.1.1.d) reuses the RAG advisor pattern for grounded text — but the *obligations and dates come from the engine, not the LLM* (same numbers-looked-up discipline as Epic B §1).
 

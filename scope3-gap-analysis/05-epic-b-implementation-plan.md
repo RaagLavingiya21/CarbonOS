@@ -59,7 +59,7 @@ Extends the existing inbound-inbox pattern in `027_pcf_requests.sql` (which hand
 | `questionnaire/question_mapper.py` | Map each question to a datapoint (Epic A inventory / product footprint / library) + confidence + flag. **🔴 the join.** Enforces §1 (numbers looked up, never generated). | Epic A `db/inventory_store.py` results; `db/rollup_store.py`; `answer_library` |
 | `questionnaire/answer_assembler.py` | Assemble draft answers; generate methodology narrative (grounded); attach category relevance-status | `pages/1_Advisor.py`/RAG advisor for narrative; gap_analyzer `assess_reporting_requirements` structured output for P.4.2.3 |
 | `questionnaire/exporters/` | EcoVadis/retailer packs + generic PDF/CSV | `exchange/pact.py` serialization patterns; `api/routes/shares.py`, `public.py` |
-| `db/questionnaire_store.py` | CRUD for the 4 tables | `db/request_store.py`, `db/store.py`, `shares_org_with` |
+| `db/questionnaire_store.py` | CRUD for the 4 tables | `db/request_store.py`, `db/store.py`, `is_org_member(org_id)` |
 
 **Reuse insight:** the gap analyzer already answers "which of the 15 categories apply to this company" with a structured `{applicable, not_applicable, uncertain}` payload (`gap_analyzer/tools/assess_reporting_requirements.py`). That *is* the category relevance-status answer (P.4.2.3) most questionnaires ask for — reuse it directly rather than rebuild.
 

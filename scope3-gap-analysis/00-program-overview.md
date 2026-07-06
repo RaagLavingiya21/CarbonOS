@@ -33,8 +33,9 @@ This module is built as an isolated lane on `feature/scope3-mvp` alongside Scope
 | **URLs / API client** | `/scope-3/*` · `lib/scope3-api.ts` | Plans saying `/api/questionnaires` → under `/scope-3`. |
 | **DTOs** | `api/models/scope3_schemas.py` | |
 | **Feature flag** | `NEXT_PUBLIC_SCOPE3_ENABLED` | Ships **dark** — nav hidden, default OFF in prod. |
-| **Migration band** | **`050`–`059`** | MVP fits exactly: Epic A `050`–`053`, Epic B `054`–`057`, Epic C `058`–`059`. **Epics D–I need additional bands coordinated with the integrator — the numbers in plans `07`–`12` are placeholders, not final.** |
-| **Shared files** | append-only (`api/main.py` include_router, app-shell nav entry, `requirements.txt`) | Never modify shared infra (`auth`, `db/client`, `org_store`, `shares_org_with`); a genuine shared change lands as its own PR to `main` first. |
+| **Migration band** | **`050`–`059`** | MVP fits exactly: Epic A `050`–`053`, Epic B `054`–`057`, Epic C `058`–`059`. Do **not** use `030`/`040` (reserved for S1/S2). **Epics D–I need additional bands coordinated with the integrator — the numbers in plans `07`–`12` are placeholders, not final.** |
+| **Tenancy / RLS** | Every org-scoped table carries `org_id UUID NOT NULL`. RLS: `USING (public.is_org_member(org_id))` on SELECT/UPDATE/DELETE, `WITH CHECK (public.is_org_member(org_id))` on INSERT (helper from migration `014`). | `user_id` is optional `created_by` **metadata only — NEVER in an RLS policy**. Precede every `CREATE POLICY` with `DROP POLICY IF EXISTS <name> ON <table>;` so migrations are re-runnable. **Global reference tables** = read-all-authenticated, service-role writes. This supersedes the older `user_id`/`shares_org_with` pattern mentioned in the per-epic plans. |
+| **Shared files** | append-only (`api/main.py` include_router, app-shell nav entry, `requirements.txt`) | Never modify shared infra (`auth`, `db/client`, `org_store`, `is_org_member`); a genuine shared change lands as its own PR to `main` first. |
 
 ---
 

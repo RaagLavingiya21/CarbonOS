@@ -37,7 +37,7 @@ GL / ERP spend  ──►  classify each line  ──►  category totals (spend
 
 ## 2. New data model (migrations `050`–`053`)
 
-Follows the existing migration conventions (`supabase/migrations/`, `BIGSERIAL` PKs, RLS with `shares_org_with()`, org visibility mirroring `product_volumes` in `028`).
+Follows the existing migration conventions (`supabase/migrations/`, `BIGSERIAL` PKs, RLS with `is_org_member(org_id)`, org visibility mirroring `product_volumes` in `028`).
 
 | Table | Purpose | Key columns |
 |---|---|---|
@@ -58,7 +58,7 @@ Reuse the boundary concept from `s1_consolidation/multiplier.py` (equity/control
 | `factors/spend_classifier.py` | **new** | GL line → (Scope 3 category 1–15, EEIO sector, `EFMatch`) with confidence + alternatives + flag. **The 🔴 make-or-break unit.** | wraps `factors/ef_lookup.py` `lookup_ef` / `lookup_ef_by_sector_code` / `_find_sector` for the sector→EF half; net-new = the GL-line→category step |
 | `calc/inventory.py` | **new** | Compute 15-category corporate inventory from classifications; category totals; DQ; **Cat-1 reconciliation** with product rollup | `calc/footprint.py` (kg = usd × ef), `calc/dqr.py` |
 | `calc/rollup.py` | **extend** | Generalize `compute_rollup` → category-aware so the product Cat-1 rollup plugs into `inventory_category_results` | existing `compute_rollup`, `db/rollup_store.py` `_latest_published_per_lineage` |
-| `db/inventory_store.py` | **new** | CRUD for the 4 new tables; org-scoped reads | `db/store.py`, `db/rollup_store.py`, `db/client.py` `get_user_client`, `shares_org_with` |
+| `db/inventory_store.py` | **new** | CRUD for the 4 new tables; org-scoped reads | `db/store.py`, `db/rollup_store.py`, `db/client.py` `get_user_client`, `is_org_member(org_id)` |
 
 **Key reuse insight (the whole reason this epic is tractable):** `factors/ef_lookup.py` already does fuzzy `material → EEIO sector → EF` matching with confidence scoring and analyst overrides (`lookup_ef_by_sector_code`). A GL line's `description`/`vendor` text is the same kind of input a BOM `material` is. So `spend_classifier` reuses that matcher wholesale for the sector→EF half; the genuinely new work is the **line → Scope 3 category** decision (which of the 15 buckets) and GL-oriented text normalization. Prototype *that* first.
 
@@ -91,7 +91,7 @@ Style matches `IMPLEMENTATION_PLAN.md` / `PLATFORM_CHAT_AGENT_PLAN.md`: **Goal �
 - **Goal:** The 4 tables exist with RLS; a store layer can CRUD them. No classifier yet.
 - **Files:** `supabase/migrations/050_inventory_versions.sql`, `051_spend_records.sql`, `052_spend_classifications.sql`, `053_inventory_category_results.sql` (+ RLS mirroring `028`); `db/inventory_store.py`.
 - **Verify:** Run migrations against a **branch** database (never the demo DB — per CLAUDE.md). Create an inventory version, insert spend records, read them back org-scoped. Confirm RLS blocks cross-user reads.
-- **Prompt:** *Read `scope3-gap-analysis/04-epic-a-implementation-plan.md` §2 and §3. Create migrations 050–053 for `inventory_versions`, `spend_records`, `spend_classifications`, `inventory_category_results`, following the column specs in §2 and the RLS pattern in `supabase/migrations/028_product_volumes.sql` (owner + `shares_org_with`). Then create `db/inventory_store.py` with CRUD following `db/rollup_store.py` patterns (`get_user_client`, org-scoped reads). No classifier or calc logic yet.*
+- **Prompt:** *Read `scope3-gap-analysis/04-epic-a-implementation-plan.md` §2 and §3. Create migrations 050–053 for `inventory_versions`, `spend_records`, `spend_classifications`, `inventory_category_results`, following the column specs in §2 and the RLS pattern in `supabase/migrations/028_product_volumes.sql` (owner + `is_org_member(org_id)`). Then create `db/inventory_store.py` with CRUD following `db/rollup_store.py` patterns (`get_user_client`, org-scoped reads). No classifier or calc logic yet.*
 
 ### A2 — Spend ingestion
 - **Goal:** Upload a GL/ERP CSV, get normalized `spend_records` with flags.
@@ -143,7 +143,7 @@ Style matches `IMPLEMENTATION_PLAN.md` / `PLATFORM_CHAT_AGENT_PLAN.md`: **Goal �
 | Boundary (equity/control) | `s1_consolidation/multiplier.py` | Org-level application |
 | Ingestion + flagging conventions | `parsing/bom_parser.py`, CLAUDE.md decision rules | GL column mapping |
 | DQ scoring | `calc/dqr.py` | Per-category DQ |
-| Audit / RLS / org visibility | `audit_log` (003), `shares_org_with()` | — |
+| Audit / RLS / org visibility | `audit_log` (003), `is_org_member(org_id)` | — |
 
 ---
 
