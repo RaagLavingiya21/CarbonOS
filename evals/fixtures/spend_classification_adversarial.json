@@ -1,0 +1,21 @@
+{
+  "_comment": "HARD/adversarial GL lines for the Epic A spend classifier. Real GL data is cryptic, abbreviated, and ambiguous. The safety property we assert here is NOT raw accuracy but 'correct OR flagged for human review' — the classifier must never CONFIDENTLY misclassify an ambiguous line. Each case: expected_category = best-guess correct Scope 3 category; note = why it is hard. Used by evals/test_spend_classification.py.",
+  "cases": [
+    {"description": "FRT-INBD RM Q3", "vendor": "WERNER ENTERPRISES", "expected_category": 4, "note": "cryptic freight abbreviation"},
+    {"description": "A/P TRVL-AIR", "vendor": "AMEX", "expected_category": 6, "note": "abbreviated air travel"},
+    {"description": "PKG CORR 32ECT", "vendor": "", "expected_category": 1, "note": "abbreviated corrugated packaging"},
+    {"description": "utilities", "vendor": "", "expected_category": 3, "note": "ambiguous: electricity(S2)/gas(S1)/water; must flag"},
+    {"description": "equipment rental - Q2", "vendor": "United Rentals", "expected_category": 1, "note": "TRAP: rental is a service (Cat 1/8), NOT capital goods (Cat 2)"},
+    {"description": "vehicle maintenance and repair", "vendor": "", "expected_category": 1, "note": "TRAP: service, not a vehicle purchase (Cat 2)"},
+    {"description": "software licenses - annual", "vendor": "Adobe", "expected_category": 1, "note": "SaaS/intangible → services Cat 1"},
+    {"description": "cloud hosting services", "vendor": "AWS", "expected_category": 1, "note": "term 'services' generic; Cat 1"},
+    {"description": "insurance premiums", "vendor": "Chubb", "expected_category": 1, "note": "financial service; low materiality"},
+    {"description": "bank and card processing fees", "vendor": "JPMorgan", "expected_category": 1, "note": "financial services"},
+    {"description": "MRO supplies", "vendor": "Grainger", "expected_category": 1, "note": "maintenance/repair/operations goods"},
+    {"description": "ground transportation - client visits", "vendor": "Uber", "expected_category": 6, "note": "travel not freight, despite 'transportation'"},
+    {"description": "recycling rebate credit", "vendor": "", "expected_category": 5, "note": "TRAP: a credit, not a purchase; should flag"},
+    {"description": "consulting - engineering", "vendor": "AECOM", "expected_category": 1, "note": "professional services"},
+    {"description": "co-packing services", "vendor": "ContractPack Inc", "expected_category": 1, "note": "contract manufacturing of own product"},
+    {"description": "misc", "vendor": "", "expected_category": 1, "note": "no signal at all; must flag/no_match"}
+  ]
+}
