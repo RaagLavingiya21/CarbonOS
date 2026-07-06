@@ -68,6 +68,45 @@ def test_create_site(monkeypatch) -> None:
     assert captured["payload"]["lease_type"]
 
 
+def test_egrid_subregions_endpoint() -> None:
+    resp = client.get("/api/scope2/egrid-subregions", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    codes = {s["code"] for s in resp.json()}
+    assert {"RFCE", "CAMX"} <= codes
+
+
+def test_create_site_rejects_invalid_subregion() -> None:
+    # field_validator fails at request parse -> 422 before the route body runs.
+    resp = client.post(
+        "/api/scope2/sites",
+        headers=AUTH_HEADERS,
+        json={"name": "X", "site_type": "retail", "egrid_subregion": "ZZZZ"},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_site_accepts_and_normalizes_subregion(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_sites.resolve_org_id", lambda cu: "org-1")
+
+    def _create(payload, *, org_id, user_id, access_token):
+        captured["payload"] = payload
+        return 1
+
+    monkeypatch.setattr("db.s2_site_store.create_site", _create)
+    monkeypatch.setattr(
+        "db.s2_site_store.get_site",
+        lambda sid, token: _site_row(egrid_subregion="RFCE"),
+    )
+    resp = client.post(
+        "/api/scope2/sites",
+        headers=AUTH_HEADERS,
+        json={"name": "Store", "site_type": "retail", "egrid_subregion": "rfce"},
+    )
+    assert resp.status_code == 201
+    assert captured["payload"]["egrid_subregion"] == "RFCE"  # normalized to upper
+
+
 def test_list_sites(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])
     resp = client.get("/api/scope2/sites", headers=AUTH_HEADERS)

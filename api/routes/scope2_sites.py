@@ -11,10 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope2_schemas import (
     CreateSiteRequest,
+    EgridSubregionDTO,
     Scope2HealthResponse,
     SiteDTO,
     SiteTemplateDTO,
     UpdateSiteRequest,
+    all_egrid_subregion_dtos,
     all_site_template_dtos,
 )
 from api.routes.scope2_deps import resolve_org_id
@@ -38,6 +40,14 @@ def list_site_templates(
 ) -> list[SiteTemplateDTO]:
     """Return the prebuilt consumer-sector site templates (PRD 5.3)."""
     return all_site_template_dtos()
+
+
+@router.get("/egrid-subregions", response_model=list[EgridSubregionDTO])
+def list_egrid_subregions(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[EgridSubregionDTO]:
+    """Return the EPA eGRID subregions for US site geo-mapping (PRD 5.3)."""
+    return all_egrid_subregion_dtos()
 
 
 @router.post("/sites", response_model=SiteDTO, status_code=201)

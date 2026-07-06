@@ -7,8 +7,9 @@ are shared at the app level.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
+from s2_sites.geomap import EGRID_SUBREGIONS, is_valid_subregion
 from s2_sites.templates import SITE_TEMPLATES, SiteTemplate
 
 
@@ -59,6 +60,30 @@ class CreateSiteRequest(BaseModel):
     franchise_flag: bool = False
     consolidation_approach: str = "operational_control"
     status: str = "active"
+
+    @field_validator("egrid_subregion")
+    @classmethod
+    def _validate_subregion(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        code = value.strip().upper()
+        if not is_valid_subregion(code):
+            raise ValueError(
+                f"Unknown eGRID subregion '{value}'. Must be one of {sorted(EGRID_SUBREGIONS)}."
+            )
+        return code
+
+
+class EgridSubregionDTO(BaseModel):
+    code: str
+    name: str
+
+
+def all_egrid_subregion_dtos() -> list[EgridSubregionDTO]:
+    return [
+        EgridSubregionDTO(code=code, name=name)
+        for code, name in EGRID_SUBREGIONS.items()
+    ]
 
 
 class UpdateSiteRequest(BaseModel):

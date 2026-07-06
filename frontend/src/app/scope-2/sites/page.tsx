@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CsvCommit,
   CsvPreview,
+  EgridSubregion,
   Site,
   SiteTemplate,
   scope2Api,
@@ -54,6 +55,8 @@ export default function Scope2SitesPage() {
   const [name, setName] = useState("");
   const [siteType, setSiteType] = useState("");
   const [zip, setZip] = useState("");
+  const [egrid, setEgrid] = useState("");
+  const [subregions, setSubregions] = useState<EgridSubregion[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [csv, setCsv] = useState(CSV_EXAMPLE);
@@ -72,6 +75,7 @@ export default function Scope2SitesPage() {
   useEffect(() => {
     load();
     scope2Api.siteTemplates().then(setTemplates).catch(() => setTemplates([]));
+    scope2Api.egridSubregions().then(setSubregions).catch(() => setSubregions([]));
   }, [load]);
 
   async function addSite(e: React.FormEvent) {
@@ -84,10 +88,12 @@ export default function Scope2SitesPage() {
         name: name.trim(),
         site_type: siteType,
         zip: zip.trim() || undefined,
+        egrid_subregion: egrid || undefined,
       });
       setName("");
       setSiteType("");
       setZip("");
+      setEgrid("");
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create site.");
@@ -241,6 +247,25 @@ export default function Scope2SitesPage() {
                   onChange={(e) => setZip(e.target.value)}
                   placeholder="10001"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>eGRID subregion (US)</Label>
+                <Select value={egrid} onValueChange={setEgrid}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Grid region for location-based factor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subregions.map((s) => (
+                      <SelectItem key={s.code} value={s.code}>
+                        {s.code} — {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-caption text-muted-foreground">
+                  Sets the correct eGRID location-based factor. Leave blank to use the
+                  US national average.
+                </p>
               </div>
               <Button type="submit" className="w-full" loading={saving} disabled={!name.trim() || !siteType}>
                 <Plus className="h-3.5 w-3.5" /> Add site

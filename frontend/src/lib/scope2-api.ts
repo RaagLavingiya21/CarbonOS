@@ -46,6 +46,8 @@ export type CreateSitePayload = {
   franchise_flag?: boolean;
 };
 
+export type EgridSubregion = { code: string; name: string };
+
 export type CsvBillPreview = {
   site_ref: string;
   period_start: string;
@@ -131,6 +133,9 @@ async function request<T>(
 export const scope2Api = {
   health: () => request<Scope2Health>("/api/scope2/health"),
   siteTemplates: () => request<SiteTemplate[]>("/api/scope2/site-templates"),
+
+  egridSubregions: () =>
+    request<EgridSubregion[]>("/api/scope2/egrid-subregions"),
 
   listSites: () => request<Site[]>("/api/scope2/sites"),
   createSite: (payload: CreateSitePayload) =>
