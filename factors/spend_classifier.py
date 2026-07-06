@@ -101,17 +101,23 @@ def _rule(pattern: str, sector_code: str, category: int, why: str) -> _LexRule:
 
 _GL_LEXICON: list[_LexRule] = [
     # --- Cat 6 business travel (check before generic transport) ---
-    _rule(r"\bair\s*travel|airfare|airline|flight\b", "481000", 6, "air travel term"),
+    _rule(r"\bair\s*travel|airfare|airline|flight|trvl-air\b", "481000", 6, "air travel term"),
     _rule(r"\bhotel|lodging|accommodation\b", "721000", 6, "accommodation term"),
     _rule(
-        r"\btravel (booking|arrangement|agency|reservation)|per\s?diem\b",
+        r"\btravel (booking|arrangement|agency|reservation)|per\s?diem|\btrvl\b",
         "561500",
         6,
-        "travel-booking term",
+        "travel term (incl. TRVL abbrev.)",
     ),
     _rule(r"\brental car|car rental|rideshare|taxi\b", "485000", 6, "ground passenger travel term"),
     # --- Cat 4 upstream transport & distribution ---
-    _rule(r"\b(freight|trucking|truckload|ltl|drayage)\b", "484000", 4, "trucking/freight term"),
+    # 'frt'/'frght' are common GL abbreviations for freight.
+    _rule(
+        r"\b(freight|frght|frt|trucking|truckload|ltl|drayage)\b",
+        "484000",
+        4,
+        "trucking/freight term",
+    ),
     _rule(
         r"\bocean freight|sea freight|container ship|maritime shipping\b",
         "483000",
@@ -149,6 +155,9 @@ _GL_LEXICON: list[_LexRule] = [
         3,
         "purchased electricity term",
     ),
+    # 'utilities' is ambiguous (power/gas/water, some Scope 1/2); route to Cat 3
+    # so it is surfaced with a review_scope flag rather than silently in Cat 1.
+    _rule(r"\butilities\b", "221100", 3, "ambiguous utilities term (needs Scope 1/2 review)"),
     # --- Cat 2 capital goods (durable equipment, by GL intent) ---
     _rule(
         r"\b(laptop|desktop|server|workstation|computer)s?\b", "334111", 2, "IT hardware (capital)"

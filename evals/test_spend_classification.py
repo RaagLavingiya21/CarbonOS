@@ -24,6 +24,7 @@ from pathlib import Path
 from factors.spend_classifier import classify_spend_line
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "spend_classification_cases.json"
+_ADVERSARIAL = Path(__file__).parent / "fixtures" / "spend_classification_adversarial.json"
 
 # Accuracy floors for this prototype. Set from the measured baseline; raise as
 # the classifier improves. The point of A3 is to measure honestly, not to hit
@@ -33,6 +34,10 @@ _OVERALL_FLOOR = 0.85
 
 def _load_cases() -> list[dict]:
     return json.loads(_FIXTURE.read_text())["cases"]
+
+
+def _load_adversarial() -> list[dict]:
+    return json.loads(_ADVERSARIAL.read_text())["cases"]
 
 
 def _classify(case: dict):
@@ -101,6 +106,37 @@ def test_determinism():
         ), f"non-deterministic classification for {case['description']!r}"
 
 
+def adversarial_outcomes() -> dict:
+    """Classify the adversarial set; bucket into correct / wrong-but-flagged /
+    confident-wrong. The safety property is that confident-wrong == 0."""
+    cases = _load_adversarial()
+    correct = flagged = confident_wrong = 0
+    offenders: list[str] = []
+    for case in cases:
+        r = classify_spend_line(case["description"], vendor=case.get("vendor"), amount_usd=1000.0)
+        if r.scope3_category == case["expected_category"]:
+            correct += 1
+        elif r.flag_status != "ok":
+            flagged += 1
+        else:
+            confident_wrong += 1
+            offenders.append(f"{case['description']!r} -> Cat {r.scope3_category} (unflagged)")
+    return {
+        "total": len(cases),
+        "correct": correct,
+        "flagged": flagged,
+        "confident_wrong": confident_wrong,
+        "offenders": offenders,
+    }
+
+
+def test_adversarial_never_confidently_wrong():
+    """The trust-critical invariant: on hard/ambiguous GL lines the classifier
+    must be correct OR flag for human review — never a confident misclassify."""
+    m = adversarial_outcomes()
+    assert m["confident_wrong"] == 0, f"confident misclassifications: {m['offenders']}"
+
+
 def test_every_matched_line_has_citation():
     cases = _load_cases()
     for case in cases:
@@ -126,6 +162,19 @@ def _report() -> None:
         print("\nFlag failures:")
         for f in m["flag_failures"]:
             print(f"  {f}")
+
+    a = adversarial_outcomes()
+    print(
+        f"\nAdversarial set ({a['total']} hard lines): "
+        f"correct={a['correct']} wrong-but-flagged={a['flagged']} "
+        f"CONFIDENT-WRONG={a['confident_wrong']}"
+    )
+    safe = a["correct"] + a["flagged"]
+    print(f"  SAFE (correct or flagged) = {safe}/{a['total']} = {safe / a['total']:.0%}")
+    if a["offenders"]:
+        print("  Confident misclassifications:")
+        for o in a["offenders"]:
+            print(f"    {o}")
 
 
 if __name__ == "__main__":
