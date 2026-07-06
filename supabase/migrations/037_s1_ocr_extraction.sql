@@ -26,9 +26,12 @@ CREATE INDEX IF NOT EXISTS idx_s1_ocr_org_id ON s1_ocr_extraction (org_id);
 CREATE INDEX IF NOT EXISTS idx_s1_ocr_status ON s1_ocr_extraction (org_id, status);
 
 ALTER TABLE s1_ocr_extraction ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS s1_ocr_select_org ON s1_ocr_extraction;
 CREATE POLICY s1_ocr_select_org ON s1_ocr_extraction
     FOR SELECT TO authenticated USING (public.is_org_member(org_id));
+DROP POLICY IF EXISTS s1_ocr_insert_org ON s1_ocr_extraction;
 CREATE POLICY s1_ocr_insert_org ON s1_ocr_extraction
     FOR INSERT TO authenticated WITH CHECK (public.is_org_member(org_id));
+DROP POLICY IF EXISTS s1_ocr_update_org ON s1_ocr_extraction;
 CREATE POLICY s1_ocr_update_org ON s1_ocr_extraction
     FOR UPDATE TO authenticated USING (public.is_org_member(org_id)) WITH CHECK (public.is_org_member(org_id));
