@@ -128,6 +128,16 @@ export type EstimateResult = {
   method_note: string;
 };
 
+export type ReportDestination = { key: string; label: string };
+
+export type Report = {
+  destination: string;
+  entity: string;
+  reporting_year: number;
+  rows: { field: string; value: string }[];
+  csv: string;
+};
+
 export type Coverage = {
   total_mwh: number;
   coverage_fraction: number;
@@ -207,6 +217,13 @@ export const scope2Api = {
     }),
   listCalculations: () => request<Calculation[]>("/api/scope2/calculations"),
   coverage: () => request<Coverage>("/api/scope2/coverage"),
+
+  reportDestinations: () =>
+    request<ReportDestination[]>("/api/scope2/report-destinations"),
+  report: (calcId: number, destination: string) =>
+    request<Report>(
+      `/api/scope2/calculations/${calcId}/report?destination=${destination}`,
+    ),
 
   listLandlordRequests: () =>
     request<LandlordRequest[]>("/api/scope2/landlord-requests"),

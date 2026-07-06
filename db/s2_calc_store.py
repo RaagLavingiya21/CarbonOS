@@ -34,3 +34,15 @@ def list_calculations(access_token: str) -> list[dict]:
         .execute()
         .data
     )
+
+
+def get_calculation(calc_id: int, access_token: str) -> dict | None:
+    client = get_user_client(access_token)
+    response = (
+        client.table("s2_calculations")
+        .select(f"{_COLUMNS}, factor_versions, methodology_notes")
+        .eq("calc_id", calc_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None

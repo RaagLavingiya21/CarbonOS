@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, Calculator, Mail, Upload, Zap } from "lucide-react";
+import { ArrowRight, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
 
 import { KpiStrip } from "@/components/portfolio/KpiStrip";
 import { ErrorState } from "@/components/ui/error-state";
@@ -34,6 +34,12 @@ const ENTRIES = [
     icon: Mail,
     title: "Leased-site data requests",
     body: "Request whole-building or sub-metered data from landlords for leased sites — the gap no incumbent fills.",
+  },
+  {
+    href: "/scope-2/reports",
+    icon: FileText,
+    title: "Buyer & CDP response",
+    body: "Prefill CDP Supply Chain and buyer templates (Amazon) from one calculation — one number, many formats.",
   },
 ];
 

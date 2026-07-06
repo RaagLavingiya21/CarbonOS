@@ -297,6 +297,79 @@ def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
     assert "Store 1" in data["unresolved_site_refs"]
 
 
+# --- reporting -------------------------------------------------------------
+
+
+def _calc_row(**kw) -> dict:
+    r = {
+        "calc_id": 42,
+        "org_id": "org-1",
+        "reporting_year": 2024,
+        "scope": "entity",
+        "site_id": None,
+        "location_based_kg_co2e": 4625.0,
+        "market_based_kg_co2e": 7000.0,
+        "consumption_mwh": 12.5,
+        "market_tier": None,
+        "market_fallback_flagged": False,
+        "factor_versions": {},
+        "methodology_notes": "GHG Protocol Scope 2 dual-method.",
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    r.update(kw)
+    return r
+
+
+class _FakeOrg:
+    id = "org-1"
+    name = "Acme Inc"
+
+
+def test_report_destinations_endpoint() -> None:
+    resp = client.get("/api/scope2/report-destinations", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    keys = {d["key"] for d in resp.json()}
+    assert {"standard", "cdp", "amazon"} <= keys
+
+
+def test_get_report_cdp(monkeypatch) -> None:
+    monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: _calc_row())
+    monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])
+    monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: [])
+    monkeypatch.setattr(
+        "db.org_store.get_active_org", lambda token, *, user_id=None: _FakeOrg()
+    )
+    resp = client.get(
+        "/api/scope2/calculations/42/report?destination=cdp", headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["entity"] == "Acme Inc"
+    assert data["destination"] == "cdp"
+    assert data["csv"]
+    joined = " ".join(f"{r['field']}={r['value']}" for r in data["rows"])
+    assert "4.625" in joined  # location-based kg -> tCO2e
+
+
+def test_get_report_missing_calc_404(monkeypatch) -> None:
+    monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: None)
+    resp = client.get("/api/scope2/calculations/999/report", headers=AUTH_HEADERS)
+    assert resp.status_code == 404
+
+
+def test_get_report_bad_destination_422(monkeypatch) -> None:
+    monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: _calc_row())
+    monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])
+    monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: [])
+    monkeypatch.setattr(
+        "db.org_store.get_active_org", lambda token, *, user_id=None: _FakeOrg()
+    )
+    resp = client.get(
+        "/api/scope2/calculations/42/report?destination=bogus", headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 422
+
+
 # --- coverage scoring ------------------------------------------------------
 
 

@@ -32,6 +32,7 @@ from api.routes import (
     scope2_calc,
     scope2_ingestion,
     scope2_landlord,
+    scope2_reports,
     scope2_sites,
     shares,
 )
@@ -179,6 +180,7 @@ app.include_router(scope2_sites.router)
 app.include_router(scope2_ingestion.router)
 app.include_router(scope2_calc.router)
 app.include_router(scope2_landlord.router)
+app.include_router(scope2_reports.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

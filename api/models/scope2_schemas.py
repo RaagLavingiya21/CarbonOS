@@ -256,6 +256,27 @@ class CoverageResponse(BaseModel):
     per_site: list[SiteCoverageDTO]
 
 
+# --- Reporting: one number, many formats (PRD 5.5) --------------------------
+
+
+class ReportDestinationDTO(BaseModel):
+    key: str
+    label: str
+
+
+class ReportRow(BaseModel):
+    field: str
+    value: str
+
+
+class ReportResponse(BaseModel):
+    destination: str
+    entity: str
+    reporting_year: int
+    rows: list[ReportRow]
+    csv: str
+
+
 # --- Leased-site landlord data-requests (PRD 5.2) ---------------------------
 
 LandlordMethod = Literal["email", "portal", "phone"]
