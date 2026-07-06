@@ -29,6 +29,7 @@ from api.routes import (
     requests,
     rollup,
     scenarios,
+    scope1,
     scope2_calc,
     scope2_ingestion,
     scope2_landlord,
@@ -176,6 +177,7 @@ app.include_router(chat.router)
 app.include_router(panels.router)
 app.include_router(org.router)
 app.include_router(scenarios.router)
+app.include_router(scope1.router)
 # Scope 3 lane — ships dark behind NEXT_PUBLIC_SCOPE3_ENABLED (nav hidden until GA).
 app.include_router(scope3_inventory.router)
 app.include_router(scope3_obligations.router)
