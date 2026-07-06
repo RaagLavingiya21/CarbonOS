@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Copy, Download, FileWarning, FlaskConical, RefreshCw, Share2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileWarning, Flag, FlaskConical, RefreshCw, Share2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,20 +27,21 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { HotspotBar } from "@/components/data/HotspotBar";
-import { MetricCard } from "@/components/data/MetricCard";
-import { SourceCitation } from "@/components/data/SourceCitation";
 import { Term } from "@/components/data/Term";
+import { KpiStrip, type KpiTileData } from "@/components/portfolio/KpiStrip";
+import { StatusChip } from "@/components/portfolio/StatusChip";
+import { Cell, HeadCell, PctBar } from "@/components/portfolio/DataTable";
 import { RemapLineSheet, lineItemNeedsRemap } from "@/components/analyzer/RemapLineSheet";
 import { AnalysisDetail, AnalysisLineItem, ApplyPrimaryDataResponse, FootprintProvenance, ScenarioSummary, ShareSummary, api } from "@/lib/api";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { getAnalysisFromSupabase } from "@/lib/supabase-data";
-import { formatKg, formatPct } from "@/lib/utils";
+import { cn, formatKg, formatPct } from "@/lib/utils";
 
-function statusBadgeVariant(status: string | null | undefined) {
-  if (status === "flagged") return "destructive" as const;
-  if (status === "published") return "default" as const;
-  return "secondary" as const;
+function compactNumber(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "0";
+  return new Intl.NumberFormat("en", {
+    maximumFractionDigits: value >= 100 ? 0 : 1,
+  }).format(value);
 }
 
 function dataSourceBadgeVariant(dataSource: string | null | undefined) {
@@ -58,6 +59,10 @@ function formatLineDqr(item: AnalysisLineItem) {
   }
   return `T${item.technological_dqr ?? "—"}/G${item.geographical_dqr ?? "—"}/Y${item.temporal_dqr ?? "—"}`;
 }
+
+// Shared grid template for the line-item table (grouped header + rows + footer).
+const LINE_ITEM_GRID =
+  "grid-cols-[minmax(200px,2fr)_minmax(140px,1.3fr)_92px_88px_100px_140px_72px_150px]";
 
 export default function AnalysisDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -417,11 +422,11 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
     : "/analyzer";
 
   return (
-    <div className="space-y-6">
-      <Button asChild variant="ghost" className="-ml-3">
-        <Link href="/">
-          <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
+    <div className="space-y-3">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+        <Link href="/products">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to portfolio
         </Link>
       </Button>
 
@@ -444,22 +449,24 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
       ) : analysis ? (
         <>
           <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusBadgeVariant(analysis.status)}>
-                  {analysis.status ?? "saved"}
-                </Badge>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <StatusChip status={analysis.status} />
                 {analysis.version ? (
-                  <Badge variant="outline">Version {analysis.version}</Badge>
+                  <span className="num inline-flex items-center rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-caption font-medium text-foreground">
+                    v{analysis.version}
+                  </span>
                 ) : null}
+                <span className="text-caption text-muted-foreground">
+                  Analyzed {analysis.analysis_date}
+                  {analysis.published_at
+                    ? ` · Published ${new Date(analysis.published_at).toLocaleDateString()}`
+                    : null}
+                </span>
               </div>
-              <h1 className="mt-3 text-h1">{analysis.product_name}</h1>
-              <p className="mt-2 text-small text-muted-foreground">
-                Analysis date: {analysis.analysis_date}
-                {analysis.published_at
-                  ? ` · Published ${new Date(analysis.published_at).toLocaleDateString()}`
-                  : null}
-              </p>
+              <h1 className="mt-1.5 text-h1 font-semibold tracking-tight text-foreground">
+                {analysis.product_name}
+              </h1>
             </div>
             <div className="flex flex-wrap gap-2">
               {analysis.status === "approved" ? (
@@ -511,6 +518,40 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
               </Button>
             </div>
           </section>
+
+          <KpiStrip
+            tiles={
+              [
+                {
+                  label: "Total footprint",
+                  value: compactNumber(analysis.total_kg_co2e),
+                  unit: "kg CO₂e",
+                  hint: (
+                    <>
+                      <Term name="scope 3 category 1">Scope 3 Cat 1</Term> ·{" "}
+                      <Term name="cradle-to-gate">cradle-to-gate</Term>
+                    </>
+                  ),
+                },
+                {
+                  label: "Matched lines",
+                  value: compactNumber(analysis.matched_items),
+                  unit: "in total",
+                },
+                {
+                  label: "Flagged",
+                  value: compactNumber(analysis.flagged_items),
+                  unit: "need review",
+                },
+                {
+                  label: "Primary data",
+                  value: compactNumber((analysis.primary_data_share ?? 0) * 100),
+                  unit: "%",
+                  bar: analysis.primary_data_share ?? 0,
+                },
+              ] satisfies KpiTileData[]
+            }
+          />
 
           {scenarios.length > 0 ? (
             <Card>
@@ -819,6 +860,253 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
             </Card>
           ) : null}
 
+          {analysis.technological_dqr != null ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-border bg-surface px-4 py-2 text-small shadow-xs">
+              <span className="font-semibold text-foreground">Data quality</span>
+              <span className="text-caption text-muted-foreground">
+                PACT DQR · 1 = best, 5 = worst
+              </span>
+              <span className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-1">
+                {(
+                  [
+                    ["Technological", analysis.technological_dqr],
+                    ["Geographical", analysis.geographical_dqr],
+                    ["Temporal", analysis.temporal_dqr],
+                  ] as const
+                ).map(([label, value]) => (
+                  <span key={label} className="flex items-center gap-1.5">
+                    <span className="text-caption uppercase tracking-wide text-muted-foreground">
+                      {label}
+                    </span>
+                    <span className="num font-semibold text-foreground">{value ?? "—"}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          ) : null}
+
+          <div className="rounded-lg border border-border bg-surface px-4 py-2 shadow-xs">
+            {provenanceLoading ? (
+              <Skeleton className="h-6 w-full" />
+            ) : provenance ? (
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex min-w-0 items-center gap-2 text-small">
+                  <span className="shrink-0 font-semibold text-foreground">Provenance</span>
+                  <span className="text-border">·</span>
+                  <span className="truncate text-caption text-muted-foreground">
+                    {provenance.method_statement.summary} · {provenance.version_lineage.length}{" "}
+                    version(s) · PDS {formatPct((provenance.primary_data_share ?? 0) * 100)}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    onClick={() => void downloadProvenance("json")}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    className="h-6 px-2 text-caption"
+                  >
+                    <Download className="h-3 w-3" />
+                    .json
+                  </Button>
+                  <Button
+                    onClick={() => void downloadProvenance("markdown")}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    className="h-6 px-2 text-caption"
+                  >
+                    <Download className="h-3 w-3" />
+                    .md
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-small text-muted-foreground">
+                Provenance unavailable for this footprint.
+              </p>
+            )}
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-2 px-4 py-2.5">
+              <div>
+                <h2 className="text-body font-semibold text-foreground">Line items &amp; hotspots</h2>
+                <p className="text-caption text-muted-foreground">
+                  Contribution to the total footprint, largest first. Each{" "}
+                  <Term name="hotspot">hotspot</Term> shows its{" "}
+                  <Term name="emission factor">emission factor</Term> source.
+                </p>
+              </div>
+            </header>
+            {analysis.line_items.every((item) => item.kg_co2e == null) ? (
+              <p className="px-4 py-10 text-center text-small text-muted-foreground">
+                No matched line items to chart yet.
+              </p>
+            ) : (
+              <div className="relative">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[1000px]">
+                    {/* Column header */}
+                    <div
+                      className={cn(
+                        "grid",
+                        LINE_ITEM_GRID,
+                        "border-b border-border bg-surface-2 text-caption font-medium text-muted-foreground",
+                      )}
+                    >
+                      <HeadCell sticky>Line item</HeadCell>
+                      <HeadCell>Emission factor</HeadCell>
+                      <HeadCell>Tier</HeadCell>
+                      <HeadCell align="right">Spend</HeadCell>
+                      <HeadCell align="right">kg CO₂e</HeadCell>
+                      <HeadCell>% of total</HeadCell>
+                      <HeadCell>DQR</HeadCell>
+                      <HeadCell> </HeadCell>
+                    </div>
+
+                    {/* Rows */}
+                    {[...analysis.line_items]
+                      .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
+                      .map((item, index) => {
+                        const flagged = /flag|low|no_ef|review|unmatch|missing/i.test(
+                          item.flag_status ?? "",
+                        );
+                        const secondary = item.data_source !== "primary" && item.item_id != null;
+                        return (
+                          <div
+                            key={`${item.component}-${item.material}-${index}`}
+                            className={cn(
+                              "group grid min-h-11 border-b border-border text-body transition-colors hover:bg-muted/60",
+                              LINE_ITEM_GRID,
+                            )}
+                          >
+                            <Cell sticky>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate font-medium text-foreground">
+                                    {item.component ?? "Unnamed component"}
+                                  </span>
+                                  {flagged ? (
+                                    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-data-medium-bg px-1 py-0.5 text-[10px] font-medium text-data-medium">
+                                      <Flag className="h-2.5 w-2.5" />
+                                      flag
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="truncate text-caption text-muted-foreground">
+                                  {item.material ?? "—"} · {item.matched_sector ?? "unmatched"}
+                                </div>
+                              </div>
+                            </Cell>
+                            <Cell>
+                              {item.ef_source ? (
+                                <span
+                                  title={item.ef_source}
+                                  className="truncate text-caption text-muted-foreground"
+                                >
+                                  {item.ef_source}
+                                </span>
+                              ) : (
+                                <span className="text-caption text-muted-foreground">—</span>
+                              )}
+                            </Cell>
+                            <Cell>
+                              <Badge variant={dataSourceBadgeVariant(item.data_source)}>
+                                {item.data_source === "primary" ? "Primary" : "Secondary"}
+                              </Badge>
+                            </Cell>
+                            <Cell align="right">
+                              <span className="num text-caption text-muted-foreground">
+                                {item.spend_usd != null ? `$${item.spend_usd.toFixed(2)}` : "—"}
+                              </span>
+                            </Cell>
+                            <Cell align="right">
+                              <span className="num text-body font-semibold text-foreground">
+                                {item.kg_co2e != null ? compactNumber(item.kg_co2e) : "—"}
+                              </span>
+                            </Cell>
+                            <Cell>
+                              <PctBar value={(item.share_pct ?? 0) / 100} />
+                            </Cell>
+                            <Cell>
+                              {formatLineDqr(item) ? (
+                                <span className="num text-caption text-muted-foreground">
+                                  {formatLineDqr(item)}
+                                </span>
+                              ) : (
+                                <span className="text-caption text-muted-foreground/50">—</span>
+                              )}
+                            </Cell>
+                            <Cell>
+                              {secondary ? (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {lineItemNeedsRemap(item) ? (
+                                    <Button
+                                      onClick={() => openRemapSheet(item)}
+                                      size="sm"
+                                      type="button"
+                                      variant="outline"
+                                      className="h-6 px-2 text-caption"
+                                    >
+                                      Re-map
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    onClick={() => openPrimaryDataSheet(item)}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    className="h-6 px-2 text-caption"
+                                  >
+                                    Enter value
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </Cell>
+                          </div>
+                        );
+                      })}
+
+                    {/* Total footer */}
+                    <div
+                      className={cn(
+                        "grid border-t border-border bg-surface-2",
+                        LINE_ITEM_GRID,
+                      )}
+                    >
+                      <Cell sticky>
+                        <span className="text-caption uppercase tracking-wide text-muted-foreground">
+                          Total · {analysis.line_items.length} lines
+                        </span>
+                      </Cell>
+                      <Cell> </Cell>
+                      <Cell> </Cell>
+                      <Cell align="right">
+                        <span className="num text-caption text-muted-foreground">
+                          ${analysis.line_items.reduce((s, i) => s + (i.spend_usd ?? 0), 0).toFixed(2)}
+                        </span>
+                      </Cell>
+                      <Cell align="right">
+                        <span className="num text-body font-semibold text-foreground">
+                          {compactNumber(
+                            analysis.line_items.reduce((s, i) => s + (i.kg_co2e ?? 0), 0),
+                          )}
+                        </span>
+                      </Cell>
+                      <Cell>
+                        <span className="num text-caption text-muted-foreground">100%</span>
+                      </Cell>
+                      <Cell> </Cell>
+                      <Cell> </Cell>
+                    </div>
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent" />
+              </div>
+            )}
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle>Annual volume</CardTitle>
@@ -870,175 +1158,6 @@ export default function AnalysisDetailPage({ params }: { params: { id: string } 
                   <span className="text-caption text-muted-foreground">Saved</span>
                 ) : null}
               </div>
-            </CardContent>
-          </Card>
-
-          <section className="grid gap-4 md:grid-cols-4">
-            <MetricCard
-              label="Total footprint"
-              value={formatKg(analysis.total_kg_co2e)}
-              unit="kg CO₂e"
-              hint={
-                <>
-                  <Term name="scope 3 category 1">Scope 3 Category 1</Term>,{" "}
-                  <Term name="cradle-to-gate">cradle-to-gate</Term>
-                </>
-              }
-            />
-            <MetricCard label="Matched line items" value={analysis.matched_items} hint="Included in total" />
-            <MetricCard label="Flagged line items" value={analysis.flagged_items} hint="Need human review" />
-            <MetricCard
-              label="Primary data share"
-              value={formatPct((analysis.primary_data_share ?? 0) * 100)}
-              hint="Share of footprint from supplier-specific data"
-            />
-          </section>
-
-          {analysis.technological_dqr != null ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Data quality</CardTitle>
-                <CardDescription>
-                  PACT Data Quality Rating (1 = best, 5 = worst): technological, geographical,
-                  temporal.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <MetricCard
-                  label="Technological DQR"
-                  value={analysis.technological_dqr}
-                  hint="Primary data = 1; secondary by EF confidence"
-                />
-                <MetricCard
-                  label="Geographical DQR"
-                  value={analysis.geographical_dqr ?? "—"}
-                  hint="Country-specific activity data vs global fallback"
-                />
-                <MetricCard
-                  label="Temporal DQR"
-                  value={analysis.temporal_dqr ?? "—"}
-                  hint="Reporting period vs Open CEDA 2025 vintage"
-                />
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Provenance / methodology</CardTitle>
-              <CardDescription>
-                Auditor-facing traceability: method statement, per-line citations, and version
-                lineage.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {provenanceLoading ? (
-                <Skeleton className="h-20 w-full" />
-              ) : provenance ? (
-                <>
-                  <p className="text-small text-muted-foreground">
-                    {provenance.method_statement.summary}
-                  </p>
-                  <p className="text-small">
-                    {provenance.version_lineage.length} version(s) in lineage · PDS{" "}
-                    {formatPct((provenance.primary_data_share ?? 0) * 100)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => void downloadProvenance("json")}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download methodology (.json)
-                    </Button>
-                    <Button
-                      onClick={() => void downloadProvenance("markdown")}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download methodology (.md)
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-small text-muted-foreground">
-                  Provenance unavailable for this footprint.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Emission hotspots</CardTitle>
-              <CardDescription>
-                Line-item contribution to the total footprint, largest first. Each{" "}
-                <Term name="hotspot">hotspot</Term> shows the{" "}
-                <Term name="emission factor">emission factor</Term> source it used.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {[...analysis.line_items]
-                .filter((item) => item.kg_co2e != null)
-                .sort((a, b) => (b.share_pct ?? 0) - (a.share_pct ?? 0))
-                .map((item, index) => (
-                  <div key={`${item.component}-${item.material}-${index}`} className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <HotspotBar
-                        label={item.component ?? "Unnamed component"}
-                        sublabel={item.material ?? undefined}
-                        sharePct={item.share_pct ?? 0}
-                        value={`${formatKg(item.kg_co2e)} kg`}
-                        emphasized={index === 0}
-                      />
-                      <Badge variant={dataSourceBadgeVariant(item.data_source)}>
-                        {item.data_source === "primary" ? "Primary" : "Secondary"}
-                      </Badge>
-                      {item.data_source !== "primary" && item.item_id ? (
-                        <>
-                          {lineItemNeedsRemap(item) ? (
-                            <Button
-                              onClick={() => openRemapSheet(item)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              Re-map factor
-                            </Button>
-                          ) : null}
-                          <Button
-                            onClick={() => openPrimaryDataSheet(item)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            Enter supplier value
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pl-0.5">
-                      <span className="truncate text-caption text-muted-foreground">
-                        {item.matched_sector ?? "unmatched"}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {formatLineDqr(item) ? (
-                          <Badge variant="outline">{formatLineDqr(item)}</Badge>
-                        ) : null}
-                        {item.ef_source ? <SourceCitation source={item.ef_source} /> : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              {analysis.line_items.every((item) => item.kg_co2e == null) ? (
-                <p className="py-6 text-center text-small text-muted-foreground">
-                  No matched line items to chart yet.
-                </p>
-              ) : null}
             </CardContent>
           </Card>
         </>
