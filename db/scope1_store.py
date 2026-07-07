@@ -242,6 +242,32 @@ def list_records_for_inventory(
     )
 
 
+# --- Fugitive (refrigerant) records -----------------------------------------
+
+def create_fugitive_record(data: dict, *, access_token: str, user_id: str) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {"org_id": org_id, "created_by": user_id, **data}
+    return client.table("s1_fugitive_record").insert(row).execute().data[0]
+
+
+def list_fugitive_records(inventory_id: str, *, access_token: str, user_id: str) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_fugitive_record").select("*")
+        .eq("org_id", org_id).eq("inventory_id", inventory_id)
+        .order("created_at").execute().data
+    )
+
+
+def delete_fugitive_record(record_id: str, *, access_token: str, user_id: str) -> dict | None:
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_fugitive_record").delete()
+        .eq("org_id", org_id).eq("id", record_id).execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
 # --- Base-year recalculation events -----------------------------------------
 
 def list_recalc_events(inventory_id: str, *, access_token: str, user_id: str) -> list[dict]:

@@ -278,10 +278,47 @@ export type S1Recalc = {
   has_pending: boolean;
 };
 
+export type S1Refrigerant = {
+  name: string;
+  kind: "pure" | "blend";
+  components?: Record<string, number>;
+  gwp: { AR4: number; AR5: number; AR6: number };
+};
+export type S1FugitiveRecord = {
+  id: string;
+  refrigerant: string;
+  method: string;
+  facility_id: string | null;
+  leaked_kg: number;
+  gwp: number;
+  tco2e: number;
+  description: string | null;
+  data_quality_tier: number | null;
+  evidence_document_id: string | null;
+};
+export type S1Fugitive = {
+  ar_version: string;
+  records: S1FugitiveRecord[];
+  total_tco2e: number;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  refrigerants: () => request<S1Refrigerant[]>("/api/scope1/refrigerants"),
+  fugitive: (inventoryId: string, arVersion: string) =>
+    request<S1Fugitive>(
+      `/api/scope1/inventories/${inventoryId}/fugitive?ar_version=${encodeURIComponent(arVersion)}`,
+    ),
+  createFugitive: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/fugitive", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteFugitive: (recordId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/fugitive/${recordId}`, { method: "DELETE" }),
 
   recalc: (inventoryId: string) =>
     request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc`),

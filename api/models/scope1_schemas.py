@@ -205,6 +205,46 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Fugitive (refrigerant) emissions ---------------------------------------
+
+class CreateFugitiveRequest(BaseModel):
+    inventory_id: str
+    refrigerant: str
+    method: str = Field(pattern="^(screening|material_balance)$")
+    facility_id: str | None = None
+    # Screening inputs:
+    charge_kg: float | None = Field(default=None, ge=0)
+    leak_rate_pct: float | None = Field(default=None, ge=0)
+    # Material-balance inputs:
+    purchases_kg: float | None = Field(default=None, ge=0)
+    beginning_inventory_kg: float | None = Field(default=None, ge=0)
+    ending_inventory_kg: float | None = Field(default=None, ge=0)
+    description: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    data_quality_tier: int = 4
+    evidence_document_id: str | None = None
+
+
+class FugitiveRecordDTO(BaseModel):
+    id: str
+    refrigerant: str
+    method: str
+    facility_id: str | None = None
+    leaked_kg: float
+    gwp: float
+    tco2e: float
+    description: str | None = None
+    data_quality_tier: int | None = None
+    evidence_document_id: str | None = None
+
+
+class FugitiveReportResponse(BaseModel):
+    ar_version: str
+    records: list[FugitiveRecordDTO]
+    total_tco2e: float
+
+
 # --- Base-year recalculation ------------------------------------------------
 
 class CreateRecalcEventRequest(BaseModel):

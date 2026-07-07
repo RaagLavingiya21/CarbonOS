@@ -25,6 +25,7 @@ from api.models.scope1_schemas import (
     CreateEfOverrideRequest,
     CreateEntityRequest,
     CreateFacilityRequest,
+    CreateFugitiveRequest,
     CreateInventoryRequest,
     CreateRecalcEventRequest,
     CreateSourceRequest,
@@ -32,6 +33,8 @@ from api.models.scope1_schemas import (
     ExcludeSourceRequest,
     FacilityBreakdownDTO,
     FactorsResponse,
+    FugitiveRecordDTO,
+    FugitiveReportResponse,
     GasBreakdownDTO,
     InventoryReportResponse,
     InviteMemberRequest,
@@ -56,6 +59,13 @@ from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor, rows_to_factors
+from s1_fugitive import (
+    UnknownRefrigerant,
+    compute_leaked_kg,
+    fugitive_tco2e,
+    list_refrigerants,
+    refrigerant_gwp,
+)
 from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_onboarding import OnboardingCounts, build_onboarding
@@ -929,6 +939,74 @@ def trends(
         latest_vs_base_abs=result.latest_vs_base_abs,
         latest_vs_base_pct=result.latest_vs_base_pct,
     )
+
+
+# --- Fugitive (refrigerant) emissions ---------------------------------------
+
+@router.get("/refrigerants")
+def refrigerants(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    """Refrigerant library with GWP per AR version (for the intake picker)."""
+    return list_refrigerants()
+
+
+@router.post("/fugitive")
+def create_fugitive(req: CreateFugitiveRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+    """Record a fugitive refrigerant-leak estimate. The leaked *mass* is computed
+    server-side from the method inputs and stored; tCO2e is derived at reporting
+    time from the refrigerant GWP (never stored)."""
+    try:
+        refrigerant_gwp(req.refrigerant, "AR5")  # validate the refrigerant is known
+        leaked = compute_leaked_kg(
+            req.method, charge_kg=req.charge_kg, leak_rate_pct=req.leak_rate_pct,
+            purchases_kg=req.purchases_kg, beginning_inventory_kg=req.beginning_inventory_kg,
+            ending_inventory_kg=req.ending_inventory_kg,
+        )
+    except (ValueError, UnknownRefrigerant) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    row = {**req.model_dump(exclude_none=True), "leaked_kg": leaked}
+    record = _guard(store.create_fugitive_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _log(record["id"], "create", user, entity_table="s1_fugitive_record",
+         field_changes={"refrigerant": req.refrigerant, "method": req.method, "leaked_kg": leaked})
+    return record
+
+
+@router.get("/inventories/{inventory_id}/fugitive", response_model=FugitiveReportResponse)
+def list_fugitive(
+    inventory_id: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> FugitiveReportResponse:
+    """Fugitive records with tCO2e derived at the chosen AR version, plus a total."""
+    rows = _guard(store.list_fugitive_records, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    records: list[FugitiveRecordDTO] = []
+    total = 0.0
+    for r in rows:
+        leaked = float(r["leaked_kg"])
+        try:
+            gwp = refrigerant_gwp(r["refrigerant"], ar_version)
+        except UnknownRefrigerant:
+            gwp = 0.0
+        tco2e = fugitive_tco2e(leaked, r["refrigerant"], ar_version) if gwp else 0.0
+        total += tco2e
+        records.append(FugitiveRecordDTO(
+            id=r["id"], refrigerant=r["refrigerant"], method=r["method"],
+            facility_id=r.get("facility_id"), leaked_kg=leaked, gwp=gwp, tco2e=tco2e,
+            description=r.get("description"), data_quality_tier=r.get("data_quality_tier"),
+            evidence_document_id=r.get("evidence_document_id"),
+        ))
+    return FugitiveReportResponse(ar_version=ar_version, records=records, total_tco2e=total)
+
+
+@router.delete("/fugitive/{record_id}")
+def delete_fugitive(record_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
+    deleted = _guard(store.delete_fugitive_record, record_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Fugitive record not found.")
+    _log(record_id, "delete", user, entity_table="s1_fugitive_record")
+    return deleted
 
 
 # --- Reporting --------------------------------------------------------------

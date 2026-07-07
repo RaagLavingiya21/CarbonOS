@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Beaker, ClipboardCheck, Database, Flame, ListChecks, RefreshCcw, Settings2, FileText, Users } from "lucide-react";
+import { Beaker, ClipboardCheck, Database, Flame, ListChecks, RefreshCcw, Settings2, Snowflake, FileText, Users } from "lucide-react";
 
 import { MetricCard } from "@/components/data/MetricCard";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { scope1Api, type S1Readiness, type S1Report } from "@/lib/scope1-api";
+import { scope1Api, type S1Fugitive, type S1Readiness, type S1Report } from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "./_lib";
 import { OnboardingChecklist } from "./_onboarding";
@@ -22,22 +22,26 @@ export default function Scope1Dashboard() {
   const [arVersion, setArVersion] = useState("AR5");
   const [report, setReport] = useState<S1Report | null>(null);
   const [readiness, setReadiness] = useState<S1Readiness | null>(null);
+  const [fugitive, setFugitive] = useState<S1Fugitive | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadMetrics = useCallback(async () => {
     if (!activeId) {
       setReport(null);
       setReadiness(null);
+      setFugitive(null);
       return;
     }
     setError(null);
     try {
-      const [rep, ready] = await Promise.all([
+      const [rep, ready, fug] = await Promise.all([
         scope1Api.report(activeId, arVersion),
         scope1Api.readiness(activeId),
+        scope1Api.fugitive(activeId, arVersion).catch(() => null),
       ]);
       setReport(rep);
       setReadiness(ready);
+      setFugitive(fug);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -95,6 +99,12 @@ export default function Scope1Dashboard() {
           <Link href="/scope-1/data">
             <Database className="h-4 w-4" />
             Add activity data
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/scope-1/fugitive">
+            <Snowflake className="h-4 w-4" />
+            Fugitive emissions
           </Link>
         </Button>
         <Button asChild variant="outline">
@@ -156,12 +166,24 @@ export default function Scope1Dashboard() {
         </Alert>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label={`Gross Scope 1 (${arVersion})`}
-              value={fmtT(report?.total_scope1_tco2e)}
+              value={fmtT((report?.total_scope1_tco2e ?? 0) + (fugitive?.total_tco2e ?? 0))}
               unit="tCO₂e"
-              hint={active ? `${active.reporting_year} · ${report?.record_count ?? 0} record(s)` : undefined}
+              hint={
+                fugitive && fugitive.total_tco2e > 0
+                  ? `combustion ${fmtT(report?.total_scope1_tco2e)} + fugitive ${fmtT(fugitive.total_tco2e)}`
+                  : active
+                    ? `${active.reporting_year} · ${report?.record_count ?? 0} record(s)`
+                    : undefined
+              }
+            />
+            <MetricCard
+              label="Fugitive (refrigerant)"
+              value={fmtT(fugitive?.total_tco2e)}
+              unit="tCO₂e"
+              hint={fugitive ? `${fugitive.records.length} record(s)` : "No fugitive records"}
             />
             <MetricCard
               label="Biogenic CO₂ (memo)"
