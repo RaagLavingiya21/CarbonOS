@@ -40,8 +40,11 @@ from api.models.scope1_schemas import (
     OnboardingStepDTO,
     ReadinessResponse,
     SetBaseYearRequest,
+    SetInventoryMetricsRequest,
     SetRoleRequest,
     StationaryRecordRequest,
+    TrendPointDTO,
+    TrendsResponse,
     UpsertBoundaryRequest,
 )
 from db import org_store
@@ -55,9 +58,11 @@ from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_onboarding import OnboardingCounts, build_onboarding
 from s1_reporting import (
     DisclosureMeta,
+    InventoryDatum,
     ReportRecord,
     build_inventory_report,
     build_pdf,
+    build_trends,
     build_xlsx,
     trace_record,
 )
@@ -332,6 +337,22 @@ async def import_base_year(
     return {**inv, "evidence_document_id": evidence["id"],
             "imported": {"base_year": parsed.base_year, "total_tco2e": parsed.total_tco2e,
                          "gwp_version": parsed.gwp_version}}
+
+
+@router.post("/inventories/{inventory_id}/metrics")
+def set_inventory_metrics(
+    inventory_id: str, req: SetInventoryMetricsRequest,
+    user: CurrentUser = Depends(require_editor),
+) -> dict:
+    """Set operational denominators (revenue / output / headcount) used for
+    emissions-intensity reporting."""
+    patch = req.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(status_code=422, detail="No metrics provided.")
+    inv = _guard(store.set_inventory_metrics, inventory_id, patch,
+                 access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "set_metrics", user, entity_table="s1_inventory", field_changes=patch)
+    return inv
 
 
 @router.post("/consolidation/preview", response_model=ConsolidationPreviewResponse)
@@ -759,6 +780,52 @@ def onboarding(user: CurrentUser = Depends(get_current_user)) -> OnboardingRespo
         total=checklist.total,
         pct=checklist.pct,
         next_key=checklist.next_key,
+    )
+
+
+# --- Trends & emissions intensity -------------------------------------------
+
+def _num(x) -> float | None:
+    return float(x) if x is not None else None
+
+
+@router.get("/trends", response_model=TrendsResponse)
+def trends(
+    ar_version: str = Query("AR5"), user: CurrentUser = Depends(get_current_user)
+) -> TrendsResponse:
+    """Year-over-year Scope 1 totals + emissions intensity across the org's
+    inventories, plus a comparison of the latest year to the declared base year."""
+    inventories = _guard(store.list_inventories,
+                         access_token=user.access_token, user_id=user.user_id)
+    data = [
+        InventoryDatum(
+            inventory_id=inv["id"],
+            reporting_year=inv["reporting_year"],
+            total_tco2e=_assemble_report(inv["id"], ar_version, user).total_scope1_tco2e,
+            annual_revenue=_num(inv.get("annual_revenue")),
+            revenue_currency=inv.get("revenue_currency") or "USD",
+            output_quantity=_num(inv.get("output_quantity")),
+            output_unit=inv.get("output_unit"),
+            headcount=inv.get("headcount"),
+        )
+        for inv in inventories
+    ]
+
+    base_year = base_year_total = None
+    if inventories:
+        latest = max(inventories, key=lambda i: i["reporting_year"])
+        base_year = latest.get("base_year")
+        base_year_total = _num(latest.get("base_year_total_tco2e"))
+
+    result = build_trends(data, ar_version=ar_version,
+                          base_year=base_year, base_year_total_tco2e=base_year_total)
+    return TrendsResponse(
+        ar_version=result.ar_version,
+        points=[TrendPointDTO(**vars(p)) for p in result.points],
+        base_year=result.base_year,
+        base_year_total_tco2e=result.base_year_total_tco2e,
+        latest_vs_base_abs=result.latest_vs_base_abs,
+        latest_vs_base_pct=result.latest_vs_base_pct,
     )
 
 

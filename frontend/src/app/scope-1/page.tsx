@@ -15,6 +15,7 @@ import { scope1Api, type S1Readiness, type S1Report } from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "./_lib";
 import { OnboardingChecklist } from "./_onboarding";
+import { TrendsPanel } from "./_trends";
 
 export default function Scope1Dashboard() {
   const { inventories, active, activeId, setActiveId, loading } = useInventories();
@@ -186,6 +187,8 @@ export default function Scope1Dashboard() {
               </CardContent>
             </Card>
           ) : null}
+
+          <TrendsPanel arVersion={arVersion} />
         </>
       )}
     </div>

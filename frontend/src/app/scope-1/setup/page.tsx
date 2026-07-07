@@ -170,6 +170,8 @@ export default function Scope1SetupPage() {
         onError={setError}
       />
       <BaseYearSection inventories={inventories} onSaved={reload} onError={setError} />
+
+      <OperationalMetricsSection inventories={inventories} onSaved={reload} onError={setError} />
       <SourceSection
         sources={sources}
         entityOptions={entityOptions}
@@ -547,6 +549,69 @@ function BaseYearSection({
             <input type="file" accept=".csv" onChange={importCsv} disabled={!inventoryId} className="ml-2 text-small" />
           </label>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OperationalMetricsSection({
+  inventories,
+  onSaved,
+  onError,
+}: {
+  inventories: S1Inventory[];
+  onSaved: () => void;
+  onError: (message: string) => void;
+}) {
+  const [inventoryId, setInventoryId] = useState("");
+  const [revenue, setRevenue] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [output, setOutput] = useState("");
+  const [outputUnit, setOutputUnit] = useState("");
+  const [headcount, setHeadcount] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const options = inventories.map((inv) => ({ value: inv.id, label: String(inv.reporting_year) }));
+  const ready = inventoryId && (revenue || output || headcount);
+
+  async function save() {
+    if (!ready) return;
+    setSaving(true);
+    try {
+      await scope1Api.setInventoryMetrics(inventoryId, {
+        ...(revenue ? { annual_revenue: Number(revenue), revenue_currency: currency } : {}),
+        ...(output ? { output_quantity: Number(output), output_unit: outputUnit || null } : {}),
+        ...(headcount ? { headcount: Number(headcount) } : {}),
+      });
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Operational metrics (for emissions intensity)</CardTitle>
+        <CardDescription>
+          Optional denominators used to compute intensity on the dashboard: tCO₂e per $M
+          revenue, per output unit, and per employee. Set them per reporting year.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <SelectField label="Inventory" value={inventoryId} onChange={setInventoryId} options={options} />
+          <TextField label="Annual revenue" value={revenue} onChange={setRevenue} type="number" />
+          <TextField label="Currency" value={currency} onChange={setCurrency} />
+          <TextField label="Output quantity" value={output} onChange={setOutput} type="number" />
+          <TextField label="Output unit" value={outputUnit} onChange={setOutputUnit} />
+          <TextField label="Headcount (FTE)" value={headcount} onChange={setHeadcount} type="number" />
+        </div>
+        <Button type="button" onClick={save} disabled={saving || !ready}>
+          Save metrics
+        </Button>
       </CardContent>
     </Card>
   );

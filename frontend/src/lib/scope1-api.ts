@@ -233,10 +233,40 @@ export type S1Factor = {
 };
 export type S1Factors = { your_role: string; factors: S1Factor[]; override_count: number };
 
+export type S1TrendPoint = {
+  inventory_id: string;
+  reporting_year: number;
+  total_tco2e: number;
+  is_base_year: boolean;
+  yoy_abs: number | null;
+  yoy_pct: number | null;
+  per_revenue_mm: number | null;
+  revenue_currency: string;
+  per_output: number | null;
+  output_unit: string | null;
+  per_headcount: number | null;
+};
+export type S1Trends = {
+  ar_version: string;
+  points: S1TrendPoint[];
+  base_year: number | null;
+  base_year_total_tco2e: number | null;
+  latest_vs_base_abs: number | null;
+  latest_vs_base_pct: number | null;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  trends: (arVersion: string) =>
+    request<S1Trends>(`/api/scope1/trends?ar_version=${encodeURIComponent(arVersion)}`),
+  setInventoryMetrics: (inventoryId: string, body: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/scope1/inventories/${inventoryId}/metrics`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   factors: () => request<S1Factors>("/api/scope1/factors"),
   createFactorOverride: (body: Record<string, unknown>) =>

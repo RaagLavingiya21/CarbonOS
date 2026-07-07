@@ -205,6 +205,39 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Trends & emissions intensity -------------------------------------------
+
+class SetInventoryMetricsRequest(BaseModel):
+    annual_revenue: float | None = Field(default=None, ge=0)
+    revenue_currency: str | None = None
+    output_quantity: float | None = Field(default=None, ge=0)
+    output_unit: str | None = None
+    headcount: int | None = Field(default=None, ge=0)
+
+
+class TrendPointDTO(BaseModel):
+    inventory_id: str
+    reporting_year: int
+    total_tco2e: float
+    is_base_year: bool
+    yoy_abs: float | None = None
+    yoy_pct: float | None = None
+    per_revenue_mm: float | None = None
+    revenue_currency: str = "USD"
+    per_output: float | None = None
+    output_unit: str | None = None
+    per_headcount: float | None = None
+
+
+class TrendsResponse(BaseModel):
+    ar_version: str
+    points: list[TrendPointDTO]
+    base_year: int | None = None
+    base_year_total_tco2e: float | None = None
+    latest_vs_base_abs: float | None = None
+    latest_vs_base_pct: float | None = None
+
+
 # --- Emission factors (admin overrides) -------------------------------------
 
 class EfFactorDTO(BaseModel):
