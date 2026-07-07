@@ -205,6 +205,47 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Process emissions -------------------------------------------------------
+
+class CreateProcessRequest(BaseModel):
+    inventory_id: str
+    process_type: str                       # library key or "custom"
+    gas_species: str = Field(pattern="^(Carbon dioxide|Methane|Nitrous oxide)$")
+    activity_quantity: float = Field(ge=0)
+    ef_value: float = Field(ge=0)
+    activity_unit: str | None = None
+    ef_unit: str | None = None
+    ef_source: str | None = None
+    facility_id: str | None = None
+    description: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    data_quality_tier: int = 4
+    evidence_document_id: str | None = None
+
+
+class ProcessRecordDTO(BaseModel):
+    id: str
+    process_type: str
+    gas_species: str
+    facility_id: str | None = None
+    activity_quantity: float
+    activity_unit: str | None = None
+    ef_value: float
+    ef_unit: str | None = None
+    emission_kg: float
+    tco2e: float
+    description: str | None = None
+    data_quality_tier: int | None = None
+    evidence_document_id: str | None = None
+
+
+class ProcessReportResponse(BaseModel):
+    ar_version: str
+    records: list[ProcessRecordDTO]
+    total_tco2e: float
+
+
 # --- Fugitive (refrigerant) emissions ---------------------------------------
 
 class CreateFugitiveRequest(BaseModel):

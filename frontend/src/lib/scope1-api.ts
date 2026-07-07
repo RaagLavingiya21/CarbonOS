@@ -302,10 +302,53 @@ export type S1Fugitive = {
   total_tco2e: number;
 };
 
+export type S1ProcessFactor = {
+  process_type: string;
+  label: string;
+  gas: string;
+  value: number;
+  unit: string;
+  activity_unit: string;
+  source: string;
+};
+export type S1ProcessRecord = {
+  id: string;
+  process_type: string;
+  gas_species: string;
+  facility_id: string | null;
+  activity_quantity: number;
+  activity_unit: string | null;
+  ef_value: number;
+  ef_unit: string | null;
+  emission_kg: number;
+  tco2e: number;
+  description: string | null;
+  data_quality_tier: number | null;
+  evidence_document_id: string | null;
+};
+export type S1Process = {
+  ar_version: string;
+  records: S1ProcessRecord[];
+  total_tco2e: number;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  processFactors: () => request<S1ProcessFactor[]>("/api/scope1/process-factors"),
+  process: (inventoryId: string, arVersion: string) =>
+    request<S1Process>(
+      `/api/scope1/inventories/${inventoryId}/process?ar_version=${encodeURIComponent(arVersion)}`,
+    ),
+  createProcess: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/process", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteProcess: (recordId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/process/${recordId}`, { method: "DELETE" }),
 
   refrigerants: () => request<S1Refrigerant[]>("/api/scope1/refrigerants"),
   fugitive: (inventoryId: string, arVersion: string) =>

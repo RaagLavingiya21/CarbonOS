@@ -27,6 +27,7 @@ from api.models.scope1_schemas import (
     CreateFacilityRequest,
     CreateFugitiveRequest,
     CreateInventoryRequest,
+    CreateProcessRequest,
     CreateRecalcEventRequest,
     CreateSourceRequest,
     EfFactorDTO,
@@ -42,6 +43,8 @@ from api.models.scope1_schemas import (
     OcrReviewRequest,
     OnboardingResponse,
     OnboardingStepDTO,
+    ProcessRecordDTO,
+    ProcessReportResponse,
     ReadinessResponse,
     RecalcAnalysisResponse,
     RecalcEventDTO,
@@ -69,6 +72,7 @@ from s1_fugitive import (
 from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_onboarding import OnboardingCounts, build_onboarding
+from s1_process import compute_emission_kg, list_process_factors, process_tco2e
 from s1_recalc import RecalcEvent, analyze_recalc
 from s1_reporting import (
     DisclosureMeta,
@@ -1006,6 +1010,67 @@ def delete_fugitive(record_id: str, user: CurrentUser = Depends(require_editor))
     if deleted is None:
         raise HTTPException(status_code=404, detail="Fugitive record not found.")
     _log(record_id, "delete", user, entity_table="s1_fugitive_record")
+    return deleted
+
+
+# --- Process emissions -------------------------------------------------------
+
+@router.get("/process-factors")
+def process_factors(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    """IPCC process emission-factor library (for the intake picker)."""
+    return list_process_factors()
+
+
+@router.post("/process")
+def create_process(req: CreateProcessRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+    """Record a process-emission estimate. The emitted gas *mass* is computed
+    server-side (activity x EF) and stored; tCO2e derives at reporting time."""
+    try:
+        emission_kg = compute_emission_kg(req.activity_quantity, req.ef_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    row = {**req.model_dump(exclude_none=True), "emission_kg": emission_kg}
+    record = _guard(store.create_process_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _log(record["id"], "create", user, entity_table="s1_process_record",
+         field_changes={"process_type": req.process_type, "gas_species": req.gas_species,
+                        "emission_kg": emission_kg})
+    return record
+
+
+@router.get("/inventories/{inventory_id}/process", response_model=ProcessReportResponse)
+def list_process(
+    inventory_id: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProcessReportResponse:
+    """Process records with tCO2e derived at the chosen AR version, plus a total."""
+    rows = _guard(store.list_process_records, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    records: list[ProcessRecordDTO] = []
+    total = 0.0
+    for r in rows:
+        emission_kg = float(r["emission_kg"])
+        tco2e = process_tco2e(emission_kg, r["gas_species"], ar_version)
+        total += tco2e
+        records.append(ProcessRecordDTO(
+            id=r["id"], process_type=r["process_type"], gas_species=r["gas_species"],
+            facility_id=r.get("facility_id"), activity_quantity=float(r["activity_quantity"]),
+            activity_unit=r.get("activity_unit"), ef_value=float(r["ef_value"]),
+            ef_unit=r.get("ef_unit"), emission_kg=emission_kg, tco2e=tco2e,
+            description=r.get("description"), data_quality_tier=r.get("data_quality_tier"),
+            evidence_document_id=r.get("evidence_document_id"),
+        ))
+    return ProcessReportResponse(ar_version=ar_version, records=records, total_tco2e=total)
+
+
+@router.delete("/process/{record_id}")
+def delete_process(record_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
+    deleted = _guard(store.delete_process_record, record_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Process record not found.")
+    _log(record_id, "delete", user, entity_table="s1_process_record")
     return deleted
 
 
