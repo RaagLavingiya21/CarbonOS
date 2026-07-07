@@ -20,6 +20,7 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic D — DB layer (unapplied):** migrations `310–312` (s3_targets/target_categories/flag_targets) + `db/s3_target_store.py` + `api/routes/scope3_targets.py` (wizard preview / create+persist / list); reuses `s3_targets` math + `s3_obligations.sbti_readiness` + Epic A inventory + Epic C profile. *(post-PR-#24)*
 - **Epic E — progress logic (first mid-term epic):** `s3_progress/` (decompose real-vs-method · tracker on/off-track + base-year recalc · deterministic narrative) + `tests/test_s3_progress.py`. Pure logic; DB layer not yet built. *(post-PR-#24)*
 - **Epic G — disclosure logic:** `s3_disclosure/` (versioned `data/frameworks.yaml` for ESRS E1/SB253/IFRS S2 · `mapper.py` inventory→datapoints, numbers looked-up + sourced, SB253 provisional · `serialize.py` CSV/Markdown; iXBRL deferred) + `tests/test_s3_disclosure.py`. Pure logic; DB layer not built. *(post-PR-#24)*
+- **Epic H — use-phase logic:** `s3_usephase/` (Cat 11 direct/indirect calc · SAMPLE grid/water factors · sub-sector templates) + `tests/test_s3_usephase.py`. Bounded activity path, method='activity'. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
 
