@@ -4,7 +4,7 @@ Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per
 _Last updated: 2026-07-07 · Branch: feature/scope3-v1 (off merged main, PR #24)_
 
 ## 1. Where we are
-Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). All the **pure business logic** for A/B/C/D is built, tested, and merged, plus the **DB layer (migrations + stores + routes) for Epics A, B, and C** — the `050–059` band is now fully used. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped and de-risked against labeled evals. **No migrations have been applied to any database yet**; **no frontend yet**. Epic D has math but its DB layer is **blocked on a new migration band** (`050–059` is full). Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
+Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). All the **pure business logic** for A/B/C/D is built, tested, and merged, plus the **DB layer (migrations + stores + routes) for all four MVP epics A/B/C/D** — so the MVP is code-complete end-to-end. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
 
 ## 2. Done (shipped to main via PR #24)
 - **Planning:** `scope3-gap-analysis/00–12` — gap analysis + all 9 epic implementation plans + program overview.
@@ -17,10 +17,11 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic B — framework detector (B3 🔴):** `s3_questionnaire/framework_detector.py` + `evals/test_framework_detection.py` — `ef469a1`.
 - **Epic B — question→datapoint mapper (B4 🔴):** `s3_questionnaire/question_mapper.py` + `evals/test_question_mapping.py` — numbers looked-up-only, no-fabrication invariant. *(post-PR-#24)*
 - **Epic B — DB layer (unapplied):** migrations `054–057` (requests/questions/mappings/answer_library) + `db/s3_questionnaire_store.py` + `api/routes/scope3_questionnaire.py` (create/list/detect/map/get/submit). *(post-PR-#24)*
-- **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint). `api/models/scope3_schemas.py` DTOs.
+- **Epic D — DB layer (unapplied):** migrations `310–312` (s3_targets/target_categories/flag_targets) + `db/s3_target_store.py` + `api/routes/scope3_targets.py` (wizard preview / create+persist / list); reuses `s3_targets` math + `s3_obligations.sbti_readiness` + Epic A inventory + Epic C profile. *(post-PR-#24)*
+- **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
 
 ## 3. Decisions (+ why)
-- **Migration band `050–059`** (Scope 3 lane). Used: A `050–053`, C `058–059`. B → `054–057`; **D and beyond exceed the 10-slot band → needs an integrator-coordinated band** (see Open questions).
+- **Migration bands (Scope 3):** `050–059` (A `050–053`, B `054–057`, C `058–059`) and **`310–319`** for Epic D onward (D uses `310–312`). The high second band was chosen (integrator) to avoid any collision with the low-numbered scopes; `060–309` intentionally left unused by Scope 3.
 - **RLS = `public.is_org_member(org_id)`** (from migration `014`); every table carries `org_id UUID NOT NULL`; `user_id` is `created_by` metadata only, **never in a policy**. (Supersedes the older `shares_org_with(user_id)` pattern.)
 - **Vendored the CEDA engine into `s3_factors/`** rather than importing shared `factors/` — hygiene rule 6 forbids importing shared business modules; keeps the module independently mergeable.
 - **Spend-based only** for the inventory (Open CEDA 2025, kg CO₂e/USD) — matches CarbonOS's standing decision; activity/use-phase is Epic H.
@@ -64,10 +65,10 @@ python3 -m ruff check s3_factors s3_measure s3_obligations s3_targets s3_questio
 
 ## 6. Next up / deferred
 **Queued:**
-1. **Apply migrations `050–059`** (all 10) to the shared dev DB (by hand, Supabase SQL Editor, in order) → then **integration-test** the Epic A/B/C DB layers (stores, routes, RLS) — currently static-verified only. *(Blocked on DB access — I can't apply or run these.)*
-2. **Epic D DB layer:** target tables + store + routes (reuses `s3_targets` math + `s3_obligations.sbti_readiness`). **BLOCKED: needs a migration band beyond `059`** (proposed `060–069`) — confirm with integrator before writing the migration files.
-3. **Frontend:** `/scope-3/*` pages + `lib/scope3-api.ts`, nav gated behind the flag (nothing built yet).
-4. Epic B follow-ups: methodology-narrative assembly + export packs (P.4.2.4/.6); structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
+1. **Apply migrations to the shared dev DB** (by hand, Supabase SQL Editor, in order): the ten `050–059`, then `310`, `311`, `312`. Then **integration-test** the A/B/C/D DB layers (stores, routes, RLS) — currently static-verified only. *(Blocked on DB access — I can't apply or run these; needs someone to apply, or a throwaway `DATABASE_URL`.)*
+2. **Frontend:** `/scope-3/*` pages + `lib/scope3-api.ts`, nav gated behind the flag (nothing built yet).
+3. Epic B follow-ups: methodology-narrative assembly + export packs (P.4.2.4/.6); structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
+4. Epic A follow-ups (still): per-line classification persistence + line-level drill-down + override PATCH.
 
 **Deferred / parked:**
 - Epic A follow-ups: per-line classification persistence, line-level drill-down to EF citation, analyst override PATCH.
