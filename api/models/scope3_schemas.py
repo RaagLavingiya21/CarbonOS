@@ -141,3 +141,62 @@ class SBTiReadinessResponse(BaseModel):
     coverage_gap: list[int] = Field(default_factory=list)
     meets_requirement: bool | None = None
     notes: list[str] = Field(default_factory=list)
+
+
+# --- Epic B: questionnaire answer -------------------------------------------
+
+
+class QuestionnaireCreateRequest(BaseModel):
+    customer_name: str | None = None
+    framework: str | None = None
+    deadline: str | None = None
+    inventory_id: int | None = None
+
+
+class QuestionnaireRequestDTO(BaseModel):
+    request_id: int
+    org_id: str
+    customer_name: str | None = None
+    framework: str
+    status: str
+    deadline: str | None = None
+    inventory_id: int | None = None
+    created_at: str | None = None
+
+
+class DetectResponse(BaseModel):
+    request_id: int
+    framework: str
+    is_low_confidence: bool
+    question_count: int
+
+
+class MapResponse(BaseModel):
+    request_id: int
+    mapped: int
+    needs_human: int
+
+
+class QuestionDTO(BaseModel):
+    question_id: int
+    question_index: int
+    question_text: str
+    question_type: str
+    framework_field_key: str | None = None
+
+
+class QuestionMappingDTO(BaseModel):
+    question_id: int
+    datapoint_ref: str | None = None
+    mapped_value: float | None = None
+    answer_text: str | None = None
+    confidence_score: float
+    method: str
+    citation: str | None = None
+    flag_status: str
+
+
+class QuestionnaireDetailDTO(BaseModel):
+    request: QuestionnaireRequestDTO
+    questions: list[QuestionDTO] = Field(default_factory=list)
+    mappings: list[QuestionMappingDTO] = Field(default_factory=list)

@@ -37,6 +37,7 @@ from api.routes import (
     scope2_sites,
     scope3_inventory,
     scope3_obligations,
+    scope3_questionnaire,
     shares,
 )
 
@@ -181,6 +182,7 @@ app.include_router(scope1.router)
 # Scope 3 lane — ships dark behind NEXT_PUBLIC_SCOPE3_ENABLED (nav hidden until GA).
 app.include_router(scope3_inventory.router)
 app.include_router(scope3_obligations.router)
+app.include_router(scope3_questionnaire.router)
 
 # Scope 2 ("Grid") module — isolated; shares only auth + app instance.
 app.include_router(scope2_sites.router)
