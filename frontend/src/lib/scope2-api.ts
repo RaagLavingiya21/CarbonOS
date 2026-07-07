@@ -366,6 +366,21 @@ export const scope2Api = {
     request<ComplianceDisclosure>(
       `/api/scope2/calculations/${calcId}/disclosure?standard=${standard}`,
     ),
+  disclosureFile: async (
+    calcId: number,
+    standard: string,
+    format: "xlsx" | "pdf",
+  ): Promise<Blob> => {
+    const headers = new Headers();
+    const token = await getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(
+      `${BACKEND_URL}/api/scope2/calculations/${calcId}/disclosure.${format}?standard=${standard}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(`Scope 2 API ${response.status}: export failed`);
+    return response.blob();
+  },
 
   listBuyerRequests: () =>
     request<BuyerRequest[]>("/api/scope2/buyer-requests"),

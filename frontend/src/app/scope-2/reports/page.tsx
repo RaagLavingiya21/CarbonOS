@@ -42,14 +42,17 @@ import {
   scope2Api,
 } from "@/lib/scope2-api";
 
-function download(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: "text/csv" });
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function download(csv: string, filename: string) {
+  downloadBlob(new Blob([csv], { type: "text/csv" }), filename);
 }
 
 export default function ReportsPage() {
@@ -157,6 +160,16 @@ export default function ReportsPage() {
       setLoadingDisc(false);
     }
   }, [calcId, standard]);
+
+  async function downloadDisclosure(format: "xlsx" | "pdf") {
+    if (!disclosure) return;
+    try {
+      const blob = await scope2Api.disclosureFile(Number(calcId), disclosure.standard, format);
+      downloadBlob(blob, `scope2-${disclosure.standard}-${disclosure.reporting_year}.${format}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed.");
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
@@ -381,15 +394,23 @@ export default function ReportsPage() {
                 {disclosure.standard_label} · {disclosure.reporting_year}
               </CardDescription>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                download(disclosure.csv, `scope2-${disclosure.standard}-${disclosure.reporting_year}.csv`)
-              }
-            >
-              <Download className="h-3.5 w-3.5" /> CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  download(disclosure.csv, `scope2-${disclosure.standard}-${disclosure.reporting_year}.csv`)
+                }
+              >
+                <Download className="h-3.5 w-3.5" /> CSV
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => downloadDisclosure("xlsx")}>
+                <Download className="h-3.5 w-3.5" /> XLSX
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => downloadDisclosure("pdf")}>
+                <Download className="h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Readiness banner */}
