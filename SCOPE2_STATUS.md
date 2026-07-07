@@ -15,11 +15,11 @@ via PR #24 (`integration/scopes`), shipping **dark** (nav flag off). It's one is
 UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. 419-test
 suite, CI-green.
 
-**V1 in progress on `feature/scope2-v1`** — M1 ingestion hardening is essentially done
-(local, unpushed): true-up dedup (`115022c`), aggregator adapter (`d22a63b`), idempotent
-migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffold + routes**
-(`fbe81ef`, `55c41d3`, `94bfbac`). Next work = OCR **frontend upload UI**, real-doc evals
-(you supply redacted bills), then V1 compliance.
+**V1 in progress on `feature/scope2-v1`** (local, unpushed). M1 ingestion hardening done:
+true-up dedup (`115022c`), overlap dedup (`eb2ef11`), aggregator adapter (`d22a63b`),
+idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`fbe81ef`…
+`203261f`). **V1 compliance started**: SB 253 + CSRD ESRS E1 disclosure generators + UI
+(`9fd8e54`, `afc5073`). Next V1 = EAC registry linkage, then assurance export + target-setting.
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
@@ -117,8 +117,16 @@ migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffol
   Remaining polish: flag/surface the partial-coverage (<90%) transient double-count (§4).
 - ✅ **Migration idempotency back-fill** done (`bcdd94d`).
 - **Real factor data** — replace sample factors with cited eGRID/IEA/Green-e via the loader.
-- **V1 (compliance-grade)**: EAC registry linkage, SB253 + CSRD ESRS E1 generators,
-  assurance-ready export, target-setting. **V2**: procurement decision support + MACC.
+- **V1 (compliance-grade)** — in progress:
+  - ✅ **SB 253 + CSRD ESRS E1 disclosure generators** done (`9fd8e54` backend, `afc5073` UI):
+    `s2_reporting/compliance.py` (structured sections + assurance-readiness gate), routes
+    `GET /disclosure-standards` + `/calculations/{id}/disclosure?standard=`, and the
+    disclosure view on `/scope-2/reports`. Config-driven; template drift = data change.
+  - **EAC registry linkage** (next) — data model for RECs/GOs (contract, MWh, vintage,
+    registry, retirement) linked to sites/periods; feeds the market-based calc with real
+    instruments + populates CSRD renewable mix (today `renewable_mwh` is None → E1-5 warns).
+  - **Assurance-ready export** (XLSX/PDF, like Scope 1's `s1_reporting/export.py`) + **target-setting**.
+  **V2**: procurement decision support + MACC.
   **V3**: hourly matching. (Full roadmap: `SCOPE2_IMPLEMENTATION_PLAN.md` §6, synthesis §7–8.)
 
 ## 7. Open questions
