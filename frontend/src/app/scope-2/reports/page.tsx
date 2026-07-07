@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Download, FileText, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Download,
+  FileText,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +35,8 @@ import { cn } from "@/lib/utils";
 import {
   BuyerRequest,
   Calculation,
+  ComplianceDisclosure,
+  DisclosureStandard,
   Report,
   ReportDestination,
   scope2Api,
@@ -55,6 +66,11 @@ export default function ReportsPage() {
   const [dueDate, setDueDate] = useState("");
   const [savingReq, setSavingReq] = useState(false);
 
+  const [standards, setStandards] = useState<DisclosureStandard[]>([]);
+  const [standard, setStandard] = useState("sb253");
+  const [disclosure, setDisclosure] = useState<ComplianceDisclosure | null>(null);
+  const [loadingDisc, setLoadingDisc] = useState(false);
+
   const loadRequests = useCallback(() => {
     scope2Api.listBuyerRequests().then(setRequests).catch(() => setRequests([]));
   }, []);
@@ -68,6 +84,7 @@ export default function ReportsPage() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load."));
     scope2Api.reportDestinations().then(setDestinations).catch(() => setDestinations([]));
+    scope2Api.disclosureStandards().then(setStandards).catch(() => setStandards([]));
     loadRequests();
   }, [loadRequests]);
 
@@ -127,6 +144,19 @@ export default function ReportsPage() {
       setLoading(false);
     }
   }, [calcId, destination]);
+
+  const generateDisclosure = useCallback(async () => {
+    if (!calcId) return;
+    setLoadingDisc(true);
+    setError(null);
+    try {
+      setDisclosure(await scope2Api.disclosure(Number(calcId), standard));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate disclosure.");
+    } finally {
+      setLoadingDisc(false);
+    }
+  }, [calcId, standard]);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
@@ -304,6 +334,119 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Regulatory disclosures (SB 253 / CSRD ESRS E1) */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-h3">Regulatory disclosure</CardTitle>
+          <CardDescription>
+            Generate an assurance-ready SB 253 or CSRD ESRS E1 Scope 2 disclosure. Both
+            report location- and market-based separately; the readiness check flags gaps
+            an assurer will question.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[160px] flex-1 space-y-1.5">
+              <Label>Standard</Label>
+              <Select value={standard} onValueChange={setStandard}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {standards.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="secondary" loading={loadingDisc} disabled={!calcId} onClick={generateDisclosure}>
+              <ShieldCheck className="h-3.5 w-3.5" /> Generate disclosure
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {disclosure ? (
+        <Card className="mt-6">
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-h3">{disclosure.entity}</CardTitle>
+              <CardDescription>
+                {disclosure.standard_label} · {disclosure.reporting_year}
+              </CardDescription>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                download(disclosure.csv, `scope2-${disclosure.standard}-${disclosure.reporting_year}.csv`)
+              }
+            >
+              <Download className="h-3.5 w-3.5" /> CSV
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Readiness banner */}
+            <div
+              className={cn(
+                "flex items-start gap-2 rounded-md border p-3 text-small",
+                disclosure.readiness.ready
+                  ? "border-data-low/40 bg-data-low-bg/40"
+                  : "border-data-high/40 bg-data-high-bg/40",
+              )}
+            >
+              {disclosure.readiness.ready ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-data-low" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-data-high" />
+              )}
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {disclosure.readiness.ready
+                    ? "Assurance-ready — no blocking gaps"
+                    : "Not assurance-ready"}
+                </p>
+                {disclosure.readiness.blockers.map((b) => (
+                  <p key={b} className="text-data-high">
+                    • {b}
+                  </p>
+                ))}
+                {disclosure.readiness.warnings.map((w) => (
+                  <p key={w} className="text-data-medium">
+                    • {w}
+                  </p>
+                ))}
+              </div>
+            </div>
+
+            {disclosure.sections.map((section) => (
+              <div key={section.title}>
+                <h3 className="mb-1.5 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+                  {section.title}
+                </h3>
+                <table className="w-full text-small">
+                  <tbody>
+                    {section.items.map((item) => (
+                      <tr key={item.label} className="border-b border-border last:border-0">
+                        <td className="py-2 pr-4 text-muted-foreground">
+                          {item.label}
+                          {item.note ? (
+                            <span className="block text-caption text-data-medium">{item.note}</span>
+                          ) : null}
+                        </td>
+                        <td className="num py-2 text-right font-medium">{item.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </CardContent>
         </Card>
       ) : null}

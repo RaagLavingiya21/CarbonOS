@@ -119,6 +119,28 @@ export type ImportDocResult = {
   skipped_count: number;
 };
 
+export type DisclosureStandard = { key: string; label: string };
+
+export type DisclosureItem = { label: string; value: string; note: string | null };
+
+export type DisclosureSection = { title: string; items: DisclosureItem[] };
+
+export type DisclosureReadiness = {
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+
+export type ComplianceDisclosure = {
+  standard: string;
+  standard_label: string;
+  entity: string;
+  reporting_year: number;
+  sections: DisclosureSection[];
+  readiness: DisclosureReadiness;
+  csv: string;
+};
+
 export type Calculation = {
   calc_id: number;
   reporting_year: number;
@@ -301,6 +323,13 @@ export const scope2Api = {
   report: (calcId: number, destination: string) =>
     request<Report>(
       `/api/scope2/calculations/${calcId}/report?destination=${destination}`,
+    ),
+
+  disclosureStandards: () =>
+    request<DisclosureStandard[]>("/api/scope2/disclosure-standards"),
+  disclosure: (calcId: number, standard: string) =>
+    request<ComplianceDisclosure>(
+      `/api/scope2/calculations/${calcId}/disclosure?standard=${standard}`,
     ),
 
   listBuyerRequests: () =>
