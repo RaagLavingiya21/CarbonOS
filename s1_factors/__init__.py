@@ -5,7 +5,12 @@ Emission Factors Hub 2025 / 40 CFR Part 98 combustion factors and the selection
 hierarchy over them. See research/2.1.
 """
 
-from s1_factors.library import EmissionFactorLibrary
+from s1_factors.library import EmissionFactorLibrary, rows_to_factors
 from s1_factors.models import EmissionFactor, MissingEmissionFactor
 
-__all__ = ["EmissionFactor", "EmissionFactorLibrary", "MissingEmissionFactor"]
+__all__ = [
+    "EmissionFactor",
+    "EmissionFactorLibrary",
+    "MissingEmissionFactor",
+    "rows_to_factors",
+]
