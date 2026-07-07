@@ -24,6 +24,12 @@ const ENTRIES = [
     body: "Add your multi-site footprint from sector templates and import utility bills (CSV).",
   },
   {
+    href: "/scope-2/import",
+    icon: Upload,
+    title: "Import a bill (PDF/OCR)",
+    body: "Upload a PDF or image; Claude extracts each meter with a confidence score to review, then normalizes and de-dupes.",
+  },
+  {
     href: "/scope-2/calculate",
     icon: Calculator,
     title: "Calculate & report",

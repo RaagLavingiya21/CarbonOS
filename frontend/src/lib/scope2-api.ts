@@ -74,6 +74,51 @@ export type CsvCommit = {
   unresolved_site_refs: string[];
 };
 
+export type ExtractedField = { value: string | null; confidence: number };
+
+export type ExtractedMeter = {
+  meter_number: string | null;
+  energy_carrier: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  raw_quantity: number | null;
+  raw_unit: string | null;
+  canonical_mwh: number | null;
+  cost_usd: number | null;
+  demand_kw: number | null;
+  is_estimated_read: boolean;
+  is_cost_only: boolean;
+  needs_review: boolean;
+  min_confidence: number;
+  review_reasons: string[];
+};
+
+export type ExtractDocResult = {
+  header: Record<string, ExtractedField>;
+  meters: ExtractedMeter[];
+  model: string;
+  error: string | null;
+  needs_review: boolean;
+};
+
+export type ConfirmedMeter = {
+  energy_carrier: string;
+  period_start: string;
+  period_end: string;
+  raw_quantity?: number | null;
+  raw_unit?: string | null;
+  canonical_mwh?: number | null;
+  cost_usd?: number | null;
+  is_estimated_read?: boolean;
+  is_cost_only?: boolean;
+};
+
+export type ImportDocResult = {
+  committed_count: number;
+  superseded_count: number;
+  skipped_count: number;
+};
+
 export type Calculation = {
   calc_id: number;
   reporting_year: number;
@@ -230,6 +275,17 @@ export const scope2Api = {
     request<CsvCommit>("/api/scope2/bills/import-csv", {
       method: "POST",
       body: { csv_text: csvText, mapping },
+    }),
+
+  extractDoc: (fileBase64: string, contentType: string | null) =>
+    request<ExtractDocResult>("/api/scope2/bills/extract-doc", {
+      method: "POST",
+      body: { file_base64: fileBase64, content_type: contentType },
+    }),
+  importDoc: (siteId: number, meters: ConfirmedMeter[]) =>
+    request<ImportDocResult>("/api/scope2/bills/import-doc", {
+      method: "POST",
+      body: { site_id: siteId, meters },
     }),
 
   runCalculation: (reportingYear: number) =>
