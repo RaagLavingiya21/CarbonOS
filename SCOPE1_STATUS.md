@@ -23,8 +23,9 @@ Post-merge (on `feature/scope1-v1`, not in PR #24):
 - Incumbent / prior-year **base-year import** (A1b) — `f94b550` (no migration; reuses `s1_inventory.base_year*` cols; CSV or manual, source kept as evidence)
 - Guided **onboarding wizard + checklist** (P1) — `37c1db7` (no migration; `GET /api/scope1/onboarding` aggregates live counts via pure `s1_onboarding` package into a 6-step checklist; dashboard progress card highlights the next step and self-hides when complete)
 - Admin **emission-factor overrides + DB-backed loader** (C1) — `74ae9c8` (**migration 110**, band 110–199; per-org `s1_ef_override` table, `is_org_member` RLS, admin-only writes; `_library(user)` layers active overrides over the EPA set via `with_overrides`; `GET /api/scope1/factors` + `/scope-1/factors` admin page; versioned/retirable). **Migration 110 NOT yet applied to any DB — needs applying to dev + prod.**
+- **Trends + emissions intensity** (post-MVP depth) — `51912be` (**migration 111**, additive nullable cols on `s1_inventory`; pure `s1_reporting/trends.build_trends` over per-inventory rollups: YoY delta/%, base-year comparison, intensity tCO2e per $M revenue / output unit / FTE; `GET /api/scope1/trends` + `POST /inventories/{id}/metrics`; dashboard `TrendsPanel` CSS bar chart + intensity cards, setup-page metrics form). **Migration 111 NOT yet applied — needs dev + prod.**
 
-Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_* + 110_s1_ef_override.sql`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
+Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_* + 110_s1_ef_override.sql + 111_s1_inventory_metrics.sql`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
 
 ## 3. Decisions (+ why)
 - **Migration band 030–039** (reserved lane; no collision with s2 040–049 / s3 050–059).
@@ -59,7 +60,7 @@ Scope-1-specific (cost real time):
 
 ## 5. How to run / test
 Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `WT=<repo>/product-footprint-analyzer-scope1` (this worktree), `SCRATCH=.../scratchpad`.
-- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (383 passing).
+- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (393 passing).
 - **Ruff:** `$ORIG/.venv/bin/ruff check --ignore E501 <paths> s1_calc s1_factors s1_consolidation s1_reporting s1_intake`.
 - **Frontend:** `cd $WT/frontend && npm run lint && npm run build` (node_modules symlinked).
 - **Migrations:** apply by hand via Supabase SQL Editor, or `psycopg.connect(os.environ["DATABASE_URL"])` from `.env`. `030–039` already on dev DB.
@@ -69,7 +70,8 @@ Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `
 
 ## 6. Next up / deferred
 - **Next (MVP breadth):** ~~(3) base-year import (A1b)~~ ✅ `f94b550`. ~~(4) onboarding wizard (P1)~~ ✅ `37c1db7`. ~~(5) admin EF overrides / DB-backed loader (C1)~~ ✅ `74ae9c8`. **MVP breadth items done — only the Bayou lane (6/7) remains.**
-- **⚠ Apply migration 110** (`s1_ef_override`) to the dev DB (and prod at release), like 030–039. Until applied, EF override reads/writes 500; intake still works (loader falls back to the EPA default when the table is absent/empty). Band 110–199 is now open for future s1 schema.
+- **⚠ Apply migrations 110 + 111** to the dev DB (and prod at release), like 030–039. 110 (`s1_ef_override`): until applied, EF override reads/writes 500; intake still works (loader falls back to the EPA default when the table is absent/empty). 111 (`s1_inventory` metric cols): until applied, `GET /trends` totals/YoY still work but intensity is null and `POST /metrics` 500s. Band 110–199 is open for future s1 schema.
+- **Next options (post-MVP, user's pick):** fugitive/refrigerant emissions (biggest coverage gap — S1 is combustion-only today), base-year recalc engine, RLS-hard role enforcement, or the parked Bayou lane (6/7).
 - **Parked to end (Bayou lane, user's call):** (6) Bayou credential-connect auto-pull (Option A), (7) connection management — health/re-auth/sync (P5).
 - **V1 (explicitly out of MVP):** base-year recalculation engine, refrigerant/fugitive, process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
 - **Integration follow-up:** the three `s{N}_member_role` tables may be consolidated into one shared roles model (integrator's call).
