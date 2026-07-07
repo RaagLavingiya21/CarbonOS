@@ -1,0 +1,29 @@
+{
+  "doc": "synthetic_multimeter_elec_gas",
+  "notes": "Two meters (elec + gas). The gas read is a low-confidence mis-read (model said 1080 therms; truth is 1000) AND flagged estimated — exercises MWh tolerance and review recall.",
+  "header": {
+    "utility_name": "ConEd",
+    "account_number": "88-0099",
+    "service_address": "500 Market St, Newark, NJ"
+  },
+  "meters": [
+    {
+      "energy_carrier": "electricity",
+      "service_period_start": "2025-02-01",
+      "service_period_end": "2025-02-28",
+      "consumption_quantity": 2000,
+      "consumption_unit": "kWh",
+      "canonical_mwh": 2.0,
+      "is_estimated_read": false
+    },
+    {
+      "energy_carrier": "natural_gas",
+      "service_period_start": "2025-02-01",
+      "service_period_end": "2025-02-28",
+      "consumption_quantity": 1000,
+      "consumption_unit": "therms",
+      "canonical_mwh": 29.3071,
+      "is_estimated_read": true
+    }
+  ]
+}
