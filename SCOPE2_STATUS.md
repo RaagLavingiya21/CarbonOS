@@ -12,12 +12,14 @@ _Last updated: 2026-07-07 · Branch: `feature/scope2-v1` (off `main` after PR #2
 The **Scope 2 MVP is feature-complete** (PRD §5, all of M0–M3) and **merged to `main`**
 via PR #24 (`integration/scopes`), shipping **dark** (nav flag off). It's one isolated
 `s2_*` module on the Carbon OS platform, sharing infra (auth, DB client, deploy, shadcn
-UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. ~245 tests
-(397 total suite), CI-green.
+UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. 419-test
+suite, CI-green.
 
-**V1 in progress on `feature/scope2-v1`** — three M1-hardening items landed (local,
-unpushed): true-up dedup (`115022c`), aggregator adapter (`d22a63b`), idempotent
-migrations (`bcdd94d`). Next work = PDF/OCR bill extraction, then V1 compliance.
+**V1 in progress on `feature/scope2-v1`** — M1 ingestion hardening is essentially done
+(local, unpushed): true-up dedup (`115022c`), aggregator adapter (`d22a63b`), idempotent
+migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffold + routes**
+(`fbe81ef`, `55c41d3`, `94bfbac`). Next work = OCR **frontend upload UI**, real-doc evals
+(you supply redacted bills), then V1 compliance.
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
@@ -30,7 +32,14 @@ migrations (`bcdd94d`). Next work = PDF/OCR bill extraction, then V1 compliance.
   `s2_bill_store.supersede_bills`; commit response carries `superseded_count`);
   **provider-agnostic aggregator adapter** (`s2_ingestion/aggregator.py`: RawBill/RawAccount +
   `AggregatorProvider` Protocol + `map_raw_bill` + `FakeAggregatorProvider` + registry —
-  no real vendor bound yet; `get_provider` raises for un-wired names).
+  no real vendor bound yet; `get_provider` raises for un-wired names);
+  **multi-meter PDF/OCR extraction** (`s2_ingestion/ocr.py`: Claude-vision, injectable
+  invoke, per-field confidence, review flags; elec+gas; own REVIEW_THRESHOLD, isolated)
+  via routes `POST /api/scope2/bills/extract-doc` (stateless preview) + `import-doc`
+  (commit, `ingestion_method='pdf_ocr'`, feeds dedup). **Two-tier OCR eval** in
+  `evals/scope2_ocr/`: platform-agnostic scoring (field acc, end-to-end MWh, review
+  precision/recall, cost/latency), deterministic golden tier in CI + manual
+  `run_live.py` for real redacted bills (README documents the label schema).
 - **M2** — **leased-site landlord data-request workflow** (the wedge), **documented
   estimation fallback** (floor-area × sector intensity, audit-labeled), **data-quality /
   coverage scoring** (dashboard readiness KPI).
@@ -92,11 +101,14 @@ migrations (`bcdd94d`). Next work = PDF/OCR bill extraction, then V1 compliance.
   reports (CDP/Amazon + request queue).
 
 ## 6. Next up / deferred
-- **M1 hardening**: ✅ true-up/estimated-read **dedup** done · ✅ **aggregator adapter**
-  interface done (bind a real provider — Arcadia/UtilityAPI — when a design partner's
-  utilities are known; wire `register_provider` + a pull route). Remaining: **PDF/OCR
-  bill extraction** (Claude vision; Scope 1's `s1_intake/ocr/extract.py` is a working
-  template to mirror in `s2_ingestion/ocr.py`).
+- **M1 hardening**: ✅ true-up/estimated-read **dedup** · ✅ **aggregator adapter** interface
+  (bind Arcadia/UtilityAPI + a pull route when a partner's utilities are known) · ✅
+  **PDF/OCR extraction + eval scaffold + routes**. Remaining M1:
+  - **OCR frontend upload UI** — `/scope-2` page: upload → `extract-doc` → review table
+    (edit low-confidence/flagged meters) → `import-doc`. Backend is ready; no UI yet.
+  - **Real-doc OCR evals** — drop redacted bills + labels into `evals/scope2_ocr/` and run
+    `run_live.py`; use review-recall to **calibrate `REVIEW_THRESHOLD`** (currently 0.85,
+    a guess). Decide then whether to push live runs to LangSmith (scoring is decoupled).
 - **Overlap dedup** (deferred, see §4): annual documented estimate vs. monthly actuals.
 - ✅ **Migration idempotency back-fill** done (`bcdd94d`).
 - **Real factor data** — replace sample factors with cited eGRID/IEA/Green-e via the loader.
