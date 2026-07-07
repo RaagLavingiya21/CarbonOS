@@ -6,6 +6,8 @@ Exercises site CRUD, CSV preview, and the full run-calculation orchestration
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -582,6 +584,118 @@ def test_estimate_site_404_for_missing_site(monkeypatch) -> None:
         "/api/scope2/sites/999/estimate",
         headers=AUTH_HEADERS,
         json={"floor_area_sqft": 1000, "reporting_year": 2024},
+    )
+    assert resp.status_code == 404
+
+
+# --- PDF/OCR document ingestion --------------------------------------------
+
+_DOC_BODY = {"file_base64": base64.b64encode(b"%PDF-fake").decode(), "content_type": "application/pdf"}
+
+
+def _fake_extraction(meters, header=None):
+    from s2_ingestion.ocr import BillExtraction, ExtractedField, MeterExtraction
+
+    def _f(v, c=0.98):
+        return ExtractedField(v, c)
+
+    hdr = {k: _f(v) for k, v in (header or {"utility_name": "PG&E"}).items()}
+    return BillExtraction(
+        header=hdr,
+        meters=[MeterExtraction(fields={k: _f(*(m[k] if isinstance(m[k], tuple) else (m[k],))) for k in m}) for m in meters],
+        model="test-model",
+    )
+
+
+def test_extract_doc_returns_meters_and_review_flag(monkeypatch) -> None:
+    meter = {
+        "meter_number": "M1",
+        "energy_carrier": "Electricity",
+        "service_period_start": "2025-01-01",
+        "service_period_end": "2025-01-31",
+        "consumption_quantity": "1500",
+        "consumption_unit": "kWh",
+        "total_cost_usd": "$210",
+        "is_estimated_read": "false",
+    }
+    monkeypatch.setattr(
+        "api.routes.scope2_ingestion.extract_bill_document",
+        lambda data, ct, **kw: _fake_extraction([meter]),
+    )
+    resp = client.post("/api/scope2/bills/extract-doc", headers=AUTH_HEADERS, json=_DOC_BODY)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["meters"]) == 1
+    assert data["meters"][0]["canonical_mwh"] == 1.5
+    assert data["meters"][0]["energy_carrier"] == "electricity"
+    assert data["needs_review"] is False
+
+
+def test_extract_doc_flags_low_confidence_for_review(monkeypatch) -> None:
+    meter = {
+        "energy_carrier": "Electricity",
+        "service_period_start": "2025-01-01",
+        "service_period_end": "2025-01-31",
+        "consumption_quantity": ("1500", 0.4),  # below REVIEW_THRESHOLD
+        "consumption_unit": "kWh",
+    }
+    monkeypatch.setattr(
+        "api.routes.scope2_ingestion.extract_bill_document",
+        lambda data, ct, **kw: _fake_extraction([meter]),
+    )
+    resp = client.post("/api/scope2/bills/extract-doc", headers=AUTH_HEADERS, json=_DOC_BODY)
+    assert resp.json()["needs_review"] is True
+
+
+def test_extract_doc_rejects_bad_base64() -> None:
+    resp = client.post(
+        "/api/scope2/bills/extract-doc",
+        headers=AUTH_HEADERS,
+        json={"file_base64": "!!!not-base64!!!", "content_type": "application/pdf"},
+    )
+    assert resp.status_code == 422
+
+
+def test_import_doc_persists_and_dedups(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: _site_row())
+    monkeypatch.setattr(
+        "db.s2_bill_store.get_or_create_account",
+        lambda site_id, carrier, *, org_id, user_id, access_token, source_type: {"electricity": 5, "natural_gas": 6}[carrier],
+    )
+
+    def _insert(rows, *, org_id, user_id, access_token):
+        captured["rows"] = rows
+        return [{**r, "bill_id": i} for i, r in enumerate(rows, start=1)]
+
+    monkeypatch.setattr("db.s2_bill_store.insert_bills", _insert)
+    monkeypatch.setattr("db.s2_bill_store.list_active_bill_keys", lambda ids, token: [])
+    monkeypatch.setattr("db.s2_bill_store.supersede_bills", lambda pairs, *, access_token: 0)
+
+    body = {
+        "site_id": 1,
+        "meters": [
+            {"energy_carrier": "electricity", "period_start": "2025-01-01", "period_end": "2025-01-31", "canonical_mwh": 1.5},
+            {"energy_carrier": "natural_gas", "period_start": "2025-01-01", "period_end": "2025-01-31", "canonical_mwh": 29.3},
+            {"energy_carrier": "plutonium", "period_start": "2025-01-01", "period_end": "2025-01-31"},  # skipped
+        ],
+    }
+    resp = client.post("/api/scope2/bills/import-doc", headers=AUTH_HEADERS, json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["committed_count"] == 2
+    assert data["skipped_count"] == 1
+    assert captured["rows"][0]["ingestion_method"] == "pdf_ocr"
+
+
+def test_import_doc_404_for_missing_site(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: None)
+    resp = client.post(
+        "/api/scope2/bills/import-doc",
+        headers=AUTH_HEADERS,
+        json={"site_id": 999, "meters": []},
     )
     assert resp.status_code == 404
 

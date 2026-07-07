@@ -18,15 +18,21 @@ def get_or_create_account(
     org_id: str,
     user_id: str,
     access_token: str,
+    source_type: str = "csv",
 ) -> int:
-    """Return the csv-source account for (site, carrier), creating it if absent."""
+    """Return the account for (site, carrier), creating it if absent.
+
+    Deliberately matches on (site, carrier) *regardless of source_type* so bills
+    from different ingestion paths (CSV, PDF/OCR, aggregator) for the same physical
+    account share one account_id — otherwise cross-source true-up dedup, which is
+    keyed by account, could never fire. `source_type` labels a newly-created account.
+    """
     client = get_user_client(access_token)
     existing = (
         client.table("s2_utility_accounts")
         .select("account_id")
         .eq("site_id", site_id)
         .eq("energy_carrier", energy_carrier)
-        .eq("source_type", "csv")
         .limit(1)
         .execute()
     )
@@ -40,7 +46,7 @@ def get_or_create_account(
                 "org_id": org_id,
                 "user_id": user_id,
                 "energy_carrier": energy_carrier,
-                "source_type": "csv",
+                "source_type": source_type,
             }
         )
         .execute()
