@@ -22,15 +22,16 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 Post-merge (on `feature/scope1-v1`, not in PR #24):
 - Incumbent / prior-year **base-year import** (A1b) — `f94b550` (no migration; reuses `s1_inventory.base_year*` cols; CSV or manual, source kept as evidence)
 - Guided **onboarding wizard + checklist** (P1) — `37c1db7` (no migration; `GET /api/scope1/onboarding` aggregates live counts via pure `s1_onboarding` package into a 6-step checklist; dashboard progress card highlights the next step and self-hides when complete)
+- Admin **emission-factor overrides + DB-backed loader** (C1) — `74ae9c8` (**migration 110**, band 110–199; per-org `s1_ef_override` table, `is_org_member` RLS, admin-only writes; `_library(user)` layers active overrides over the EPA set via `with_overrides`; `GET /api/scope1/factors` + `/scope-1/factors` admin page; versioned/retirable). **Migration 110 NOT yet applied to any DB — needs applying to dev + prod.**
 
-Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_*`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
+Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_* + 110_s1_ef_override.sql`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
 
 ## 3. Decisions (+ why)
 - **Migration band 030–039** (reserved lane; no collision with s2 040–049 / s3 050–059).
 - **RLS = `public.is_org_member(org_id)`** everywhere (org-owned system-of-record data). We explicitly rejected `shares_org_with(user_id)` — it has a real bug: if the row's creator leaves the org, teammates lose access. Now the mandated standard for all 3 modules. `user_id`/`created_by` is audit metadata only, never in RLS.
 - **Store gas masses (kg per species); NEVER store CO2e.** CO2e is derived at reporting time by applying a GWP version (AR5/AR6) at query time — one dataset serves US (AR5) + EU (AR6). AR6 splits CH4 into fossil 29.8 / biogenic 27.9. Biogenic CO2 is a separate memo line, excluded from the S1 total.
 - **Roles: app-layer enforcement** via `require_scope1_role(min)` dependency (viewer<editor<admin). Default: org-admin→admin, member→editor. `s1_member_role` is Scope-1-owned (not a shared-`org_members` change). RLS-hard role enforcement is a V1 follow-up.
-- **EF engine uses the canonical `EmissionFactorLibrary.default()`** (byte-identical to seeded `s1_ef_record`). DB-backed EF loader deferred (only matters for the annual admin EF-update story).
+- **EF engine: canonical `EmissionFactorLibrary.default()` (EPA set) + per-org overrides.** `_library(user)` layers an org's active `s1_ef_override` rows over the default; with no overrides it's byte-identical to `default()`. The shared `s1_ef_record` table stays global read-only reference data — the annual EPA refresh is a platform/service-role op, NOT a tenant write (avoids one org mutating everyone's factors). Per-org overrides are the tenant-safe "admin update".
 - **Bayou: PDF bill-upload (Option B) shipped; credential-connect (Option A) deferred** to the end of the queue.
 - **PDF via `fpdf2`** (new dep); **XLSX via `openpyxl`** (already present).
 - **Ships dark** via `NEXT_PUBLIC_SCOPE1_ENABLED`. CI/lint owned by the integrator (s1 packages not in the ruff path).
@@ -41,14 +42,14 @@ Shared (still true):
 - `CREATE POLICY` isn't idempotent — every one is preceded by `DROP POLICY IF EXISTS` so migrations re-run cleanly.
 - Inserting explicit `null` overrides a column DEFAULT → NOT NULL violation. Drop None fields on insert (`req.model_dump(exclude_none=True)`).
 - Migrations are applied **by hand** (Supabase SQL Editor / psycopg) to a **shared dev DB all 3 agents use**; merging code does NOT apply them. `030–039` are applied to dev; **prod still needs them**.
-- Migration band: S1 = 030–039 (S2 040–049, S3 050–059). **NOW FULL (all 10 used).** Any future s1 schema change needs a band decision from the integrator — do NOT reach into 040+ (Scope 2). Reuse existing columns/tables where possible (e.g. base-year import reused `s1_inventory.base_year*`).
+- Migration band: S1's original band `030–039` is **FULL (all 10 used)**. **The user granted Scope 1 a second band `110–199` (2026-07-07) for all new schema** — use it as needed; do NOT reach into 040+ (Scope 2 / Scope 3). Still prefer reusing existing columns/tables where it's clean (e.g. base-year import reused `s1_inventory.base_year*`), but new tables now go in `110–199`.
 - Ships dark via `NEXT_PUBLIC_SCOPE1_ENABLED`.
 
 Scope-1-specific (cost real time):
 - **`fpdf2` core fonts are Latin-1 only.** Any Unicode in user data (e.g. a facility named "Café Plânt") crashes the PDF. All dynamic text goes through `_pdf_safe()` (`s1_reporting/export.py`). Don't remove it.
 - **`fpdf2` is a new dep** in `requirements.txt`. It's NOT in the shared `.venv`; it's installed isolated at `<scratch>/exportlibs`. **Run any suite that touches export/roles/api tests with `PYTHONPATH=<scratch>/exportlibs`** or you get `ImportError`. CI/deploy installs it from requirements.
 - **LangGraph OCR tests need `MemorySaver`, not the Postgres checkpointer.** That setup is a **module-local autouse fixture in `tests/test_s1_ocr.py`** (reset `scope1_ocr_graph._ocr_graph = None` + patch `get_checkpointer`). It is deliberately NOT in the shared `tests/conftest.py` (hygiene #5). Any new graph needs the same local fixture.
-- **The write-route auth swap (`require_editor`) breaks route tests that don't mock the role.** `tests/test_s1_api.py` has a module-local autouse fixture defaulting `db.scope1_store.get_scope1_role` → `"admin"` so handler tests still run; role gating itself is tested in `tests/test_s1_roles.py`.
+- **The write-route auth swap (`require_editor`) breaks route tests that don't mock the role.** `tests/test_s1_api.py` has a module-local autouse fixture defaulting `db.scope1_store.get_scope1_role` → `"admin"` **and stubbing `list_ef_overrides` → `[]`** (intake now calls `_library(user)` which reads overrides — an unmocked call hits live Supabase) so handler tests still run; role gating is in `tests/test_s1_roles.py`, override behaviour in `tests/test_s1_factors_admin.py`. Any new intake-path test needs both stubs.
 - **Role enforcement is app-layer ONLY.** RLS still lets any org member write, so a viewer with the anon key could bypass via direct Supabase calls. Acceptable (app is the only client); RLS-hardening (`s1_can_edit`) is the V1 fix.
 - **Bayou real API** (verified live): base `https://bayou.energy/api/v2` (NOT `api.bayou.energy`); HTTP Basic auth with the API key as the **username, blank password**; bill `status` field values `unlocked`/`unlocked_for_gas` = parsed; meter is a `meters[].id` array. **Uploading + unlocking a bill costs ~$2 on a LIVE key** — do NOT test the upload path on a live key. The `BAYOU_API_KEY` in local `.env` is currently a **live** key (prod key belongs in Railway env, not the repo).
 - **Anthropic**: model `claude-sonnet-4-6`; vision via a `document` content block for PDFs, `image` block for images (`s1_intake/ocr/extract.py`). The LLM call is injectable so parse/confidence logic is unit-tested keyless.
@@ -58,7 +59,7 @@ Scope-1-specific (cost real time):
 
 ## 5. How to run / test
 Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `WT=<repo>/product-footprint-analyzer-scope1` (this worktree), `SCRATCH=.../scratchpad`.
-- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (373 passing).
+- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (383 passing).
 - **Ruff:** `$ORIG/.venv/bin/ruff check --ignore E501 <paths> s1_calc s1_factors s1_consolidation s1_reporting s1_intake`.
 - **Frontend:** `cd $WT/frontend && npm run lint && npm run build` (node_modules symlinked).
 - **Migrations:** apply by hand via Supabase SQL Editor, or `psycopg.connect(os.environ["DATABASE_URL"])` from `.env`. `030–039` already on dev DB.
@@ -67,7 +68,8 @@ Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `
 - **Live full-stack:** `uvicorn api.main:app --port 8001` + `cd frontend && npm run dev -- -p 3021`; open `http://localhost:3021`, log in, `/scope-1`.
 
 ## 6. Next up / deferred
-- **Next (MVP breadth):** ~~(3) incumbent / prior-year import (A1b)~~ ✅ `f94b550`. ~~(4) guided onboarding wizard + checklist (P1)~~ ✅ `37c1db7`. **(5) admin annual EPA EF update / DB-backed EF loader (C1) — NEXT.**
+- **Next (MVP breadth):** ~~(3) base-year import (A1b)~~ ✅ `f94b550`. ~~(4) onboarding wizard (P1)~~ ✅ `37c1db7`. ~~(5) admin EF overrides / DB-backed loader (C1)~~ ✅ `74ae9c8`. **MVP breadth items done — only the Bayou lane (6/7) remains.**
+- **⚠ Apply migration 110** (`s1_ef_override`) to the dev DB (and prod at release), like 030–039. Until applied, EF override reads/writes 500; intake still works (loader falls back to the EPA default when the table is absent/empty). Band 110–199 is now open for future s1 schema.
 - **Parked to end (Bayou lane, user's call):** (6) Bayou credential-connect auto-pull (Option A), (7) connection management — health/re-auth/sync (P5).
 - **V1 (explicitly out of MVP):** base-year recalculation engine, refrigerant/fugitive, process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
 - **Integration follow-up:** the three `s{N}_member_role` tables may be consolidated into one shared roles model (integrator's call).
