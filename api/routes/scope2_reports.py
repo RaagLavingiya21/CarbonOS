@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope2_schemas import (
     BuyerRequestDTO,
+    ComplianceDisclosureResponse,
     CreateBuyerRequest,
+    DisclosureItemDTO,
+    DisclosureSectionDTO,
+    DisclosureStandardDTO,
+    ReadinessDTO,
     ReportDestinationDTO,
     ReportResponse,
     ReportRow,
@@ -29,6 +34,13 @@ from db import (
     s2_site_store,
 )
 from s2_quality.scoring import compute_coverage
+from s2_reporting.compliance import (
+    STANDARDS,
+    DisclosureContext,
+    UnknownStandardError,
+    build_disclosure,
+    disclosure_to_csv,
+)
 from s2_reporting.formats import (
     DESTINATIONS,
     UnknownDestinationError,
@@ -44,6 +56,32 @@ _DESTINATION_LABELS = {
     "cdp": "CDP Supply Chain",
     "amazon": "Amazon Supply Chain",
 }
+
+
+def _summary_and_context(calc_id: int, current_user: CurrentUser):
+    """Shared: resolve a calc -> (canonical summary, disclosure context).
+
+    Raises HTTP 404 if the calc is missing. The disclosure context carries the
+    regulatory metadata (boundary, GWP, assurance) not held on the calc row.
+    """
+    token = current_user.access_token
+    calc = s2_calc_store.get_calculation(calc_id, token)
+    if calc is None:
+        raise HTTPException(status_code=404, detail=f"Calculation {calc_id} not found.")
+
+    org = org_store.get_active_org(token, user_id=current_user.user_id)
+    entity = org.name if org else "Reporting entity"
+
+    sites = [s for s in s2_site_store.list_sites(token) if not s.get("franchise_flag")]
+    site_ids = [int(s["site_id"]) for s in sites]
+    coverage = compute_coverage(s2_bill_store.list_active_bills(token), site_ids)
+    summary = build_summary(calc, entity=entity, coverage_fraction=coverage.coverage_fraction)
+
+    # Most common consolidation approach across sites (defaults operational_control).
+    approaches = [s.get("consolidation_approach") for s in sites if s.get("consolidation_approach")]
+    consolidation = max(set(approaches), key=approaches.count) if approaches else "operational_control"
+    ctx = DisclosureContext(consolidation_approach=consolidation)
+    return summary, entity, ctx
 
 
 @router.get("/report-destinations", response_model=list[ReportDestinationDTO])
@@ -91,6 +129,53 @@ def get_report(
         reporting_year=summary.reporting_year,
         rows=[ReportRow(field=r["field"], value=str(r["value"])) for r in rows],
         csv=report_to_csv(rows),
+    )
+
+
+# --- regulatory disclosures (SB 253, CSRD ESRS E1) -------------------------
+
+
+@router.get("/disclosure-standards", response_model=list[DisclosureStandardDTO])
+def list_disclosure_standards(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[DisclosureStandardDTO]:
+    return [DisclosureStandardDTO(key=key, label=label) for key, (label, _) in STANDARDS.items()]
+
+
+@router.get("/calculations/{calc_id}/disclosure", response_model=ComplianceDisclosureResponse)
+def get_disclosure(
+    calc_id: int,
+    standard: str = Query("sb253"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ComplianceDisclosureResponse:
+    """Generate a structured regulatory disclosure + assurance-readiness gate."""
+    summary, entity, ctx = _summary_and_context(calc_id, current_user)
+    try:
+        disclosure = build_disclosure(summary, ctx, standard)
+    except UnknownStandardError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ComplianceDisclosureResponse(
+        standard=disclosure.standard,
+        standard_label=disclosure.standard_label,
+        entity=entity,
+        reporting_year=disclosure.reporting_year,
+        sections=[
+            DisclosureSectionDTO(
+                title=section.title,
+                items=[
+                    DisclosureItemDTO(label=item.label, value=str(item.value), note=item.note)
+                    for item in section.items
+                ],
+            )
+            for section in disclosure.sections
+        ],
+        readiness=ReadinessDTO(
+            ready=disclosure.readiness.ready,
+            blockers=disclosure.readiness.blockers,
+            warnings=disclosure.readiness.warnings,
+        ),
+        csv=disclosure_to_csv(disclosure),
     )
 
 

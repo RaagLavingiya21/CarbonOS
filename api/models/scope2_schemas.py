@@ -347,6 +347,41 @@ class ReportResponse(BaseModel):
     csv: str
 
 
+# --- Regulatory disclosures (V1 compliance: SB 253, CSRD ESRS E1) ------------
+
+
+class DisclosureStandardDTO(BaseModel):
+    key: str
+    label: str
+
+
+class DisclosureItemDTO(BaseModel):
+    label: str
+    value: str
+    note: str | None = None
+
+
+class DisclosureSectionDTO(BaseModel):
+    title: str
+    items: list[DisclosureItemDTO]
+
+
+class ReadinessDTO(BaseModel):
+    ready: bool
+    blockers: list[str]
+    warnings: list[str]
+
+
+class ComplianceDisclosureResponse(BaseModel):
+    standard: str
+    standard_label: str
+    entity: str
+    reporting_year: int
+    sections: list[DisclosureSectionDTO]
+    readiness: ReadinessDTO
+    csv: str
+
+
 # --- Inbound buyer/CDP request queue (PRD 5.5) ------------------------------
 
 ReportDestinationKey = Literal["standard", "cdp", "amazon"]

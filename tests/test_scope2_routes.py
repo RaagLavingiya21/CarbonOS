@@ -414,6 +414,72 @@ def test_get_report_missing_calc_404(monkeypatch) -> None:
     assert resp.status_code == 404
 
 
+# --- regulatory disclosures ------------------------------------------------
+
+
+def _mock_disclosure_deps(monkeypatch, calc=None) -> None:
+    monkeypatch.setattr(
+        "db.s2_calc_store.get_calculation", lambda cid, token: calc if calc is not None else _calc_row()
+    )
+    monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])
+    monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: [])
+    monkeypatch.setattr("db.org_store.get_active_org", lambda token, *, user_id=None: _FakeOrg())
+
+
+def test_disclosure_standards_endpoint() -> None:
+    resp = client.get("/api/scope2/disclosure-standards", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    keys = {d["key"] for d in resp.json()}
+    assert {"sb253", "csrd_e1"} <= keys
+
+
+def test_get_sb253_disclosure(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get(
+        "/api/scope2/calculations/42/disclosure?standard=sb253", headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["standard"] == "sb253"
+    assert data["entity"] == "Acme Inc"
+    titles = [s["title"] for s in data["sections"]]
+    assert any("Scope 2 emissions" in t for t in titles)
+    assert "ready" in data["readiness"]
+    assert data["csv"]
+
+
+def test_get_csrd_disclosure_has_e1_sections(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get(
+        "/api/scope2/calculations/42/disclosure?standard=csrd_e1", headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 200
+    titles = [s["title"] for s in resp.json()["sections"]]
+    assert any("E1-6" in t for t in titles)
+    assert any("E1-5" in t for t in titles)
+
+
+def test_disclosure_unknown_standard_422(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get(
+        "/api/scope2/calculations/42/disclosure?standard=tcfd", headers=AUTH_HEADERS
+    )
+    assert resp.status_code == 422
+
+
+def test_disclosure_missing_calc_404(monkeypatch) -> None:
+    monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: None)
+    resp = client.get("/api/scope2/calculations/999/disclosure", headers=AUTH_HEADERS)
+    assert resp.status_code == 404
+
+
+def test_disclosure_readiness_flags_fallback(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch, calc=_calc_row(market_fallback_flagged=True))
+    resp = client.get("/api/scope2/calculations/42/disclosure?standard=sb253", headers=AUTH_HEADERS)
+    warnings = " ".join(resp.json()["readiness"]["warnings"])
+    assert "EAC" in warnings
+
+
 def test_get_report_bad_destination_422(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: _calc_row())
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])
