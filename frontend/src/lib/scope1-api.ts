@@ -199,9 +199,28 @@ export type S1OcrExtraction = {
 export type S1Member = { user_id: string; role: string; explicit: boolean; is_you: boolean };
 export type S1Members = { your_role: string; members: S1Member[] };
 
+export type S1OnboardingStep = {
+  key: string;
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+  done: boolean;
+  count: number;
+};
+export type S1Onboarding = {
+  steps: S1OnboardingStep[];
+  complete: number;
+  total: number;
+  pct: number;
+  next_key: string | null;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
+  onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
   listEntities: () => request<S1Entity[]>("/api/scope1/entities"),
   createEntity: (body: Record<string, unknown>) =>
     request<S1Entity>("/api/scope1/entities", { method: "POST", body: JSON.stringify(body) }),

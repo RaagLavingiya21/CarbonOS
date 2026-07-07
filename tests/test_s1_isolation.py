@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Everything the Scope 1 module owns.
 SCOPE1_PATHS = [
     "s1_calc", "s1_factors", "s1_consolidation", "s1_reporting", "s1_intake",
+    "s1_onboarding",
     "api/routes/scope1.py", "db/scope1_store.py",
     "api/models/scope1_schemas.py", "api/graphs/scope1_ocr_graph.py",
 ]

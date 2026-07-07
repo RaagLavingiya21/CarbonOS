@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { scope1Api, type S1Readiness, type S1Report } from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "./_lib";
+import { OnboardingChecklist } from "./_onboarding";
 
 export default function Scope1Dashboard() {
   const { inventories, active, activeId, setActiveId, loading } = useInventories();
@@ -114,6 +115,8 @@ export default function Scope1Dashboard() {
           </Link>
         </Button>
       </div>
+
+      <OnboardingChecklist />
 
       {error ? (
         <Alert variant="destructive">

@@ -203,3 +203,23 @@ class InventoryReportResponse(BaseModel):
     by_gas: GasBreakdownDTO
     by_facility: list[FacilityBreakdownDTO]
     record_count: int
+
+
+# --- Onboarding wizard ------------------------------------------------------
+
+class OnboardingStepDTO(BaseModel):
+    key: str
+    title: str
+    description: str
+    href: str
+    cta: str
+    done: bool
+    count: int
+
+
+class OnboardingResponse(BaseModel):
+    steps: list[OnboardingStepDTO]
+    complete: int
+    total: int
+    pct: float
+    next_key: str | None = None

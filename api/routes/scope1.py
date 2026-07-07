@@ -32,6 +32,8 @@ from api.models.scope1_schemas import (
     InviteMemberRequest,
     MobileRecordRequest,
     OcrReviewRequest,
+    OnboardingResponse,
+    OnboardingStepDTO,
     ReadinessResponse,
     SetBaseYearRequest,
     SetRoleRequest,
@@ -46,6 +48,7 @@ from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
 from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
+from s1_onboarding import OnboardingCounts, build_onboarding
 from s1_reporting import (
     DisclosureMeta,
     ReportRecord,
@@ -633,6 +636,45 @@ def readiness(
         completeness_pct=(complete / total * 100.0) if total else 0.0,
         by_status=dict(by_status),
         items=statuses,
+    )
+
+
+# --- Onboarding wizard ------------------------------------------------------
+
+@router.get("/onboarding", response_model=OnboardingResponse)
+def onboarding(user: CurrentUser = Depends(get_current_user)) -> OnboardingResponse:
+    """Backend-driven guided-setup checklist reflecting the org's real progress."""
+    kw = {"access_token": user.access_token, "user_id": user.user_id}
+    entities = _guard(store.list_entities, **kw)
+    facilities = _guard(store.list_facilities, **kw)
+    sources = _guard(store.list_sources, **kw)
+    inventories = _guard(store.list_inventories, **kw)
+
+    records = 0
+    locked = 0
+    for inv in inventories:
+        if inv.get("locked"):
+            locked += 1
+        records += len(
+            _guard(store.list_records_for_inventory, inv["id"], **kw)
+        )
+
+    checklist = build_onboarding(
+        OnboardingCounts(
+            entities=len(entities),
+            facilities=len(facilities),
+            sources=sum(1 for s in sources if not s.get("is_excluded")),
+            inventories=len(inventories),
+            records=records,
+            locked_inventories=locked,
+        )
+    )
+    return OnboardingResponse(
+        steps=[OnboardingStepDTO(**vars(s)) for s in checklist.steps],
+        complete=checklist.complete,
+        total=checklist.total,
+        pct=checklist.pct,
+        next_key=checklist.next_key,
     )
 
 
