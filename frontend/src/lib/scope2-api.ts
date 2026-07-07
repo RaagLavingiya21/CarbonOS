@@ -119,6 +119,35 @@ export type ImportDocResult = {
   skipped_count: number;
 };
 
+export type Eac = {
+  instrument_id: number;
+  site_id: number;
+  instrument_type: string;
+  reporting_year: number;
+  mwh: number;
+  region_market: string;
+  vintage_year: number;
+  kg_co2e_per_mwh: number;
+  registry_name: string | null;
+  retirement_id: string | null;
+  retirement_date: string | null;
+  notes: string | null;
+};
+
+export type CreateEacPayload = {
+  site_id: number;
+  instrument_type?: string;
+  reporting_year: number;
+  mwh: number;
+  region_market: string;
+  vintage_year: number;
+  kg_co2e_per_mwh?: number;
+  registry_name?: string;
+  retirement_id?: string;
+  retirement_date?: string;
+  notes?: string;
+};
+
 export type DisclosureStandard = { key: string; label: string };
 
 export type DisclosureItem = { label: string; value: string; note: string | null };
@@ -324,6 +353,12 @@ export const scope2Api = {
     request<Report>(
       `/api/scope2/calculations/${calcId}/report?destination=${destination}`,
     ),
+
+  listEacs: () => request<Eac[]>("/api/scope2/eacs"),
+  createEac: (payload: CreateEacPayload) =>
+    request<Eac>("/api/scope2/eacs", { method: "POST", body: payload }),
+  deleteEac: (instrumentId: number) =>
+    request<void>(`/api/scope2/eacs/${instrumentId}`, { method: "DELETE" }),
 
   disclosureStandards: () =>
     request<DisclosureStandard[]>("/api/scope2/disclosure-standards"),

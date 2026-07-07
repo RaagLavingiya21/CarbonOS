@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
+import { ArrowRight, Award, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
 
 import { KpiStrip } from "@/components/portfolio/KpiStrip";
 import { ErrorState } from "@/components/ui/error-state";
@@ -34,6 +34,12 @@ const ENTRIES = [
     icon: Calculator,
     title: "Calculate & report",
     body: "Run a dual-method (location + market-based) Scope 2 inventory with a full audit trail.",
+  },
+  {
+    href: "/scope-2/eacs",
+    icon: Award,
+    title: "EAC registry",
+    body: "Record RECs, GOs, and PPAs backing your market-based total; each is quality-screened before it covers load.",
   },
   {
     href: "/scope-2/landlord",
