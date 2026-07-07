@@ -13,6 +13,12 @@
     {"text": "What were your gross Scope 1 emissions in tCO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Scope 1 is out of scope for a Scope 3 module"},
     {"text": "Describe your emissions reduction initiatives.", "question_type": "narrative", "framework_field_key": null, "expected_ref": null, "note": "non-numeric -> analyst answers"},
     {"text": "Do you have a science-based target?", "question_type": "boolean", "framework_field_key": null, "expected_ref": null, "note": "non-numeric"},
-    {"text": "What is your total annual revenue in USD?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "no inventory datapoint -> must NOT fabricate"}
+    {"text": "What is your total annual revenue in USD?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "no inventory datapoint -> must NOT fabricate"},
+    {"text": "Scope 3 category 1 (purchased goods and services) emissions in kg CO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat1.total", "expected_value": 70000.0, "note": "explicit category-1 phrasing"},
+    {"text": "Category 4 emissions in tCO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat4.total", "expected_value": 12000.0, "note": "category-by-number"},
+    {"text": "Combined business travel and employee commuting emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "TRAP: spans two categories (6+7) -> must flag, not answer with just one"},
+    {"text": "What percentage of your total emissions comes from Scope 3?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "TRAP: a ratio, not a datapoint -> must NOT return an absolute total"},
+    {"text": "Report your purchased electricity emissions.", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Scope 2 -> not in the Scope 3 inventory"},
+    {"text": "Downstream transportation and distribution emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Cat 9 not present in a spend-based inventory -> needs_human"}
   ]
 }

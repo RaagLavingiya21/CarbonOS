@@ -38,6 +38,9 @@ _CATEGORY_KEYWORDS: list[tuple[re.Pattern[str], int]] = [
 _CDP_SCOPE3_TOTAL = re.compile(r"cdp\.C6\.(5|10)", re.I)
 _SCOPE3_TOTAL_TEXT = re.compile(r"\bscope 3\b.*(total|gross|overall)|total scope 3", re.I)
 _OUT_OF_SCOPE = re.compile(r"\bscope [12]\b", re.I)
+# A percentage/share/ratio has no single datapoint answer — must not map to an
+# absolute total (that would be answering the wrong question with a real number).
+_RATIO = re.compile(r"\b(percent|percentage|share|ratio|proportion)\b|%", re.I)
 
 
 @dataclass
@@ -66,6 +69,10 @@ def map_question(question: ParsedQuestion, inventory: dict) -> QuestionMapping:
 
     text = f"{question.framework_field_key or ''} {question.text}"
 
+    # A percentage/share/ratio is not a single datapoint → never answer with a total.
+    if _RATIO.search(text):
+        return _needs_human(question, "Percentage/ratio question — not a single datapoint.")
+
     # Scope 1/2 asked inside a Scope-3 module → cannot answer from this inventory.
     if _OUT_OF_SCOPE.search(text) and not _SCOPE3_TOTAL_TEXT.search(text):
         return _needs_human(question, "Scope 1/2 datapoint — not in the Scope 3 inventory.")
@@ -79,15 +86,19 @@ def map_question(question: ParsedQuestion, inventory: dict) -> QuestionMapping:
             return _needs_human(question, "Scope 3 total not available in the inventory.")
         return _mapped(question, "inventory:total", float(total), 95.0)
 
-    # 2) A specific Scope 3 category.
-    for pattern, cat in _CATEGORY_KEYWORDS:
-        if pattern.search(text):
-            value = categories.get(cat)
-            if value is None:
-                return _needs_human(
-                    question, f"Category {cat} not present in this inventory version."
-                )
-            return _mapped(question, f"inventory:cat{cat}.total", float(value), 90.0)
+    # 2) A specific Scope 3 category. A question spanning MULTIPLE categories is
+    #    ambiguous — flag it rather than answer with just one category's number.
+    matched = [cat for pattern, cat in _CATEGORY_KEYWORDS if pattern.search(text)]
+    if len(set(matched)) > 1:
+        return _needs_human(
+            question, f"Spans multiple categories {sorted(set(matched))} — map individually."
+        )
+    if matched:
+        cat = matched[0]
+        value = categories.get(cat)
+        if value is None:
+            return _needs_human(question, f"Category {cat} not present in this inventory version.")
+        return _mapped(question, f"inventory:cat{cat}.total", float(value), 90.0)
 
     # 3) Numeric but unmatched → flag; NEVER fabricate a number.
     return _needs_human(question, "No inventory datapoint matched — needs human input.")
