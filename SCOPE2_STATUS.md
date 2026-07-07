@@ -4,7 +4,7 @@
 Design lives in `SCOPE2_IMPLEMENTATION_PLAN.md`; this is current position + gotchas.
 Update it at the end of each work chunk.
 
-_Last updated: 2026-07-06 · Branch: `feature/scope2-v1` (off `main` after PR #24)_
+_Last updated: 2026-07-07 · Branch: `feature/scope2-v1` (off `main` after PR #24)_
 
 ---
 
@@ -12,15 +12,25 @@ _Last updated: 2026-07-06 · Branch: `feature/scope2-v1` (off `main` after PR #2
 The **Scope 2 MVP is feature-complete** (PRD §5, all of M0–M3) and **merged to `main`**
 via PR #24 (`integration/scopes`), shipping **dark** (nav flag off). It's one isolated
 `s2_*` module on the Carbon OS platform, sharing infra (auth, DB client, deploy, shadcn
-UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. ~230 tests,
-CI-green. Next work = M1 ingestion hardening + post-MVP (V1 compliance).
+UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. ~245 tests
+(397 total suite), CI-green.
+
+**V1 in progress on `feature/scope2-v1`** — three M1-hardening items landed (local,
+unpushed): true-up dedup (`115022c`), aggregator adapter (`d22a63b`), idempotent
+migrations (`bcdd94d`). Next work = PDF/OCR bill extraction, then V1 compliance.
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
   8 GHGP EAC criteria, sourcing hierarchy, proration), versioned factor library
   (vintage pinning), sector site templates, **eGRID subregion resolution**, CSV import +
   unit normalization, immutable audit log, **factor-seeding loader** (`scripts/seed_s2_factors.py`).
-- **M1 (partial)** — CSV **commit** path (persists accounts+bills, resolves site by name).
+- **M1 (partial)** — CSV **commit** path (persists accounts+bills, resolves site by name);
+  **true-up / estimated-read dedup** (`s2_ingestion/dedup.py`: actual > estimated >
+  cost-only per exact account+period; applied after every CSV commit + estimate via
+  `s2_bill_store.supersede_bills`; commit response carries `superseded_count`);
+  **provider-agnostic aggregator adapter** (`s2_ingestion/aggregator.py`: RawBill/RawAccount +
+  `AggregatorProvider` Protocol + `map_raw_bill` + `FakeAggregatorProvider` + registry —
+  no real vendor bound yet; `get_provider` raises for un-wired names).
 - **M2** — **leased-site landlord data-request workflow** (the wedge), **documented
   estimation fallback** (floor-area × sector intensity, audit-labeled), **data-quality /
   coverage scoring** (dashboard readiness KPI).
@@ -50,8 +60,13 @@ CI-green. Next work = M1 ingestion hardening + post-MVP (V1 compliance).
   DEFAULT and trips NOT NULL (hit this on site create). Drop None fields so DB/template
   defaults apply.
 - **`CREATE POLICY` is NOT idempotent** (no `IF NOT EXISTS`). Precede every one with
-  `DROP POLICY IF EXISTS <name> ON <table>;` so migrations re-run cleanly. (Migrations
-  `040–046` early on lacked this; `043`/`044` have it. Consider back-filling.)
+  `DROP POLICY IF EXISTS <name> ON <table>;` so migrations re-run cleanly. ✅ **Done** —
+  all Scope 2 migrations `040–046` now do this (`bcdd94d`). Follow the same pattern in
+  any new migration.
+- **Dedup is exact-period only.** True-up dedup matches on exact (account, period_start,
+  period_end). Reconciling a full-year *documented estimate* against overlapping *monthly*
+  actuals is an unsolved overlap problem — deferred (a monthly actual will NOT yet
+  supersede the annual floor-area estimate). Don't assume it's handled.
 - **CI runs `ruff check --ignore E501`** on `evals tests calc parsing factors api llm
   copilot gap_analyzer rag db observability` — NOT `ruff format`, and NOT the `s*_` module
   dirs. So E501 never fails CI, and module packages aren't lint-gated by CI.
@@ -77,10 +92,13 @@ CI-green. Next work = M1 ingestion hardening + post-MVP (V1 compliance).
   reports (CDP/Amazon + request queue).
 
 ## 6. Next up / deferred
-- **M1 hardening**: aggregator adapter (provider TBD), PDF/OCR bill extraction (Claude
-  vision), estimated-read/true-up **dedup** (`superseded_by_bill_id` schema is ready, logic
-  isn't).
-- **Back-fill `DROP POLICY IF EXISTS`** into migrations `040–042`, `045`, `046` for idempotency.
+- **M1 hardening**: ✅ true-up/estimated-read **dedup** done · ✅ **aggregator adapter**
+  interface done (bind a real provider — Arcadia/UtilityAPI — when a design partner's
+  utilities are known; wire `register_provider` + a pull route). Remaining: **PDF/OCR
+  bill extraction** (Claude vision; Scope 1's `s1_intake/ocr/extract.py` is a working
+  template to mirror in `s2_ingestion/ocr.py`).
+- **Overlap dedup** (deferred, see §4): annual documented estimate vs. monthly actuals.
+- ✅ **Migration idempotency back-fill** done (`bcdd94d`).
 - **Real factor data** — replace sample factors with cited eGRID/IEA/Green-e via the loader.
 - **V1 (compliance-grade)**: EAC registry linkage, SB253 + CSRD ESRS E1 generators,
   assurance-ready export, target-setting. **V2**: procurement decision support + MACC.
