@@ -21,8 +21,9 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 
 Post-merge (on `feature/scope1-v1`, not in PR #24):
 - Incumbent / prior-year **base-year import** (A1b) — `f94b550` (no migration; reuses `s1_inventory.base_year*` cols; CSV or manual, source kept as evidence)
+- Guided **onboarding wizard + checklist** (P1) — `37c1db7` (no migration; `GET /api/scope1/onboarding` aggregates live counts via pure `s1_onboarding` package into a 6-step checklist; dashboard progress card highlights the next step and self-hides when complete)
 
-Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou}`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_*`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
+Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_*`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
 
 ## 3. Decisions (+ why)
 - **Migration band 030–039** (reserved lane; no collision with s2 040–049 / s3 050–059).
@@ -57,7 +58,7 @@ Scope-1-specific (cost real time):
 
 ## 5. How to run / test
 Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `WT=<repo>/product-footprint-analyzer-scope1` (this worktree), `SCRATCH=.../scratchpad`.
-- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (208 passing).
+- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (373 passing).
 - **Ruff:** `$ORIG/.venv/bin/ruff check --ignore E501 <paths> s1_calc s1_factors s1_consolidation s1_reporting s1_intake`.
 - **Frontend:** `cd $WT/frontend && npm run lint && npm run build` (node_modules symlinked).
 - **Migrations:** apply by hand via Supabase SQL Editor, or `psycopg.connect(os.environ["DATABASE_URL"])` from `.env`. `030–039` already on dev DB.
@@ -66,7 +67,7 @@ Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `
 - **Live full-stack:** `uvicorn api.main:app --port 8001` + `cd frontend && npm run dev -- -p 3021`; open `http://localhost:3021`, log in, `/scope-1`.
 
 ## 6. Next up / deferred
-- **Next (MVP breadth):** ~~(3) incumbent / prior-year import (A1b)~~ ✅ done `f94b550`. (4) guided onboarding wizard + checklist (P1), (5) admin annual EPA EF update / DB-backed EF loader (C1).
+- **Next (MVP breadth):** ~~(3) incumbent / prior-year import (A1b)~~ ✅ `f94b550`. ~~(4) guided onboarding wizard + checklist (P1)~~ ✅ `37c1db7`. **(5) admin annual EPA EF update / DB-backed EF loader (C1) — NEXT.**
 - **Parked to end (Bayou lane, user's call):** (6) Bayou credential-connect auto-pull (Option A), (7) connection management — health/re-auth/sync (P5).
 - **V1 (explicitly out of MVP):** base-year recalculation engine, refrigerant/fugitive, process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
 - **Integration follow-up:** the three `s{N}_member_role` tables may be consolidated into one shared roles model (integrator's call).
