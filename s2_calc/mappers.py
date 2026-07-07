@@ -76,6 +76,11 @@ def factor_from_row(row: dict) -> EmissionFactor:
 
 
 def eac_from_row(row: dict) -> EnergyAttributeCertificate:
+    """Map an s2_eac_instruments row to the engine's EAC (evidence booleans included).
+
+    The 6 storable quality-evidence flags default True when absent; same_market and
+    vintage_matched are derived at calc time (not stored), so they aren't read here.
+    """
     return EnergyAttributeCertificate(
         instrument_id=str(row["instrument_id"]),
         site_id=str(row["site_id"]),
@@ -84,4 +89,10 @@ def eac_from_row(row: dict) -> EnergyAttributeCertificate:
         region_market=row["region_market"],
         vintage_year=int(row["vintage_year"]),
         kg_co2e_per_mwh=float(row.get("kg_co2e_per_mwh") or 0.0),
+        specific_generation_attribute=bool(row.get("specific_generation_attribute", True)),
+        unique_no_double_count=bool(row.get("unique_no_double_count", True)),
+        registry_tracked=bool(row.get("registry_tracked", True)),
+        retired_for_buyer=bool(row.get("retired_for_buyer", True)),
+        not_an_offset=bool(row.get("not_an_offset", True)),
+        transparent=bool(row.get("transparent", True)),
     )

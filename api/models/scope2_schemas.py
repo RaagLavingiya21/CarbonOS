@@ -382,6 +382,61 @@ class ComplianceDisclosureResponse(BaseModel):
     csv: str
 
 
+# --- EAC / contractual-instrument registry (PRD 5.4; V1) --------------------
+
+
+class CreateEac(BaseModel):
+    site_id: int
+    instrument_type: str = "rec"  # rec | go | green_tariff | ppa
+    reporting_year: int
+    mwh: float
+    region_market: str
+    vintage_year: int
+    kg_co2e_per_mwh: float = 0.0
+    specific_generation_attribute: bool = True
+    unique_no_double_count: bool = True
+    registry_tracked: bool = True
+    retired_for_buyer: bool = True
+    not_an_offset: bool = True
+    transparent: bool = True
+    registry_name: str | None = None
+    retirement_id: str | None = None
+    retirement_date: str | None = None
+    notes: str | None = None
+
+
+class EacDTO(BaseModel):
+    instrument_id: int
+    site_id: int
+    instrument_type: str
+    reporting_year: int
+    mwh: float
+    region_market: str
+    vintage_year: int
+    kg_co2e_per_mwh: float
+    registry_name: str | None = None
+    retirement_id: str | None = None
+    retirement_date: str | None = None
+    notes: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "EacDTO":
+        return cls(
+            instrument_id=int(row["instrument_id"]),
+            site_id=int(row["site_id"]),
+            instrument_type=row.get("instrument_type") or "rec",
+            reporting_year=int(row["reporting_year"]),
+            mwh=float(row["mwh"]),
+            region_market=row["region_market"],
+            vintage_year=int(row["vintage_year"]),
+            kg_co2e_per_mwh=float(row.get("kg_co2e_per_mwh") or 0.0),
+            registry_name=row.get("registry_name"),
+            retirement_id=row.get("retirement_id"),
+            retirement_date=row.get("retirement_date"),
+            notes=row.get("notes"),
+        )
+
+
 # --- Inbound buyer/CDP request queue (PRD 5.5) ------------------------------
 
 ReportDestinationKey = Literal["standard", "cdp", "amazon"]

@@ -105,6 +105,7 @@ def compute_dual_method(
                 location_factor_vintage=grid_factor.vintage_year,
                 market_tier=mb.tier,
                 market_fallback_flagged=mb.fallback_flagged,
+                market_covered_mwh=mb.covered_mwh,
                 excluded_instruments=excluded,
             )
         )

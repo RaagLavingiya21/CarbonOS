@@ -31,6 +31,7 @@ from api.routes import (
     scenarios,
     scope1,
     scope2_calc,
+    scope2_eac,
     scope2_ingestion,
     scope2_landlord,
     scope2_reports,
@@ -186,6 +187,7 @@ app.include_router(scope3_obligations.router)
 app.include_router(scope2_sites.router)
 app.include_router(scope2_ingestion.router)
 app.include_router(scope2_calc.router)
+app.include_router(scope2_eac.router)
 app.include_router(scope2_landlord.router)
 app.include_router(scope2_reports.router)
 

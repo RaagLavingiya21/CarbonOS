@@ -202,6 +202,7 @@ def test_run_calculation_orchestrates_engine_and_persists(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])
     monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: _bill_rows())
     monkeypatch.setattr("db.s2_factor_store.load_factors", lambda token: _factor_rows())
+    monkeypatch.setattr("db.s2_eac_store.list_eacs_for_year", lambda year, token: [])
 
     def _save(row, *, org_id, user_id, access_token):
         captured["row"] = row
@@ -231,7 +232,51 @@ def test_run_calculation_orchestrates_engine_and_persists(monkeypatch) -> None:
     # Persisted row carries both distinct totals + audit was written for calc 42.
     assert captured["row"]["location_based_kg_co2e"] == pytest.approx(40_000.0)
     assert captured["row"]["market_based_kg_co2e"] == pytest.approx(30_000.0)
+    # No EACs -> zero renewable-covered MWh persisted.
+    assert captured["row"]["renewable_mwh"] == pytest.approx(0.0)
     assert captured["audit_calc_id"] == 42
+
+
+def test_run_calculation_with_eac_covers_market_based(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_calc.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])
+    monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: _bill_rows())
+    monkeypatch.setattr("db.s2_factor_store.load_factors", lambda token: _factor_rows())
+    # An unbundled REC (0 kg/MWh) covering all 100 MWh, quality-passing for TESTSUB/2022.
+    monkeypatch.setattr(
+        "db.s2_eac_store.list_eacs_for_year",
+        lambda year, token: [
+            {
+                "instrument_id": 1,
+                "site_id": 1,
+                "instrument_type": "rec",
+                "mwh": 100.0,
+                "region_market": "TESTSUB",
+                "vintage_year": 2022,
+                "kg_co2e_per_mwh": 0.0,
+            }
+        ],
+    )
+    def _save(row, *, org_id, user_id, access_token):
+        captured["row"] = row
+        return 43
+
+    monkeypatch.setattr("db.s2_calc_store.save_calculation", _save)
+    monkeypatch.setattr(
+        "db.s2_audit_store.insert_calc_audit_entries",
+        lambda entries, *, calc_id, org_id, user_id, access_token: None,
+    )
+
+    resp = client.post(
+        "/api/scope2/calculations", headers=AUTH_HEADERS, json={"reporting_year": 2022}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # Location-based unchanged; market-based fully covered by the REC -> 0.
+    assert data["location_based_kg_co2e"] == pytest.approx(40_000.0)
+    assert data["market_based_kg_co2e"] == pytest.approx(0.0)
+    assert captured["row"]["renewable_mwh"] == pytest.approx(100.0)
 
 
 def test_run_calculation_excludes_franchise_sites(monkeypatch) -> None:
@@ -478,6 +523,16 @@ def test_disclosure_readiness_flags_fallback(monkeypatch) -> None:
     resp = client.get("/api/scope2/calculations/42/disclosure?standard=sb253", headers=AUTH_HEADERS)
     warnings = " ".join(resp.json()["readiness"]["warnings"])
     assert "EAC" in warnings
+
+
+def test_csrd_renewable_mix_from_calc(monkeypatch) -> None:
+    # renewable_mwh persisted by the calc populates ESRS E1-5 (no "not tracked" warning).
+    _mock_disclosure_deps(monkeypatch, calc=_calc_row(consumption_mwh=12.5, renewable_mwh=5.0))
+    resp = client.get("/api/scope2/calculations/42/disclosure?standard=csrd_e1", headers=AUTH_HEADERS)
+    data = resp.json()
+    values = " ".join(i["value"] for s in data["sections"] for i in s["items"])
+    assert "40%" in values  # 5 / 12.5
+    assert not any("Renewable energy share" in w for w in data["readiness"]["warnings"])
 
 
 def test_get_report_bad_destination_422(monkeypatch) -> None:
@@ -844,9 +899,91 @@ def test_run_calculation_missing_factor_is_422(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [_site_row()])
     monkeypatch.setattr("db.s2_bill_store.list_active_bills", lambda token: _bill_rows())
     monkeypatch.setattr("db.s2_factor_store.load_factors", lambda token: [])  # no factors
+    monkeypatch.setattr("db.s2_eac_store.list_eacs_for_year", lambda year, token: [])
     resp = client.post(
         "/api/scope2/calculations",
         headers=AUTH_HEADERS,
         json={"reporting_year": 2022},
     )
     assert resp.status_code == 422
+
+
+# --- EAC registry ----------------------------------------------------------
+
+
+def _eac_row(**kw) -> dict:
+    r = {
+        "instrument_id": 3,
+        "site_id": 1,
+        "org_id": "org-1",
+        "instrument_type": "rec",
+        "reporting_year": 2024,
+        "mwh": 500.0,
+        "region_market": "TESTSUB",
+        "vintage_year": 2024,
+        "kg_co2e_per_mwh": 0.0,
+        "registry_name": "M-RETS",
+        "retirement_id": "RET-1",
+        "retirement_date": "2025-03-01",
+        "notes": None,
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    r.update(kw)
+    return r
+
+
+def test_list_eacs(monkeypatch) -> None:
+    monkeypatch.setattr("db.s2_eac_store.list_eacs", lambda token: [_eac_row(), _eac_row(instrument_id=4)])
+    resp = client.get("/api/scope2/eacs", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+    assert resp.json()[0]["registry_name"] == "M-RETS"
+
+
+def test_create_eac(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_eac.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: _site_row())
+
+    def _create(payload, *, org_id, user_id, access_token):
+        captured["payload"] = payload
+        return 3
+
+    monkeypatch.setattr("db.s2_eac_store.create_eac", _create)
+    monkeypatch.setattr("db.s2_eac_store.get_eac", lambda iid, token: _eac_row())
+    resp = client.post(
+        "/api/scope2/eacs",
+        headers=AUTH_HEADERS,
+        json={
+            "site_id": 1,
+            "reporting_year": 2024,
+            "mwh": 500.0,
+            "region_market": "TESTSUB",
+            "vintage_year": 2024,
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["instrument_id"] == 3
+    assert captured["payload"]["region_market"] == "TESTSUB"
+
+
+def test_create_eac_404_for_missing_site(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_eac.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_site_store.get_site", lambda sid, token: None)
+    resp = client.post(
+        "/api/scope2/eacs",
+        headers=AUTH_HEADERS,
+        json={"site_id": 999, "reporting_year": 2024, "mwh": 1.0, "region_market": "X", "vintage_year": 2024},
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_eac(monkeypatch) -> None:
+    called: dict = {}
+    monkeypatch.setattr(
+        "db.s2_eac_store.delete_eac",
+        lambda iid, *, access_token: called.setdefault("id", iid),
+    )
+    resp = client.delete("/api/scope2/eacs/3", headers=AUTH_HEADERS)
+    assert resp.status_code == 204
+    assert called["id"] == 3

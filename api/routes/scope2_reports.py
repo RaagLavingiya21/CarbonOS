@@ -80,7 +80,12 @@ def _summary_and_context(calc_id: int, current_user: CurrentUser):
     # Most common consolidation approach across sites (defaults operational_control).
     approaches = [s.get("consolidation_approach") for s in sites if s.get("consolidation_approach")]
     consolidation = max(set(approaches), key=approaches.count) if approaches else "operational_control"
-    ctx = DisclosureContext(consolidation_approach=consolidation)
+    # Renewable (EAC-covered) MWh persisted by the calc — populates ESRS E1-5 energy mix.
+    renewable_mwh = calc.get("renewable_mwh")
+    ctx = DisclosureContext(
+        consolidation_approach=consolidation,
+        renewable_mwh=float(renewable_mwh) if renewable_mwh is not None else None,
+    )
     return summary, entity, ctx
 
 
