@@ -18,8 +18,10 @@ suite, CI-green.
 **V1 in progress on `feature/scope2-v1`** (local, unpushed). M1 ingestion hardening done:
 true-up dedup (`115022c`), overlap dedup (`eb2ef11`), aggregator adapter (`d22a63b`),
 idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`fbe81ef`…
-`203261f`). **V1 compliance started**: SB 253 + CSRD ESRS E1 disclosure generators + UI
-(`9fd8e54`, `afc5073`). Next V1 = EAC registry linkage, then assurance export + target-setting.
+`203261f`). **V1 compliance**: SB 253 + CSRD ESRS E1 disclosure generators + UI (`9fd8e54`, `afc5073`)
+and **EAC registry linkage** (`afcacd6`, `1b67579` — RECs/GOs feed the market-based calc +
+CSRD renewable mix). Next V1 = assurance-ready XLSX/PDF export, then target-setting.
+⚠ migrations 047 + 048 unapplied.
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
@@ -99,8 +101,10 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
   on first authenticated request via `ensure_demo_membership`).
 - **Checks**: `.venv/bin/python -m pytest -q` · `.venv/bin/python -m ruff check <files>` ·
   `cd frontend && npm run build && npm run lint`.
-- **Flow**: sites (+eGRID+CSV import) → import (PDF/OCR review) → calculate → coverage KPI →
-  landlord (+estimate) → reports (CDP/Amazon + request queue).
+- **Flow**: sites (+eGRID+CSV import) → import (PDF/OCR review) → EACs (RECs/GOs) → calculate →
+  coverage KPI → landlord (+estimate) → reports (CDP/Amazon + SB253/CSRD disclosure + queue).
+- **Unapplied migrations** (apply to the shared dev DB / prod before those features work):
+  `047_s2_eac_instruments`, `048_s2_calc_renewable_mwh`.
 
 ## 6. Next up / deferred
 - **M1 hardening**: ✅ true-up/estimated-read **dedup** · ✅ **aggregator adapter** interface
@@ -122,10 +126,13 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
     `s2_reporting/compliance.py` (structured sections + assurance-readiness gate), routes
     `GET /disclosure-standards` + `/calculations/{id}/disclosure?standard=`, and the
     disclosure view on `/scope-2/reports`. Config-driven; template drift = data change.
-  - **EAC registry linkage** (next) — data model for RECs/GOs (contract, MWh, vintage,
-    registry, retirement) linked to sites/periods; feeds the market-based calc with real
-    instruments + populates CSRD renewable mix (today `renewable_mwh` is None → E1-5 warns).
-  - **Assurance-ready export** (XLSX/PDF, like Scope 1's `s1_reporting/export.py`) + **target-setting**.
+  - ✅ **EAC registry linkage** done (`afcacd6` backend, `1b67579` UI) — `s2_eac_instruments`
+    (migration 047) + CRUD (`db/s2_eac_store.py`, `scope2_eac` routes, `/scope-2/eacs` UI).
+    Calc loads EACs for the year → engine quality-screens (8 GHGP criteria) → market-based
+    reflects real coverage; EAC-covered MWh persisted (`renewable_mwh`, migration 048) →
+    feeds CSRD ESRS E1-5 renewable mix (closed that readiness warning).
+    **⚠ migrations 047 + 048 must be applied to the shared dev DB (and prod) before use.**
+  - **Assurance-ready export** (next) — XLSX/PDF, like Scope 1's `s1_reporting/export.py`; then **target-setting**.
   **V2**: procurement decision support + MACC.
   **V3**: hourly matching. (Full roadmap: `SCOPE2_IMPLEMENTATION_PLAN.md` §6, synthesis §7–8.)
 
