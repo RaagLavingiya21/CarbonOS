@@ -19,9 +19,8 @@ suite, CI-green.
 true-up dedup (`115022c`), overlap dedup (`eb2ef11`), aggregator adapter (`d22a63b`),
 idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`fbe81ef`…
 `203261f`). **V1 compliance**: SB 253 + CSRD ESRS E1 disclosure generators + UI (`9fd8e54`, `afc5073`)
-and **EAC registry linkage** (`afcacd6`, `1b67579` — RECs/GOs feed the market-based calc +
-CSRD renewable mix). Next V1 = assurance-ready XLSX/PDF export, then target-setting.
-⚠ migrations 047 + 048 unapplied.
+**EAC registry linkage** (`afcacd6`, `1b67579`), and **assurance-ready XLSX/PDF export**
+(`d055813`, `227d722`). Next V1 = target-setting. ⚠ migrations 047 + 048 unapplied.
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
@@ -132,7 +131,11 @@ CSRD renewable mix). Next V1 = assurance-ready XLSX/PDF export, then target-sett
     reflects real coverage; EAC-covered MWh persisted (`renewable_mwh`, migration 048) →
     feeds CSRD ESRS E1-5 renewable mix (closed that readiness warning).
     **⚠ migrations 047 + 048 must be applied to the shared dev DB (and prod) before use.**
-  - **Assurance-ready export** (next) — XLSX/PDF, like Scope 1's `s1_reporting/export.py`; then **target-setting**.
+  - ✅ **Assurance-ready export** done (`d055813` backend, `227d722` UI) — `s2_reporting/export.py`
+    build_disclosure_xlsx (field-tagged + readiness sheet) / build_disclosure_pdf (readiness
+    banner + per-section tables); routes `/calculations/{id}/disclosure.xlsx` + `.pdf`; XLSX/PDF
+    download buttons on `/scope-2/reports`. (fpdf2 gotcha: multi_cell needs `new_x=LMARGIN`.)
+  - **Target-setting** (next) — base-year + reduction trajectory (SBTi-style) against the dual-method totals.
   **V2**: procurement decision support + MACC.
   **V3**: hourly matching. (Full roadmap: `SCOPE2_IMPLEMENTATION_PLAN.md` §6, synthesis §7–8.)
 
