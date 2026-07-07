@@ -25,8 +25,9 @@ Post-merge (on `feature/scope1-v1`, not in PR #24):
 - Admin **emission-factor overrides + DB-backed loader** (C1) — `74ae9c8` (**migration 110**, band 110–199; per-org `s1_ef_override` table, `is_org_member` RLS, admin-only writes; `_library(user)` layers active overrides over the EPA set via `with_overrides`; `GET /api/scope1/factors` + `/scope-1/factors` admin page; versioned/retirable). **Migration 110 NOT yet applied to any DB — needs applying to dev + prod.**
 - **Trends + emissions intensity** (post-MVP depth) — `51912be` (**migration 111**, additive nullable cols on `s1_inventory`; pure `s1_reporting/trends.build_trends` over per-inventory rollups: YoY delta/%, base-year comparison, intensity tCO2e per $M revenue / output unit / FTE; `GET /api/scope1/trends` + `POST /inventories/{id}/metrics`; dashboard `TrendsPanel` CSS bar chart + intensity cards, setup-page metrics form). **Migration 111 NOT yet applied — needs dev + prod.**
 - **Base-year recalculation engine** (GHG Protocol Ch. 5) — `49f00a4` (**migration 112**, `s1_base_year_recalc_event` table, band 110–199; pure `s1_recalc.analyze_recalc` classifies structural [M&A/out-insourcing/methodology/error] vs organic [growth/decline], computes pending structural delta + % impact vs the `significance_threshold_pct` policy + restated total; `GET/POST/DELETE .../recalc[/events]` + `POST .../recalc/apply` folds pending into `base_year_total_tco2e`, marks events applied, logs restatement; `/scope-1/recalc` page). **Migration 112 NOT yet applied — needs dev + prod.**
+- **Fugitive / refrigerant emissions** — `f340c02` (**migration 113**, `s1_fugitive_record` table, band 110–199; extends S1 beyond combustion. Pure `s1_fugitive`: IPCC AR4/5/6 refrigerant GWPs [pure species + blends from component mass fractions], screening + material-balance methods; stores leaked **mass (kg)**, derives tCO2e via refrigerant GWP at the AR version [AR toggle works]. `GET /refrigerants`, `POST /fugitive` [mass computed server-side], `GET /inventories/{id}/fugitive?ar_version=` [tCO2e + total], `DELETE`. `/scope-1/fugitive` page; dashboard gross = combustion + fugitive). **Migration 113 NOT yet applied — needs dev + prod.**
 
-Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/ s1_recalc/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_* + 110–112`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
+Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou} s1_onboarding/ s1_recalc/ s1_fugitive/`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_* + 110–113`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
 
 ## 3. Decisions (+ why)
 - **Migration band 030–039** (reserved lane; no collision with s2 040–049 / s3 050–059).
@@ -61,7 +62,7 @@ Scope-1-specific (cost real time):
 
 ## 5. How to run / test
 Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `WT=<repo>/product-footprint-analyzer-scope1` (this worktree), `SCRATCH=.../scratchpad`.
-- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (405 passing).
+- **Backend tests:** `cd $WT && PYTHONPATH=$SCRATCH/exportlibs ANTHROPIC_API_KEY="" $ORIG/.venv/bin/python -m pytest tests -q` (417 passing).
 - **Ruff:** `$ORIG/.venv/bin/ruff check --ignore E501 <paths> s1_calc s1_factors s1_consolidation s1_reporting s1_intake`.
 - **Frontend:** `cd $WT/frontend && npm run lint && npm run build` (node_modules symlinked).
 - **Migrations:** apply by hand via Supabase SQL Editor, or `psycopg.connect(os.environ["DATABASE_URL"])` from `.env`. `030–039` already on dev DB.
@@ -71,10 +72,10 @@ Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `
 
 ## 6. Next up / deferred
 - **Next (MVP breadth):** ~~(3) base-year import (A1b)~~ ✅ `f94b550`. ~~(4) onboarding wizard (P1)~~ ✅ `37c1db7`. ~~(5) admin EF overrides / DB-backed loader (C1)~~ ✅ `74ae9c8`. **MVP breadth items done — only the Bayou lane (6/7) remains.**
-- **⚠ Apply migrations 110 + 111 + 112** to the dev DB (and prod at release), like 030–039. 110 (`s1_ef_override`): until applied, EF override reads/writes 500; intake still works (loader falls back to EPA default). 111 (`s1_inventory` metric cols): trends totals/YoY still work but intensity is null and `POST /metrics` 500s. 112 (`s1_base_year_recalc_event`): recalc endpoints 500 until applied; rest of the app unaffected. Band 110–199 is open for future s1 schema.
-- **Next options (post-MVP, user's pick):** fugitive/refrigerant emissions (biggest coverage gap — S1 is combustion-only today), RLS-hard role enforcement, or the parked Bayou lane (6/7). ~~base-year recalc~~ ✅ done.
+- **⚠ Apply migrations 110–113** to the dev DB (and prod at release), like 030–039. 110 (`s1_ef_override`): EF override reads/writes 500 until applied; intake falls back to EPA default. 111 (`s1_inventory` metric cols): trends totals/YoY work but intensity null + `POST /metrics` 500. 112 (`s1_base_year_recalc_event`): recalc endpoints 500. 113 (`s1_fugitive_record`): fugitive endpoints 500 (dashboard fugitive fetch is guarded → dashboard still loads, shows 0). Band 110–199 open for future s1 schema.
+- **Next options (post-MVP, user's pick):** RLS-hard role enforcement (close the app-layer-only gap), process emissions (calcination/other non-combustion), more disclosure exports (ESRS E1/CDP/GHGRP), or the parked Bayou lane (6/7). ~~base-year recalc~~ ✅, ~~fugitive/refrigerant~~ ✅ done.
 - **Parked to end (Bayou lane, user's call):** (6) Bayou credential-connect auto-pull (Option A), (7) connection management — health/re-auth/sync (P5).
-- **V1 (explicitly out of MVP):** ~~base-year recalculation engine~~ ✅ (49f00a4), refrigerant/fugitive, process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
+- **V1 (explicitly out of MVP):** ~~base-year recalculation engine~~ ✅ (49f00a4), ~~refrigerant/fugitive~~ ✅ (f340c02), process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
 - **Integration follow-up:** the three `s{N}_member_role` tables may be consolidated into one shared roles model (integrator's call).
 
 ## 7. Open questions
