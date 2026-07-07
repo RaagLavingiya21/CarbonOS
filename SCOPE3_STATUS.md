@@ -4,7 +4,9 @@ Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per
 _Last updated: 2026-07-07 · Branch: feature/scope3-v1 (off merged main, PR #24)_
 
 ## 1. Where we are
-Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). All the **pure business logic** for A/B/C/D is built, tested, and merged, plus the **DB layer (migrations + stores + routes) for all four MVP epics A/B/C/D** — so the MVP is code-complete end-to-end. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
+Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). **Pure business logic for ALL NINE epics (A–I) is built and tested** across 10 isolated `s3_*` packages (127 scope-3 tests). The **DB layer (migrations + stores + routes) exists for the four MVP epics A/B/C/D** (code-complete, unapplied); E–I are logic-only so far. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped, hardened, and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
+
+**`s3_*` packages (10):** `s3_factors` (vendored CEDA) · `s3_measure` (inventory) · `s3_obligations` (C) · `s3_targets` (D) · `s3_questionnaire` (B) · `s3_progress` (E) · `s3_disclosure` (G) · `s3_usephase` (H) · `s3_levers` (I) · `s3_suppliers` (F).
 
 ## 2. Done (shipped to main via PR #24)
 - **Planning:** `scope3-gap-analysis/00–12` — gap analysis + all 9 epic implementation plans + program overview.
@@ -21,6 +23,8 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic E — progress logic (first mid-term epic):** `s3_progress/` (decompose real-vs-method · tracker on/off-track + base-year recalc · deterministic narrative) + `tests/test_s3_progress.py`. Pure logic; DB layer not yet built. *(post-PR-#24)*
 - **Epic G — disclosure logic:** `s3_disclosure/` (versioned `data/frameworks.yaml` for ESRS E1/SB253/IFRS S2 · `mapper.py` inventory→datapoints, numbers looked-up + sourced, SB253 provisional · `serialize.py` CSV/Markdown; iXBRL deferred) + `tests/test_s3_disclosure.py`. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic H — use-phase logic:** `s3_usephase/` (Cat 11 direct/indirect calc · SAMPLE grid/water factors · sub-sector templates) + `tests/test_s3_usephase.py`. Bounded activity path, method='activity'. Pure logic; DB layer not built. *(post-PR-#24)*
+- **Epic I — levers/MAC/claims logic:** `s3_levers/` (lever library + MAC curve + legal-gated claims: substantiate only from primary-data-backed+assured, EmpCo offset-neutrality prohibited) + `tests/test_s3_levers.py`. Pure logic; DB layer not built. *(post-PR-#24)*
+- **Epic F — supplier logic:** `s3_suppliers/` (cohorting by emissions/spend + program scorecard; outreach loop is shared copilot, out of scope) + `tests/test_s3_suppliers.py`. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
 
@@ -76,7 +80,8 @@ python3 -m ruff check s3_factors s3_measure s3_obligations s3_targets s3_questio
 
 **Deferred / parked:**
 - Epic A follow-ups: per-line classification persistence, line-level drill-down to EF citation, analyst override PATCH.
-- Epics E–I (progress/recalc, supplier program, disclosure, Cat-11 depth, levers/claims) — planned in `scope3-gap-analysis/08–12`, not started.
+- **DB layers for E–I** (progress, disclosure, use-phase, levers, suppliers) — logic done, but tables/stores/routes not built (all in the `310+` band; most only worth wiring after A/B/C/D are applied and real inventories exist).
+- Deferred logic bits: Epic B methodology narrative (needs grounded LLM), PDF/iXBRL export (need libs not in env), claims *substantiation* is legal-gated (flagger built, don't ship claims UI without legal review).
 
 ## 7. Open questions
 - **Migration band overflow:** A(4)+B(4)+C(2) fills `050–059` exactly; **Epic D onward needs an additional reserved band** — confirm with the integrator.
