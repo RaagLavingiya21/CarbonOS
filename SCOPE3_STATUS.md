@@ -67,7 +67,7 @@ python3 -m ruff check s3_factors s3_measure s3_obligations s3_targets s3_questio
 **Queued:**
 1. **Apply migrations to the shared dev DB** (by hand, Supabase SQL Editor, in order): the ten `050–059`, then `310`, `311`, `312`. Then **integration-test** the A/B/C/D DB layers (stores, routes, RLS) — currently static-verified only. *(Blocked on DB access — I can't apply or run these; needs someone to apply, or a throwaway `DATABASE_URL`.)*
 2. **Frontend:** `/scope-3/*` pages + `lib/scope3-api.ts`, nav gated behind the flag (nothing built yet).
-3. Epic B follow-ups: methodology-narrative assembly + export packs (P.4.2.4/.6); structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
+3. Epic B follow-ups: **export packs DONE** (`s3_questionnaire/exporter.py` — CSV + Markdown, `/export` route); still deferred = methodology-narrative assembly (P.4.2.4, needs grounded LLM), PDF export (no `fpdf` in env), structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
 4. Epic A follow-ups (still): per-line classification persistence + line-level drill-down + override PATCH.
 
 **Deferred / parked:**
