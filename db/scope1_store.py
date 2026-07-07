@@ -133,6 +133,16 @@ def list_inventories(*, access_token: str, user_id: str) -> list[dict]:
     )
 
 
+def set_base_year(inventory_id: str, patch: dict, *, access_token: str, user_id: str) -> dict:
+    """Update an inventory's base-year fields (base_year / total / gwp_version)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_inventory").update(patch)
+        .eq("org_id", org_id).eq("id", inventory_id).execute()
+    )
+    return resp.data[0]
+
+
 def lock_inventory(inventory_id: str, *, access_token: str, user_id: str) -> dict:
     org_id, client = _org_and_client(access_token, user_id)
     resp = (

@@ -41,6 +41,13 @@ class CreateDataOwnerRequest(BaseModel):
 
 # --- Inventory + consolidation ----------------------------------------------
 
+class SetBaseYearRequest(BaseModel):
+    base_year: int
+    base_year_total_tco2e: float
+    base_year_gwp_version: str = "AR5"       # AR4|AR5|AR6
+    evidence_document_id: str | None = None
+
+
 class CreateInventoryRequest(BaseModel):
     reporting_entity_id: str
     reporting_year: int

@@ -33,6 +33,7 @@ from api.models.scope1_schemas import (
     MobileRecordRequest,
     OcrReviewRequest,
     ReadinessResponse,
+    SetBaseYearRequest,
     SetRoleRequest,
     StationaryRecordRequest,
     UpsertBoundaryRequest,
@@ -43,7 +44,7 @@ from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
 from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
-from s1_intake import parse_intake_csv
+from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_reporting import (
     DisclosureMeta,
@@ -200,6 +201,50 @@ def lock_inventory(inventory_id: str, user: CurrentUser = Depends(require_editor
                  access_token=user.access_token, user_id=user.user_id)
     _log(inventory_id, "lock", user, entity_table="s1_inventory")
     return inv
+
+
+def _apply_base_year(inventory_id: str, base_year: int, total: float, gwp: str,
+                     evidence_id: str | None, user: CurrentUser) -> dict:
+    inv = _guard(
+        store.set_base_year, inventory_id,
+        {"base_year": base_year, "base_year_total_tco2e": total, "base_year_gwp_version": gwp},
+        access_token=user.access_token, user_id=user.user_id,
+    )
+    _log(inventory_id, "set_base_year", user, entity_table="s1_inventory",
+         field_changes={"base_year": base_year, "total_tco2e": total,
+                        "gwp_version": gwp, "evidence_document_id": evidence_id})
+    return inv
+
+
+@router.post("/inventories/{inventory_id}/base-year")
+def set_base_year(inventory_id: str, req: SetBaseYearRequest,
+                  user: CurrentUser = Depends(require_editor)) -> dict:
+    """Set the base year + prior-year total on an inventory (manual entry)."""
+    return _apply_base_year(inventory_id, req.base_year, req.base_year_total_tco2e,
+                            req.base_year_gwp_version, req.evidence_document_id, user)
+
+
+@router.post("/inventories/{inventory_id}/base-year/import")
+async def import_base_year(
+    inventory_id: str, file: UploadFile = File(...),
+    user: CurrentUser = Depends(require_editor),
+) -> dict:
+    """Import a prior-year inventory total from a consultant/spreadsheet CSV
+    (columns base_year, total_tco2e, gwp_version?); keeps the file as evidence."""
+    data = await file.read()
+    parsed = parse_base_year_csv(data)
+    if not parsed.is_valid:
+        raise HTTPException(status_code=422, detail="; ".join(parsed.errors) or "Invalid base-year CSV.")
+    evidence = _guard(
+        store.upload_evidence, data, file_name=file.filename or "base-year.csv",
+        content_type=file.content_type, document_type="base_year_import",
+        inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
+    )
+    inv = _apply_base_year(inventory_id, parsed.base_year, parsed.total_tco2e,
+                           parsed.gwp_version, evidence["id"], user)
+    return {**inv, "evidence_document_id": evidence["id"],
+            "imported": {"base_year": parsed.base_year, "total_tco2e": parsed.total_tco2e,
+                         "gwp_version": parsed.gwp_version}}
 
 
 @router.post("/consolidation/preview", response_model=ConsolidationPreviewResponse)

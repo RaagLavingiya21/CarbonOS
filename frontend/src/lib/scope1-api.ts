@@ -233,6 +233,24 @@ export const scope1Api = {
     request<S1Inventory>("/api/scope1/inventories", { method: "POST", body: JSON.stringify(body) }),
   lockInventory: (id: string) =>
     request<S1Inventory>(`/api/scope1/inventories/${id}/lock`, { method: "POST" }),
+  setBaseYear: (inventoryId: string, body: Record<string, unknown>) =>
+    request<S1Inventory>(`/api/scope1/inventories/${inventoryId}/base-year`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  importBaseYear: async (inventoryId: string, file: File): Promise<Record<string, unknown>> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(
+      `${BACKEND_URL}/api/scope1/inventories/${inventoryId}/base-year/import`,
+      { method: "POST", headers: { Authorization: `Bearer ${await accessToken()}` }, body: form },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  },
 
   consolidationPreview: (body: Record<string, unknown>) =>
     request<S1ConsolidationPreview>("/api/scope1/consolidation/preview", {

@@ -169,6 +169,7 @@ export default function Scope1SetupPage() {
         onSaved={reload}
         onError={setError}
       />
+      <BaseYearSection inventories={inventories} onSaved={reload} onError={setError} />
       <SourceSection
         sources={sources}
         entityOptions={entityOptions}
@@ -462,6 +463,90 @@ function InventorySection({
             ))}
           </ul>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Base year (incumbent import) -------------------------------------------
+
+function BaseYearSection({
+  inventories,
+  onSaved,
+  onError,
+}: {
+  inventories: S1Inventory[];
+  onSaved: () => void;
+  onError: (message: string) => void;
+}) {
+  const [inventoryId, setInventoryId] = useState("");
+  const [baseYear, setBaseYear] = useState("");
+  const [total, setTotal] = useState("");
+  const [gwp, setGwp] = useState("AR5");
+  const [saving, setSaving] = useState(false);
+
+  const options = inventories.map((inv) => ({ value: inv.id, label: String(inv.reporting_year) }));
+
+  async function saveManual() {
+    if (!inventoryId || !baseYear || !total) return;
+    setSaving(true);
+    try {
+      await scope1Api.setBaseYear(inventoryId, {
+        base_year: Number(baseYear),
+        base_year_total_tco2e: Number(total),
+        base_year_gwp_version: gwp,
+      });
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function importCsv(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !inventoryId) return;
+    try {
+      await scope1Api.importBaseYear(inventoryId, file);
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Base year (migrate off a consultant / spreadsheet)</CardTitle>
+        <CardDescription>
+          Set the prior-year total that anchors your base year — enter it, or import a CSV
+          (columns: base_year, total_tco2e, gwp_version). The file is kept as evidence.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SelectField label="Inventory" value={inventoryId} onChange={setInventoryId} options={options} />
+          <TextField label="Base year" value={baseYear} onChange={setBaseYear} type="number" />
+          <TextField label="Prior-year total (tCO₂e)" value={total} onChange={setTotal} type="number" />
+          <SelectField
+            label="GWP version"
+            value={gwp}
+            onChange={setGwp}
+            options={["AR4", "AR5", "AR6"].map((v) => ({ value: v, label: v }))}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={saveManual} disabled={saving || !inventoryId || !baseYear || !total}>
+            Set base year
+          </Button>
+          <label className="text-small text-muted-foreground">
+            or import CSV:
+            <input type="file" accept=".csv" onChange={importCsv} disabled={!inventoryId} className="ml-2 text-small" />
+          </label>
+        </div>
       </CardContent>
     </Card>
   );
