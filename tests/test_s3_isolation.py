@@ -31,6 +31,7 @@ _SCAN_DIRS = [
     "s3_progress",
     "s3_disclosure",
     "s3_usephase",
+    "s3_levers",
 ]
 _SCAN_GLOBS = ["api/routes/scope3_*.py", "db/s3_*_store.py", "api/models/scope3_schemas.py"]
 
