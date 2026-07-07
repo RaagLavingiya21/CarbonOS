@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope2_schemas import (
@@ -41,6 +42,7 @@ from s2_reporting.compliance import (
     build_disclosure,
     disclosure_to_csv,
 )
+from s2_reporting.export import build_disclosure_pdf, build_disclosure_xlsx
 from s2_reporting.formats import (
     DESTINATIONS,
     UnknownDestinationError,
@@ -181,6 +183,51 @@ def get_disclosure(
             warnings=disclosure.readiness.warnings,
         ),
         csv=disclosure_to_csv(disclosure),
+    )
+
+
+def _disclosure_or_422(calc_id: int, standard: str, current_user: CurrentUser):
+    summary, _entity, ctx = _summary_and_context(calc_id, current_user)
+    try:
+        return build_disclosure(summary, ctx, standard)
+    except UnknownStandardError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.get("/calculations/{calc_id}/disclosure.xlsx")
+def export_disclosure_xlsx(
+    calc_id: int,
+    standard: str = Query("sb253"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Assurance-ready disclosure workbook (field-tagged + readiness sheet)."""
+    disclosure = _disclosure_or_422(calc_id, standard, current_user)
+    data = build_disclosure_xlsx(disclosure)
+    filename = f"scope2-{disclosure.standard}-{disclosure.reporting_year}.xlsx"
+    return StreamingResponse(
+        iter([data]),
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/calculations/{calc_id}/disclosure.pdf")
+def export_disclosure_pdf(
+    calc_id: int,
+    standard: str = Query("sb253"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Human-readable disclosure PDF with the assurance-readiness banner."""
+    disclosure = _disclosure_or_422(calc_id, standard, current_user)
+    data = build_disclosure_pdf(disclosure)
+    filename = f"scope2-{disclosure.standard}-{disclosure.reporting_year}.pdf"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

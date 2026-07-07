@@ -535,6 +535,29 @@ def test_csrd_renewable_mix_from_calc(monkeypatch) -> None:
     assert not any("Renewable energy share" in w for w in data["readiness"]["warnings"])
 
 
+def test_export_disclosure_xlsx(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get("/api/scope2/calculations/42/disclosure.xlsx?standard=sb253", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert "spreadsheetml" in resp.headers["content-type"]
+    assert resp.content[:2] == b"PK"
+    assert "attachment" in resp.headers["content-disposition"]
+
+
+def test_export_disclosure_pdf(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get("/api/scope2/calculations/42/disclosure.pdf?standard=csrd_e1", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content[:4] == b"%PDF"
+
+
+def test_export_disclosure_unknown_standard_422(monkeypatch) -> None:
+    _mock_disclosure_deps(monkeypatch)
+    resp = client.get("/api/scope2/calculations/42/disclosure.xlsx?standard=tcfd", headers=AUTH_HEADERS)
+    assert resp.status_code == 422
+
+
 def test_get_report_bad_destination_422(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_calc_store.get_calculation", lambda cid, token: _calc_row())
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])
