@@ -171,6 +171,8 @@ class CsvCommitResponse(BaseModel):
     total_rows: int
     committed_count: int
     error_count: int
+    # Prior estimated/cost-only reads superseded by a truer same-period read (PRD 5.6).
+    superseded_count: int = 0
     # site_ref values in the CSV that didn't match any existing site by name.
     unresolved_site_refs: list[str]
 

@@ -272,9 +272,13 @@ def test_commit_csv_persists_bills(monkeypatch) -> None:
 
     def _insert(rows, *, org_id, user_id, access_token):
         captured["rows"] = rows
-        return len(rows)
+        return [{**row, "bill_id": i} for i, row in enumerate(rows, start=1)]
 
     monkeypatch.setattr("db.s2_bill_store.insert_bills", _insert)
+    monkeypatch.setattr("db.s2_bill_store.list_active_bill_keys", lambda ids, token: [])
+    monkeypatch.setattr(
+        "db.s2_bill_store.supersede_bills", lambda pairs, *, access_token: 0
+    )
 
     resp = client.post("/api/scope2/bills/import-csv", headers=AUTH_HEADERS, json=CSV_BODY)
     assert resp.status_code == 200
@@ -288,13 +292,64 @@ def test_commit_csv_reports_unresolved_site(monkeypatch) -> None:
     monkeypatch.setattr("db.s2_site_store.list_sites", lambda token: [])  # no matching site
     monkeypatch.setattr(
         "db.s2_bill_store.insert_bills",
-        lambda rows, *, org_id, user_id, access_token: 0,
+        lambda rows, *, org_id, user_id, access_token: [],
     )
     resp = client.post("/api/scope2/bills/import-csv", headers=AUTH_HEADERS, json=CSV_BODY)
     assert resp.status_code == 200
     data = resp.json()
     assert data["committed_count"] == 0
     assert "Store 1" in data["unresolved_site_refs"]
+
+
+def test_commit_csv_supersedes_prior_estimate(monkeypatch) -> None:
+    """A same-period actual read trues up a prior estimate; superseded_count reflects it."""
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_ingestion.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr(
+        "db.s2_site_store.list_sites", lambda token: [_site_row(name="Store 1")]
+    )
+    monkeypatch.setattr(
+        "db.s2_bill_store.get_or_create_account",
+        lambda site_id, carrier, *, org_id, user_id, access_token: 5,
+    )
+    # The CSV row (from CSV_BODY) is an actual read -> bill_id 20; a prior estimate for
+    # the same account+period is already active as bill_id 10.
+    monkeypatch.setattr(
+        "db.s2_bill_store.insert_bills",
+        lambda rows, *, org_id, user_id, access_token: [
+            {**row, "bill_id": 20} for row in rows
+        ],
+    )
+    active = [
+        {
+            "bill_id": 10,
+            "account_id": 5,
+            "period_start": "2024-01-01",
+            "period_end": "2024-01-31",
+            "is_estimated_read": True,
+            "is_cost_only": False,
+        },
+        {
+            "bill_id": 20,
+            "account_id": 5,
+            "period_start": "2024-01-01",
+            "period_end": "2024-01-31",
+            "is_estimated_read": False,
+            "is_cost_only": False,
+        },
+    ]
+    monkeypatch.setattr("db.s2_bill_store.list_active_bill_keys", lambda ids, token: active)
+
+    def _supersede(pairs, *, access_token):
+        captured["pairs"] = pairs
+        return len(pairs)
+
+    monkeypatch.setattr("db.s2_bill_store.supersede_bills", _supersede)
+
+    resp = client.post("/api/scope2/bills/import-csv", headers=AUTH_HEADERS, json=CSV_BODY)
+    assert resp.status_code == 200
+    assert resp.json()["superseded_count"] == 1
+    assert captured["pairs"] == [(10, 20)]  # estimate superseded by the actual
 
 
 # --- reporting -------------------------------------------------------------
@@ -498,9 +553,13 @@ def test_estimate_site_persists_labeled_estimate(monkeypatch) -> None:
 
     def _insert(rows, *, org_id, user_id, access_token):
         captured["rows"] = rows
-        return len(rows)
+        return [{**row, "bill_id": i} for i, row in enumerate(rows, start=1)]
 
     monkeypatch.setattr("db.s2_bill_store.insert_bills", _insert)
+    monkeypatch.setattr("db.s2_bill_store.list_active_bill_keys", lambda ids, token: [])
+    monkeypatch.setattr(
+        "db.s2_bill_store.supersede_bills", lambda pairs, *, access_token: 0
+    )
 
     resp = client.post(
         "/api/scope2/sites/1/estimate",

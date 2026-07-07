@@ -23,9 +23,32 @@ from api.models.scope2_schemas import (
 from api.routes.scope2_deps import resolve_org_id
 from db import s2_bill_store, s2_site_store
 from s2_ingestion.csv_import import ColumnMappingError, import_bills_csv
+from s2_ingestion.dedup import BillKey, resolve_supersessions
 from s2_ingestion.estimation import EstimationError, estimate_annual_electricity_mwh
 
 router = APIRouter(prefix="/api/scope2", tags=["scope2"])
+
+
+def _reconcile_dedup(account_ids: list[int], access_token: str) -> int:
+    """Supersede estimated/cost-only reads trued-up by a same-period actual (PRD 5.6).
+
+    Re-scans the affected accounts' active bills and applies the pure dedup verdict.
+    Idempotent — safe to run after every insert. Returns the count superseded.
+    """
+    active = s2_bill_store.list_active_bill_keys(account_ids, access_token)
+    keys = [
+        BillKey(
+            bill_id=row["bill_id"],
+            account_id=row["account_id"],
+            period_start=row["period_start"],
+            period_end=row["period_end"],
+            is_estimated_read=row.get("is_estimated_read", False),
+            is_cost_only=row.get("is_cost_only", False),
+        )
+        for row in active
+    ]
+    pairs = resolve_supersessions(keys)
+    return s2_bill_store.supersede_bills(pairs, access_token=access_token)
 
 
 @router.post("/bills/preview-csv", response_model=CsvPreviewResponse)
@@ -116,13 +139,15 @@ def commit_csv(
             }
         )
 
-    committed = s2_bill_store.insert_bills(
+    inserted = s2_bill_store.insert_bills(
         rows, org_id=org_id, user_id=current_user.user_id, access_token=token
     )
+    superseded = _reconcile_dedup(list(account_cache.values()), token)
     return CsvCommitResponse(
         total_rows=result.total_rows,
-        committed_count=committed,
+        committed_count=len(inserted),
         error_count=len(result.errors),
+        superseded_count=superseded,
         unresolved_site_refs=sorted(unresolved),
     )
 
@@ -178,6 +203,9 @@ def estimate_site(
         user_id=current_user.user_id,
         access_token=token,
     )
+    # A truer same-period read (e.g. a re-run estimate or an actual bill covering the
+    # full year) supersedes the older estimate; never double-count the period.
+    _reconcile_dedup([account_id], token)
     return EstimateResponse(
         site_id=site_id,
         reporting_year=request.reporting_year,
