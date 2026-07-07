@@ -1,0 +1,29 @@
+{
+  "utility_name": {"value": "ConEd", "confidence": 0.98},
+  "account_number": {"value": "88-0099", "confidence": 0.94},
+  "service_address": {"value": "500 Market St, Newark, NJ", "confidence": 0.9},
+  "meters": [
+    {
+      "meter_number": {"value": "E-1", "confidence": 0.95},
+      "energy_carrier": {"value": "Electricity", "confidence": 0.98},
+      "service_period_start": {"value": "2025-02-01", "confidence": 0.97},
+      "service_period_end": {"value": "2025-02-28", "confidence": 0.97},
+      "consumption_quantity": {"value": "2000", "confidence": 0.96},
+      "consumption_unit": {"value": "kWh", "confidence": 0.98},
+      "demand_kw": {"value": "55", "confidence": 0.88},
+      "total_cost_usd": {"value": "$305.00", "confidence": 0.9},
+      "is_estimated_read": {"value": "false", "confidence": 0.94}
+    },
+    {
+      "meter_number": {"value": "G-1", "confidence": 0.6},
+      "energy_carrier": {"value": "Natural Gas", "confidence": 0.97},
+      "service_period_start": {"value": "2025-02-01", "confidence": 0.95},
+      "service_period_end": {"value": "2025-02-28", "confidence": 0.95},
+      "consumption_quantity": {"value": "1080", "confidence": 0.61},
+      "consumption_unit": {"value": "therms", "confidence": 0.93},
+      "demand_kw": {"value": null, "confidence": 0.0},
+      "total_cost_usd": {"value": "$540.00", "confidence": 0.85},
+      "is_estimated_read": {"value": "true", "confidence": 0.7}
+    }
+  ]
+}

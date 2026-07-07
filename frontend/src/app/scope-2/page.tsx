@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
+import { ArrowRight, Award, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
 
 import { KpiStrip } from "@/components/portfolio/KpiStrip";
 import { ErrorState } from "@/components/ui/error-state";
@@ -24,10 +24,22 @@ const ENTRIES = [
     body: "Add your multi-site footprint from sector templates and import utility bills (CSV).",
   },
   {
+    href: "/scope-2/import",
+    icon: Upload,
+    title: "Import a bill (PDF/OCR)",
+    body: "Upload a PDF or image; Claude extracts each meter with a confidence score to review, then normalizes and de-dupes.",
+  },
+  {
     href: "/scope-2/calculate",
     icon: Calculator,
     title: "Calculate & report",
     body: "Run a dual-method (location + market-based) Scope 2 inventory with a full audit trail.",
+  },
+  {
+    href: "/scope-2/eacs",
+    icon: Award,
+    title: "EAC registry",
+    body: "Record RECs, GOs, and PPAs backing your market-based total; each is quality-screened before it covers load.",
   },
   {
     href: "/scope-2/landlord",

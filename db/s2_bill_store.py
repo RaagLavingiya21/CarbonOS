@@ -18,15 +18,21 @@ def get_or_create_account(
     org_id: str,
     user_id: str,
     access_token: str,
+    source_type: str = "csv",
 ) -> int:
-    """Return the csv-source account for (site, carrier), creating it if absent."""
+    """Return the account for (site, carrier), creating it if absent.
+
+    Deliberately matches on (site, carrier) *regardless of source_type* so bills
+    from different ingestion paths (CSV, PDF/OCR, aggregator) for the same physical
+    account share one account_id — otherwise cross-source true-up dedup, which is
+    keyed by account, could never fire. `source_type` labels a newly-created account.
+    """
     client = get_user_client(access_token)
     existing = (
         client.table("s2_utility_accounts")
         .select("account_id")
         .eq("site_id", site_id)
         .eq("energy_carrier", energy_carrier)
-        .eq("source_type", "csv")
         .limit(1)
         .execute()
     )
@@ -40,7 +46,7 @@ def get_or_create_account(
                 "org_id": org_id,
                 "user_id": user_id,
                 "energy_carrier": energy_carrier,
-                "source_type": "csv",
+                "source_type": source_type,
             }
         )
         .execute()
@@ -50,14 +56,62 @@ def get_or_create_account(
 
 def insert_bills(
     rows: list[dict], *, org_id: str, user_id: str, access_token: str
-) -> int:
-    """Insert bill rows (already carrying account_id); returns the count inserted."""
+) -> list[dict]:
+    """Insert bill rows (already carrying account_id); return the inserted rows.
+
+    Returned rows include the DB-assigned bill_id plus the fields dedup needs, so
+    callers can reconcile them against existing active bills. Use len() for a count.
+    """
     if not rows:
-        return 0
+        return []
     client = get_user_client(access_token)
     payload = [{**row, "org_id": org_id, "user_id": user_id} for row in rows]
     response = client.table("s2_utility_bills").insert(payload).execute()
-    return len(response.data)
+    return response.data or []
+
+
+def list_active_bill_keys(account_ids: list[int], access_token: str) -> list[dict]:
+    """Active (non-superseded) bills for the given accounts, keyed for dedup.
+
+    Returns bill_id, account_id, period bounds, and the estimated/cost-only flags —
+    the shape s2_ingestion.dedup.BillKey consumes. Empty account list -> no query.
+    """
+    if not account_ids:
+        return []
+    client = get_user_client(access_token)
+    response = (
+        client.table("s2_utility_bills")
+        .select(
+            "bill_id, account_id, period_start, period_end, "
+            "is_estimated_read, is_cost_only"
+        )
+        .in_("account_id", account_ids)
+        .is_("superseded_by_bill_id", "null")
+        .execute()
+    )
+    return response.data or []
+
+
+def supersede_bills(pairs: list[tuple[int, int]], *, access_token: str) -> int:
+    """Mark each superseded bill with its superseding bill_id (PRD 5.6).
+
+    `pairs` is (superseded_bill_id, superseding_bill_id). Consumption is never
+    rewritten — only the superseded_by_bill_id pointer is set, which drops the row
+    from list_active_bills / the calc engine. Returns the number of rows updated.
+    """
+    if not pairs:
+        return 0
+    client = get_user_client(access_token)
+    updated = 0
+    for superseded_id, superseding_id in pairs:
+        response = (
+            client.table("s2_utility_bills")
+            .update({"superseded_by_bill_id": superseding_id})
+            .eq("bill_id", superseded_id)
+            .execute()
+        )
+        updated += len(response.data or [])
+    return updated
 
 
 def list_active_bills(access_token: str) -> list[dict]:

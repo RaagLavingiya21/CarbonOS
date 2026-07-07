@@ -33,10 +33,14 @@ CREATE INDEX IF NOT EXISTS idx_s2_calc_site ON s2_calculations (site_id);
 
 ALTER TABLE s2_calculations ENABLE ROW LEVEL SECURITY;
 
+-- Idempotent (safe to re-run): DROP POLICY IF EXISTS precedes each CREATE POLICY.
+DROP POLICY IF EXISTS s2_calc_select_org ON s2_calculations;
 CREATE POLICY s2_calc_select_org ON s2_calculations
     FOR SELECT TO authenticated USING (public.shares_org_with(user_id));
+DROP POLICY IF EXISTS s2_calc_insert_self ON s2_calculations;
 CREATE POLICY s2_calc_insert_self ON s2_calculations
     FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 -- No UPDATE policy on purpose (immutability). DELETE allowed for draft cleanup.
+DROP POLICY IF EXISTS s2_calc_delete_org ON s2_calculations;
 CREATE POLICY s2_calc_delete_org ON s2_calculations
     FOR DELETE TO authenticated USING (public.shares_org_with(user_id));

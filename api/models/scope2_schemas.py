@@ -171,6 +171,8 @@ class CsvCommitResponse(BaseModel):
     total_rows: int
     committed_count: int
     error_count: int
+    # Prior estimated/cost-only reads superseded by a truer same-period read (PRD 5.6).
+    superseded_count: int = 0
     # site_ref values in the CSV that didn't match any existing site by name.
     unresolved_site_refs: list[str]
 
@@ -186,6 +188,73 @@ class EstimateResponse(BaseModel):
     annual_mwh: float
     intensity_kwh_per_sqft: float
     method_note: str
+
+
+# --- PDF/OCR document ingestion ---------------------------------------------
+
+
+class FieldDTO(BaseModel):
+    value: str | None = None
+    confidence: float = 0.0
+
+
+class ExtractedMeterDTO(BaseModel):
+    meter_number: str | None = None
+    energy_carrier: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    raw_quantity: float | None = None
+    raw_unit: str | None = None
+    canonical_mwh: float | None = None
+    cost_usd: float | None = None
+    demand_kw: float | None = None
+    is_estimated_read: bool = False
+    is_cost_only: bool = False
+    needs_review: bool = False
+    min_confidence: float = 0.0
+    review_reasons: list[str] = []
+
+
+class ExtractDocRequest(BaseModel):
+    # The bill file, base64-encoded (keeps ingestion JSON-only, like csv_text).
+    file_base64: str
+    content_type: str | None = None
+    filename: str | None = None
+
+
+class ExtractDocResponse(BaseModel):
+    header: dict[str, FieldDTO]
+    meters: list[ExtractedMeterDTO]
+    model: str = ""
+    error: str | None = None
+    # True if any meter needs review or the extraction errored — the UI's gate.
+    needs_review: bool = False
+
+
+class ConfirmedMeterInput(BaseModel):
+    """A meter the user reviewed/edited and is committing (post-extraction)."""
+
+    energy_carrier: str
+    period_start: str
+    period_end: str
+    raw_quantity: float | None = None
+    raw_unit: str | None = None
+    canonical_mwh: float | None = None
+    cost_usd: float | None = None
+    is_estimated_read: bool = False
+    is_cost_only: bool = False
+
+
+class ImportDocRequest(BaseModel):
+    site_id: int
+    meters: list[ConfirmedMeterInput]
+
+
+class ImportDocResponse(BaseModel):
+    committed_count: int
+    superseded_count: int = 0
+    # Meters dropped for an unrecognized carrier (not one the DB accepts).
+    skipped_count: int = 0
 
 
 # --- Calculations -----------------------------------------------------------
@@ -276,6 +345,96 @@ class ReportResponse(BaseModel):
     reporting_year: int
     rows: list[ReportRow]
     csv: str
+
+
+# --- Regulatory disclosures (V1 compliance: SB 253, CSRD ESRS E1) ------------
+
+
+class DisclosureStandardDTO(BaseModel):
+    key: str
+    label: str
+
+
+class DisclosureItemDTO(BaseModel):
+    label: str
+    value: str
+    note: str | None = None
+
+
+class DisclosureSectionDTO(BaseModel):
+    title: str
+    items: list[DisclosureItemDTO]
+
+
+class ReadinessDTO(BaseModel):
+    ready: bool
+    blockers: list[str]
+    warnings: list[str]
+
+
+class ComplianceDisclosureResponse(BaseModel):
+    standard: str
+    standard_label: str
+    entity: str
+    reporting_year: int
+    sections: list[DisclosureSectionDTO]
+    readiness: ReadinessDTO
+    csv: str
+
+
+# --- EAC / contractual-instrument registry (PRD 5.4; V1) --------------------
+
+
+class CreateEac(BaseModel):
+    site_id: int
+    instrument_type: str = "rec"  # rec | go | green_tariff | ppa
+    reporting_year: int
+    mwh: float
+    region_market: str
+    vintage_year: int
+    kg_co2e_per_mwh: float = 0.0
+    specific_generation_attribute: bool = True
+    unique_no_double_count: bool = True
+    registry_tracked: bool = True
+    retired_for_buyer: bool = True
+    not_an_offset: bool = True
+    transparent: bool = True
+    registry_name: str | None = None
+    retirement_id: str | None = None
+    retirement_date: str | None = None
+    notes: str | None = None
+
+
+class EacDTO(BaseModel):
+    instrument_id: int
+    site_id: int
+    instrument_type: str
+    reporting_year: int
+    mwh: float
+    region_market: str
+    vintage_year: int
+    kg_co2e_per_mwh: float
+    registry_name: str | None = None
+    retirement_id: str | None = None
+    retirement_date: str | None = None
+    notes: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "EacDTO":
+        return cls(
+            instrument_id=int(row["instrument_id"]),
+            site_id=int(row["site_id"]),
+            instrument_type=row.get("instrument_type") or "rec",
+            reporting_year=int(row["reporting_year"]),
+            mwh=float(row["mwh"]),
+            region_market=row["region_market"],
+            vintage_year=int(row["vintage_year"]),
+            kg_co2e_per_mwh=float(row.get("kg_co2e_per_mwh") or 0.0),
+            registry_name=row.get("registry_name"),
+            retirement_id=row.get("retirement_id"),
+            retirement_date=row.get("retirement_date"),
+            notes=row.get("notes"),
+        )
 
 
 # --- Inbound buyer/CDP request queue (PRD 5.5) ------------------------------

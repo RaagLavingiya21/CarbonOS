@@ -1,0 +1,20 @@
+{
+  "doc": "synthetic_single_elec",
+  "notes": "Clean single-electricity-meter bill; high confidence throughout.",
+  "header": {
+    "utility_name": "PG&E",
+    "account_number": "1234567",
+    "service_address": "1 Main St, San Francisco, CA"
+  },
+  "meters": [
+    {
+      "energy_carrier": "electricity",
+      "service_period_start": "2025-01-01",
+      "service_period_end": "2025-01-31",
+      "consumption_quantity": 1500,
+      "consumption_unit": "kWh",
+      "canonical_mwh": 1.5,
+      "is_estimated_read": false
+    }
+  ]
+}

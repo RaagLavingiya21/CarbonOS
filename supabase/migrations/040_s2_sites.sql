@@ -47,19 +47,24 @@ CREATE INDEX IF NOT EXISTS idx_s2_sites_egrid ON s2_sites (egrid_subregion);
 -- data-wrangler persona); rows are inserted as the creating user.
 ALTER TABLE s2_sites ENABLE ROW LEVEL SECURITY;
 
+-- Idempotent (safe to re-run): DROP POLICY IF EXISTS precedes each CREATE POLICY.
+DROP POLICY IF EXISTS s2_sites_select_org ON s2_sites;
 CREATE POLICY s2_sites_select_org ON s2_sites
     FOR SELECT TO authenticated
     USING (public.shares_org_with(user_id));
 
+DROP POLICY IF EXISTS s2_sites_insert_self ON s2_sites;
 CREATE POLICY s2_sites_insert_self ON s2_sites
     FOR INSERT TO authenticated
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS s2_sites_update_org ON s2_sites;
 CREATE POLICY s2_sites_update_org ON s2_sites
     FOR UPDATE TO authenticated
     USING (public.shares_org_with(user_id))
     WITH CHECK (public.shares_org_with(user_id));
 
+DROP POLICY IF EXISTS s2_sites_delete_org ON s2_sites;
 CREATE POLICY s2_sites_delete_org ON s2_sites
     FOR DELETE TO authenticated
     USING (public.shares_org_with(user_id));

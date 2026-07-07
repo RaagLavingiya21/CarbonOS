@@ -24,12 +24,14 @@ from db import (
     s2_audit_store,
     s2_bill_store,
     s2_calc_store,
+    s2_eac_store,
     s2_factor_store,
     s2_site_store,
 )
 from s2_calc.engine import compute_dual_method
 from s2_calc.mappers import (
     consumption_from_bill_row,
+    eac_from_row,
     factor_from_row,
     site_profile_from_row,
 )
@@ -71,15 +73,20 @@ def run_calculation(
     library = FactorLibrary(
         [factor_from_row(row) for row in s2_factor_store.load_factors(token)]
     )
+    instruments = [
+        eac_from_row(row)
+        for row in s2_eac_store.list_eacs_for_year(request.reporting_year, token)
+    ]
 
     try:
         result = compute_dual_method(
-            sites, consumption, [], library, request.reporting_year
+            sites, consumption, instruments, library, request.reporting_year
         )
     except FactorNotFoundError as exc:
         raise HTTPException(status_code=422, detail=f"Missing emission factor: {exc}") from exc
 
     total_mwh = sum(sr.consumption_mwh for sr in result.site_results)
+    renewable_mwh = sum(sr.market_covered_mwh for sr in result.site_results)
     fallback_count = sum(1 for sr in result.site_results if sr.market_fallback_flagged)
     factor_versions = {
         sr.site_id: sr.location_factor_vintage for sr in result.site_results
@@ -93,6 +100,7 @@ def run_calculation(
             "location_based_kg_co2e": result.location_based_kg_co2e,
             "market_based_kg_co2e": result.market_based_kg_co2e,
             "consumption_mwh": total_mwh,
+            "renewable_mwh": renewable_mwh,
             "market_tier": None,
             "market_fallback_flagged": fallback_count > 0,
             "factor_versions": factor_versions,

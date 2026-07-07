@@ -74,6 +74,102 @@ export type CsvCommit = {
   unresolved_site_refs: string[];
 };
 
+export type ExtractedField = { value: string | null; confidence: number };
+
+export type ExtractedMeter = {
+  meter_number: string | null;
+  energy_carrier: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  raw_quantity: number | null;
+  raw_unit: string | null;
+  canonical_mwh: number | null;
+  cost_usd: number | null;
+  demand_kw: number | null;
+  is_estimated_read: boolean;
+  is_cost_only: boolean;
+  needs_review: boolean;
+  min_confidence: number;
+  review_reasons: string[];
+};
+
+export type ExtractDocResult = {
+  header: Record<string, ExtractedField>;
+  meters: ExtractedMeter[];
+  model: string;
+  error: string | null;
+  needs_review: boolean;
+};
+
+export type ConfirmedMeter = {
+  energy_carrier: string;
+  period_start: string;
+  period_end: string;
+  raw_quantity?: number | null;
+  raw_unit?: string | null;
+  canonical_mwh?: number | null;
+  cost_usd?: number | null;
+  is_estimated_read?: boolean;
+  is_cost_only?: boolean;
+};
+
+export type ImportDocResult = {
+  committed_count: number;
+  superseded_count: number;
+  skipped_count: number;
+};
+
+export type Eac = {
+  instrument_id: number;
+  site_id: number;
+  instrument_type: string;
+  reporting_year: number;
+  mwh: number;
+  region_market: string;
+  vintage_year: number;
+  kg_co2e_per_mwh: number;
+  registry_name: string | null;
+  retirement_id: string | null;
+  retirement_date: string | null;
+  notes: string | null;
+};
+
+export type CreateEacPayload = {
+  site_id: number;
+  instrument_type?: string;
+  reporting_year: number;
+  mwh: number;
+  region_market: string;
+  vintage_year: number;
+  kg_co2e_per_mwh?: number;
+  registry_name?: string;
+  retirement_id?: string;
+  retirement_date?: string;
+  notes?: string;
+};
+
+export type DisclosureStandard = { key: string; label: string };
+
+export type DisclosureItem = { label: string; value: string; note: string | null };
+
+export type DisclosureSection = { title: string; items: DisclosureItem[] };
+
+export type DisclosureReadiness = {
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+
+export type ComplianceDisclosure = {
+  standard: string;
+  standard_label: string;
+  entity: string;
+  reporting_year: number;
+  sections: DisclosureSection[];
+  readiness: DisclosureReadiness;
+  csv: string;
+};
+
 export type Calculation = {
   calc_id: number;
   reporting_year: number;
@@ -232,6 +328,17 @@ export const scope2Api = {
       body: { csv_text: csvText, mapping },
     }),
 
+  extractDoc: (fileBase64: string, contentType: string | null) =>
+    request<ExtractDocResult>("/api/scope2/bills/extract-doc", {
+      method: "POST",
+      body: { file_base64: fileBase64, content_type: contentType },
+    }),
+  importDoc: (siteId: number, meters: ConfirmedMeter[]) =>
+    request<ImportDocResult>("/api/scope2/bills/import-doc", {
+      method: "POST",
+      body: { site_id: siteId, meters },
+    }),
+
   runCalculation: (reportingYear: number) =>
     request<RunCalculationResult>("/api/scope2/calculations", {
       method: "POST",
@@ -246,6 +353,34 @@ export const scope2Api = {
     request<Report>(
       `/api/scope2/calculations/${calcId}/report?destination=${destination}`,
     ),
+
+  listEacs: () => request<Eac[]>("/api/scope2/eacs"),
+  createEac: (payload: CreateEacPayload) =>
+    request<Eac>("/api/scope2/eacs", { method: "POST", body: payload }),
+  deleteEac: (instrumentId: number) =>
+    request<void>(`/api/scope2/eacs/${instrumentId}`, { method: "DELETE" }),
+
+  disclosureStandards: () =>
+    request<DisclosureStandard[]>("/api/scope2/disclosure-standards"),
+  disclosure: (calcId: number, standard: string) =>
+    request<ComplianceDisclosure>(
+      `/api/scope2/calculations/${calcId}/disclosure?standard=${standard}`,
+    ),
+  disclosureFile: async (
+    calcId: number,
+    standard: string,
+    format: "xlsx" | "pdf",
+  ): Promise<Blob> => {
+    const headers = new Headers();
+    const token = await getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(
+      `${BACKEND_URL}/api/scope2/calculations/${calcId}/disclosure.${format}?standard=${standard}`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(`Scope 2 API ${response.status}: export failed`);
+    return response.blob();
+  },
 
   listBuyerRequests: () =>
     request<BuyerRequest[]>("/api/scope2/buyer-requests"),
