@@ -72,10 +72,12 @@ migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffol
   `DROP POLICY IF EXISTS <name> ON <table>;` so migrations re-run cleanly. ✅ **Done** —
   all Scope 2 migrations `040–046` now do this (`bcdd94d`). Follow the same pattern in
   any new migration.
-- **Dedup is exact-period only.** True-up dedup matches on exact (account, period_start,
-  period_end). Reconciling a full-year *documented estimate* against overlapping *monthly*
-  actuals is an unsolved overlap problem — deferred (a monthly actual will NOT yet
-  supersede the annual floor-area estimate). Don't assume it's handled.
+- **Dedup runs two passes** (`s2_ingestion/dedup.py`): exact-period (authority rank), then
+  **coverage** — an estimate is superseded by overlapping *actuals* once they cover ≥90%
+  (`COVERAGE_THRESHOLD`) of its period. So a full year of monthly actuals replaces the
+  annual floor-area estimate, but a single month does not (would drop 11 months). Known
+  gap: during *partial* accumulation (<90%) the estimate and the partial actuals both
+  count → transient double-count for the covered months (same as before; not auto-resolved).
 - **CI runs `ruff check --ignore E501`** on `evals tests calc parsing factors api llm
   copilot gap_analyzer rag db observability` — NOT `ruff format`, and NOT the `s*_` module
   dirs. So E501 never fails CI, and module packages aren't lint-gated by CI.
@@ -111,7 +113,8 @@ migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffol
     `run_live.py`; use review-recall to **calibrate `REVIEW_THRESHOLD`** (currently 0.85,
     a guess). Decide then whether to push live runs to LangSmith (scoring is decoupled).
     **This needs your redacted bills — it's the main open M1 item.**
-- **Overlap dedup** (deferred, see §4): annual documented estimate vs. monthly actuals.
+- ✅ **Overlap dedup** done (`eb2ef11`) — annual estimate vs. monthly actuals (≥90% coverage).
+  Remaining polish: flag/surface the partial-coverage (<90%) transient double-count (§4).
 - ✅ **Migration idempotency back-fill** done (`bcdd94d`).
 - **Real factor data** — replace sample factors with cited eGRID/IEA/Green-e via the loader.
 - **V1 (compliance-grade)**: EAC registry linkage, SB253 + CSRD ESRS E1 generators,
