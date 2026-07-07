@@ -200,3 +200,68 @@ class QuestionnaireDetailDTO(BaseModel):
     request: QuestionnaireRequestDTO
     questions: list[QuestionDTO] = Field(default_factory=list)
     mappings: list[QuestionMappingDTO] = Field(default_factory=list)
+
+
+# --- Epic D: SBTi / FLAG targets --------------------------------------------
+
+
+class TargetWizardRequest(BaseModel):
+    inventory_id: int
+    base_year: int
+    target_year: int
+    reduction_pct: float
+    method: str = "absolute"
+    horizon: str = "near_term"
+    version: str = "v2.0"
+    covered_categories: list[int] = Field(default_factory=list)
+    sector: str = ""
+    flag_kg_co2e: float = 0.0
+
+
+class TrajectoryPointDTO(BaseModel):
+    year: int
+    target_kg_co2e: float
+
+
+class AmbitionDTO(BaseModel):
+    chosen_reduction_pct: float
+    reference_reduction_pct: float
+    meets_reference: bool
+    note: str
+
+
+class FlagDTO(BaseModel):
+    is_flag_required: bool
+    flag_share: float
+    reason: str
+    no_deforestation_commitment_date: str | None = None
+
+
+class DraftTargetDTO(BaseModel):
+    version: str
+    horizon: str
+    category_class: str
+    scope3_target_mandatory: bool
+    base_year_assurance_required: bool
+    total_scope3_kg: float
+    required_categories: list[int] = Field(default_factory=list)
+    coverage_gap: list[int] = Field(default_factory=list)
+    meets_requirement: bool | None = None
+    trajectory: list[TrajectoryPointDTO] = Field(default_factory=list)
+    ambition: AmbitionDTO
+    flag: FlagDTO | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class TargetDTO(BaseModel):
+    target_id: int
+    org_id: str
+    type: str
+    method: str
+    sbti_version: str
+    base_year: int | None = None
+    target_year: int | None = None
+    reduction_pct: float | None = None
+    inventory_base_id: int | None = None
+    status: str
+    assurance_required: bool
