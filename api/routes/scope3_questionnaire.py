@@ -10,7 +10,7 @@ PDF/xlsx extraction is a deferred follow-up.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
 import db.s3_inventory_store as inv_store
 import db.s3_questionnaire_store as store
@@ -25,6 +25,7 @@ from api.models.scope3_schemas import (
     QuestionnaireRequestDTO,
 )
 from db.org_store import get_active_org
+from s3_questionnaire.exporter import AnswerRow, export_pack
 from s3_questionnaire.framework_detector import parse_questionnaire
 from s3_questionnaire.models import ParsedQuestion
 from s3_questionnaire.question_mapper import map_question
@@ -195,6 +196,48 @@ def get_questionnaire(
             )
             for m in mappings
         ],
+    )
+
+
+@router.post("/scope-3/questionnaires/{request_id}/export")
+def export_answers(
+    request_id: int,
+    format: str = Query("csv", pattern="^(csv|markdown|md)$"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Export the reviewed answers as a submittable pack (csv | markdown)."""
+    req = _require_request(current_user, request_id)
+    questions = store.list_questions(access_token=current_user.access_token, request_id=request_id)
+    mapping_by_q = {
+        m["question_id"]: m
+        for m in store.list_mappings(
+            access_token=current_user.access_token,
+            question_ids=[q["question_id"] for q in questions],
+        )
+    }
+    answers = [
+        AnswerRow(
+            question_text=q["question_text"],
+            question_type=q["question_type"],
+            framework_field_key=q.get("framework_field_key"),
+            answer_text=(m := mapping_by_q.get(q["question_id"]) or {}).get("answer_text"),
+            datapoint_ref=m.get("datapoint_ref"),
+            citation=m.get("citation"),
+            confidence_score=m.get("confidence_score") or 0.0,
+            flag_status=m.get("flag_status") or "needs_human",
+        )
+        for q in questions
+    ]
+    title = f"{req.get('customer_name') or 'Customer'} — {req['framework']}"
+    content = export_pack(answers, format, title=title)
+    ext = "csv" if format == "csv" else "md"
+    media = "text/csv" if format == "csv" else "text/markdown"
+    return Response(
+        content=content,
+        media_type=media,
+        headers={
+            "Content-Disposition": f"attachment; filename=scope3_questionnaire_{request_id}.{ext}"
+        },
     )
 
 
