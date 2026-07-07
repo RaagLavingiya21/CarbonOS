@@ -232,6 +232,54 @@ def list_records_for_inventory(
     )
 
 
+# --- Emission-factor overrides (per-org, admin-managed) ---------------------
+
+def list_ef_overrides(
+    *, access_token: str, user_id: str, active_only: bool = True
+) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    q = client.table("s1_ef_override").select("*").eq("org_id", org_id)
+    if active_only:
+        q = q.is_("valid_to", "null")
+    return q.order("created_at", desc=True).execute().data
+
+
+def find_active_ef_override(match: dict, *, access_token: str, user_id: str) -> dict | None:
+    """The org's current active override for a factor key, if any."""
+    org_id, client = _org_and_client(access_token, user_id)
+    q = (
+        client.table("s1_ef_override").select("*")
+        .eq("org_id", org_id).is_("valid_to", "null")
+        .eq("fuel_or_activity", match["fuel_or_activity"])
+        .eq("source_category", match["source_category"])
+        .eq("gas", match["gas"])
+        .eq("region", match.get("region", "US"))
+    )
+    my = match.get("model_year")
+    q = q.is_("model_year", "null") if my is None else q.eq("model_year", my)
+    resp = q.limit(1).execute()
+    return resp.data[0] if resp.data else None
+
+
+def create_ef_override(data: dict, *, access_token: str, user_id: str) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {"org_id": org_id, "created_by": user_id, **data}
+    return client.table("s1_ef_override").insert(row).execute().data[0]
+
+
+def retire_ef_override(
+    override_id: str, valid_to: str, *, access_token: str, user_id: str
+) -> dict | None:
+    """Soft-retire an override (set valid_to); never hard-delete (history)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_ef_override").update({"valid_to": valid_to})
+        .eq("org_id", org_id).eq("id", override_id).is_("valid_to", "null")
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
 # --- Collection status (readiness meter) ------------------------------------
 
 def upsert_collection_status(data: dict, *, access_token: str, user_id: str) -> dict:

@@ -216,10 +216,38 @@ export type S1Onboarding = {
   next_key: string | null;
 };
 
+export type S1Factor = {
+  fuel_or_activity: string;
+  source_category: string;
+  gas: string;
+  value: number;
+  unit: string;
+  source: string;
+  source_version: string;
+  region: string;
+  biogenic: boolean;
+  model_year: number | null;
+  is_override: boolean;
+  basis: string | null;
+  override_id: string | null;
+};
+export type S1Factors = { your_role: string; factors: S1Factor[]; override_count: number };
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  factors: () => request<S1Factors>("/api/scope1/factors"),
+  createFactorOverride: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/factors/override", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  retireFactorOverride: (overrideId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/factors/override/${overrideId}`, {
+      method: "DELETE",
+    }),
 
   listEntities: () => request<S1Entity[]>("/api/scope1/entities"),
   createEntity: (body: Record<string, unknown>) =>

@@ -205,6 +205,48 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Emission factors (admin overrides) -------------------------------------
+
+class EfFactorDTO(BaseModel):
+    fuel_or_activity: str
+    source_category: str
+    gas: str
+    value: float
+    unit: str
+    source: str
+    source_version: str
+    region: str = "US"
+    biogenic: bool = False
+    model_year: int | None = None
+    is_override: bool = False
+    basis: str | None = None
+    override_id: str | None = None
+
+
+class FactorsResponse(BaseModel):
+    your_role: str
+    factors: list[EfFactorDTO]
+    override_count: int
+
+
+class CreateEfOverrideRequest(BaseModel):
+    fuel_or_activity: str
+    source_category: str
+    gas: str = Field(pattern="^(CO2|CH4|N2O)$")
+    value: float = Field(gt=0)
+    unit: str
+    source: str
+    source_version: str
+    region: str = "US"
+    hhv: float | None = None
+    hhv_unit: str | None = None
+    tier: int | None = None
+    biogenic: bool = False
+    model_year: int | None = None
+    basis: str = Field(default="custom", pattern="^(measured|supplier|custom)$")
+    notes: str | None = None
+
+
 # --- Onboarding wizard ------------------------------------------------------
 
 class OnboardingStepDTO(BaseModel):

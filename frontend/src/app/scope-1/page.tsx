@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardCheck, Database, Flame, ListChecks, Settings2, FileText, Users } from "lucide-react";
+import { Beaker, ClipboardCheck, Database, Flame, ListChecks, Settings2, FileText, Users } from "lucide-react";
 
 import { MetricCard } from "@/components/data/MetricCard";
 import { ModuleIntro } from "@/components/modules/ModuleIntro";
@@ -112,6 +112,12 @@ export default function Scope1Dashboard() {
           <Link href="/scope-1/settings">
             <Users className="h-4 w-4" />
             Team &amp; roles
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/scope-1/factors">
+            <Beaker className="h-4 w-4" />
+            Emission factors
           </Link>
         </Button>
       </div>

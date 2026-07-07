@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import uuid
 from collections import Counter
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -21,12 +22,15 @@ from api.models.scope1_schemas import (
     ConsolidationPreviewRequest,
     ConsolidationPreviewResponse,
     CreateDataOwnerRequest,
+    CreateEfOverrideRequest,
     CreateEntityRequest,
     CreateFacilityRequest,
     CreateInventoryRequest,
     CreateSourceRequest,
+    EfFactorDTO,
     ExcludeSourceRequest,
     FacilityBreakdownDTO,
+    FactorsResponse,
     GasBreakdownDTO,
     InventoryReportResponse,
     InviteMemberRequest,
@@ -45,7 +49,7 @@ from db import scope1_store as store
 from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
-from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
+from s1_factors import EmissionFactorLibrary, MissingEmissionFactor, rows_to_factors
 from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_onboarding import OnboardingCounts, build_onboarding
@@ -63,9 +67,22 @@ router = APIRouter(prefix="/api/scope1", tags=["scope1"])
 _COMPLETE_STATUSES = {"received", "entered", "verified"}
 
 
-def _library() -> EmissionFactorLibrary:
-    """Canonical EPA library (mirrors the seeded s1_ef_record reference data)."""
-    return EmissionFactorLibrary.default()
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _library(user: CurrentUser) -> EmissionFactorLibrary:
+    """The org's effective EF library: canonical EPA set + this org's active
+    admin overrides layered on top (an override replaces the global factor for
+    its key). Falls back to the pure default if overrides can't be read."""
+    try:
+        rows = _guard(store.list_ef_overrides,
+                      access_token=user.access_token, user_id=user.user_id)
+    except HTTPException:
+        return EmissionFactorLibrary.default()
+    if not rows:
+        return EmissionFactorLibrary.default()
+    return EmissionFactorLibrary.with_overrides(rows_to_factors(rows))
 
 
 def _guard(func, *args, **kwargs):
@@ -135,6 +152,73 @@ def invite_member(req: InviteMemberRequest, user: CurrentUser = Depends(require_
     org_store.add_member(target_id, org.id, access_token=user.access_token, role="member")
     return _guard(store.set_member_role, target_id, req.role,
                   access_token=user.access_token, user_id=user.user_id)
+
+
+# --- Emission factors (admin overrides) -------------------------------------
+
+def _override_key(row: dict) -> tuple:
+    return (row["fuel_or_activity"], row["source_category"], row["gas"],
+            row.get("region", "US"), row.get("model_year"))
+
+
+@router.get("/factors", response_model=FactorsResponse)
+def list_factors(user: CurrentUser = Depends(get_current_user)) -> FactorsResponse:
+    """The org's effective factor set: canonical EPA factors with the org's
+    active admin overrides layered on top (marked `is_override`)."""
+    overrides = _guard(store.list_ef_overrides,
+                       access_token=user.access_token, user_id=user.user_id)
+    role = _guard(store.get_scope1_role,
+                  access_token=user.access_token, user_id=user.user_id)
+    override_keys = {_override_key(o) for o in overrides}
+
+    factors: list[EfFactorDTO] = [
+        EfFactorDTO(
+            fuel_or_activity=o["fuel_or_activity"], source_category=o["source_category"],
+            gas=o["gas"], value=float(o["value"]), unit=o["unit"], source=o["source"],
+            source_version=o["source_version"], region=o.get("region", "US"),
+            biogenic=bool(o.get("biogenic", False)), model_year=o.get("model_year"),
+            is_override=True, basis=o.get("basis"), override_id=o["id"],
+        )
+        for o in overrides
+    ]
+    for f in EmissionFactorLibrary.default().factors:
+        if (f.fuel_or_activity, f.source_category, f.gas, f.region, f.model_year) in override_keys:
+            continue  # replaced by an org override
+        factors.append(EfFactorDTO(
+            fuel_or_activity=f.fuel_or_activity, source_category=f.source_category,
+            gas=f.gas, value=f.value, unit=f.unit, source=f.source,
+            source_version=f.source_version, region=f.region, biogenic=f.biogenic,
+            model_year=f.model_year, is_override=False,
+        ))
+    return FactorsResponse(your_role=role, factors=factors, override_count=len(overrides))
+
+
+@router.post("/factors/override")
+def create_factor_override(
+    req: CreateEfOverrideRequest, user: CurrentUser = Depends(require_admin)
+) -> dict:
+    """Publish an org-specific factor. Versioned: any current active override
+    for the same key is retired (valid_to set) before the new one is inserted."""
+    data = req.model_dump(exclude_none=True)
+    existing = _guard(store.find_active_ef_override, data,
+                      access_token=user.access_token, user_id=user.user_id)
+    if existing is not None:
+        _guard(store.retire_ef_override, existing["id"], _today(),
+               access_token=user.access_token, user_id=user.user_id)
+    return _guard(store.create_ef_override, data,
+                  access_token=user.access_token, user_id=user.user_id)
+
+
+@router.delete("/factors/override/{override_id}")
+def retire_factor_override(
+    override_id: str, user: CurrentUser = Depends(require_admin)
+) -> dict:
+    """Retire an override (soft; history kept). The global EPA factor resumes."""
+    retired = _guard(store.retire_ef_override, override_id, _today(),
+                     access_token=user.access_token, user_id=user.user_id)
+    if retired is None:
+        raise HTTPException(status_code=404, detail="Active override not found.")
+    return retired
 
 
 # --- Entities / facilities / data owners ------------------------------------
@@ -777,7 +861,7 @@ def record_trace(
 def _persist_stationary(req: StationaryRecordRequest, user: CurrentUser) -> dict:
     """Calculate + persist one stationary record (shared by single + CSV intake)."""
     result = calculate_stationary(
-        req.fuel_or_activity, req.activity_value, req.activity_unit, _library(),
+        req.fuel_or_activity, req.activity_value, req.activity_unit, _library(user),
         biogenic=req.biogenic, hhv_override=req.hhv_override,
         data_quality_tier=req.data_quality_tier,
     )
@@ -792,7 +876,7 @@ def _persist_stationary(req: StationaryRecordRequest, user: CurrentUser) -> dict
 def _persist_mobile(req: MobileRecordRequest, user: CurrentUser) -> dict:
     """Calculate + persist one mobile record (shared by single + CSV intake)."""
     result = calculate_mobile(
-        req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(),
+        req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(user),
         miles=req.miles, model_year=req.model_year,
         distance_activity=req.distance_activity, data_quality_tier=req.data_quality_tier,
     )
