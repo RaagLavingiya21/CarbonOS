@@ -1,0 +1,39 @@
+# Disclosure framework datapoint specs — dated, versioned DATA (not code).
+# Maps the Scope-3 corporate inventory onto each framework's Scope-3 datapoints.
+# `derive` tells the mapper where the value comes from (looked up, never generated):
+#   scope3_total          -> inventory total
+#   scope3_category:N      -> that category's total
+#   methodology            -> a fixed grounded methodology statement (text, no number)
+# Scope 1/2 datapoints are intentionally omitted — those belong to the other scope
+# modules; this module fills only the Scope-3 portion of each disclosure.
+
+frameworks:
+  esrs_e1:
+    framework: ESRS E1 (CSRD)
+    version: v1-2026
+    is_provisional: false
+    unit: tCO2e
+    datapoints:
+      - {key: "E1-6_gross_scope3", label: "Gross Scope 3 GHG emissions", derive: "scope3_total"}
+      - {key: "E1-6_scope3_methodology", label: "Scope 3 methodology & data quality", derive: "methodology"}
+    include_category_breakdown: true
+
+  sb253:
+    framework: California SB 253
+    version: v2026-provisional
+    is_provisional: true   # CARB Scope 3 format not final (~end-2026) — provisional draft only
+    unit: tCO2e
+    datapoints:
+      - {key: "sb253_scope3", label: "Scope 3 emissions (reporting from 2027)", derive: "scope3_total"}
+      - {key: "sb253_methodology", label: "Methodology (spend-based EEIO)", derive: "methodology"}
+    include_category_breakdown: false
+
+  ifrs_s2:
+    framework: IFRS S2 / ISSB
+    version: v1-2026
+    is_provisional: false
+    unit: tCO2e
+    datapoints:
+      - {key: "ifrs_s2_scope3", label: "Scope 3 GHG emissions (per GHG Protocol)", derive: "scope3_total"}
+      - {key: "ifrs_s2_methodology", label: "Measurement approach, inputs & assumptions", derive: "methodology"}
+    include_category_breakdown: false
