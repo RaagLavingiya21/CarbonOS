@@ -1,0 +1,18 @@
+{
+  "_comment": "Labeled cases for the Epic B question->datapoint mapper (P.4.2.2). Inventory is fixed below. expected_ref = the datapoint the question should map to (or null => must be flagged needs_human, NEVER fabricated). Used by evals/test_question_mapping.py.",
+  "inventory": {
+    "total": 100000.0,
+    "categories": {"1": 70000.0, "4": 12000.0, "6": 8000.0}
+  },
+  "cases": [
+    {"text": "What were your gross global Scope 3 emissions in metric tons CO2e?", "question_type": "numeric", "framework_field_key": "cdp.C6.5", "expected_ref": "inventory:total", "expected_value": 100000.0},
+    {"text": "Total purchased goods and services emissions (kg CO2e)?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat1.total", "expected_value": 70000.0},
+    {"text": "What are your business travel emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat6.total", "expected_value": 8000.0},
+    {"text": "Total upstream transportation and distribution emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat4.total", "expected_value": 12000.0},
+    {"text": "What were your capital goods (category 2) emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "cat2 absent from this inventory -> needs_human"},
+    {"text": "What were your gross Scope 1 emissions in tCO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Scope 1 is out of scope for a Scope 3 module"},
+    {"text": "Describe your emissions reduction initiatives.", "question_type": "narrative", "framework_field_key": null, "expected_ref": null, "note": "non-numeric -> analyst answers"},
+    {"text": "Do you have a science-based target?", "question_type": "boolean", "framework_field_key": null, "expected_ref": null, "note": "non-numeric"},
+    {"text": "What is your total annual revenue in USD?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "no inventory datapoint -> must NOT fabricate"}
+  ]
+}
