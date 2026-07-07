@@ -97,18 +97,20 @@ migrations (`bcdd94d`), and **multi-meter PDF/OCR bill extraction + eval scaffol
   on first authenticated request via `ensure_demo_membership`).
 - **Checks**: `.venv/bin/python -m pytest -q` · `.venv/bin/python -m ruff check <files>` ·
   `cd frontend && npm run build && npm run lint`.
-- **Flow**: sites (+eGRID+CSV import) → calculate → coverage KPI → landlord (+estimate) →
-  reports (CDP/Amazon + request queue).
+- **Flow**: sites (+eGRID+CSV import) → import (PDF/OCR review) → calculate → coverage KPI →
+  landlord (+estimate) → reports (CDP/Amazon + request queue).
 
 ## 6. Next up / deferred
 - **M1 hardening**: ✅ true-up/estimated-read **dedup** · ✅ **aggregator adapter** interface
   (bind Arcadia/UtilityAPI + a pull route when a partner's utilities are known) · ✅
   **PDF/OCR extraction + eval scaffold + routes**. Remaining M1:
-  - **OCR frontend upload UI** — `/scope-2` page: upload → `extract-doc` → review table
-    (edit low-confidence/flagged meters) → `import-doc`. Backend is ready; no UI yet.
+  - ✅ **OCR frontend upload UI** done — `/scope-2/import` (`203261f`): site select → file→
+    base64 upload → `extract-doc` → per-meter review cards (confidence + flags, inline edit,
+    drop rows) → `import-doc`; result banner shows committed/superseded/skipped.
   - **Real-doc OCR evals** — drop redacted bills + labels into `evals/scope2_ocr/` and run
     `run_live.py`; use review-recall to **calibrate `REVIEW_THRESHOLD`** (currently 0.85,
     a guess). Decide then whether to push live runs to LangSmith (scoring is decoupled).
+    **This needs your redacted bills — it's the main open M1 item.**
 - **Overlap dedup** (deferred, see §4): annual documented estimate vs. monthly actuals.
 - ✅ **Migration idempotency back-fill** done (`bcdd94d`).
 - **Real factor data** — replace sample factors with cited eGRID/IEA/Green-e via the loader.
