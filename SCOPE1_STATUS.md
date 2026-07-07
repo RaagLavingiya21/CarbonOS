@@ -19,6 +19,9 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 - Users & roles (admin/editor/viewer) — `42e0cfc`
 - Hygiene: flag-gate nav, isolation lint, `DROP POLICY` guards, ci.yml revert — `a2bf85f`, `5afe586`
 
+Post-merge (on `feature/scope1-v1`, not in PR #24):
+- Incumbent / prior-year **base-year import** (A1b) — `f94b550` (no migration; reuses `s1_inventory.base_year*` cols; CSV or manual, source kept as evidence)
+
 Files: `s1_calc/ s1_factors/ s1_consolidation/ s1_reporting/ s1_intake/{,ocr,bayou}`, `api/routes/scope1.py`, `db/scope1_store.py`, `api/models/scope1_schemas.py`, `api/graphs/scope1_ocr_graph.py`, `scripts/seed_scope1_reference.py`, `supabase/migrations/03[0-9]_*`, `frontend/src/app/scope-1/*`, `frontend/src/lib/scope1-api.ts`, `tests/test_s1_*.py`.
 
 ## 3. Decisions (+ why)
@@ -37,7 +40,7 @@ Shared (still true):
 - `CREATE POLICY` isn't idempotent — every one is preceded by `DROP POLICY IF EXISTS` so migrations re-run cleanly.
 - Inserting explicit `null` overrides a column DEFAULT → NOT NULL violation. Drop None fields on insert (`req.model_dump(exclude_none=True)`).
 - Migrations are applied **by hand** (Supabase SQL Editor / psycopg) to a **shared dev DB all 3 agents use**; merging code does NOT apply them. `030–039` are applied to dev; **prod still needs them**.
-- Migration band: S1 = 030–039 (S2 040–049, S3 050–059).
+- Migration band: S1 = 030–039 (S2 040–049, S3 050–059). **NOW FULL (all 10 used).** Any future s1 schema change needs a band decision from the integrator — do NOT reach into 040+ (Scope 2). Reuse existing columns/tables where possible (e.g. base-year import reused `s1_inventory.base_year*`).
 - Ships dark via `NEXT_PUBLIC_SCOPE1_ENABLED`.
 
 Scope-1-specific (cost real time):
@@ -63,7 +66,7 @@ Paths: `ORIG=<repo>/product-footprint-analyzer` (has `.venv`, `node_modules`), `
 - **Live full-stack:** `uvicorn api.main:app --port 8001` + `cd frontend && npm run dev -- -p 3021`; open `http://localhost:3021`, log in, `/scope-1`.
 
 ## 6. Next up / deferred
-- **Next (MVP breadth):** (3) incumbent / prior-year inventory import (A1b), (4) guided onboarding wizard + checklist (P1), (5) admin annual EPA EF update / DB-backed EF loader (C1).
+- **Next (MVP breadth):** ~~(3) incumbent / prior-year import (A1b)~~ ✅ done `f94b550`. (4) guided onboarding wizard + checklist (P1), (5) admin annual EPA EF update / DB-backed EF loader (C1).
 - **Parked to end (Bayou lane, user's call):** (6) Bayou credential-connect auto-pull (Option A), (7) connection management — health/re-auth/sync (P5).
 - **V1 (explicitly out of MVP):** base-year recalculation engine, refrigerant/fugitive, process emissions, Samsara live telematics, ESRS/CDP/GHGRP exports, Scope 2 bolt-on, RLS-hard role enforcement, SOC 2, email display in the roles UI (currently truncated `user_id`).
 - **Integration follow-up:** the three `s{N}_member_role` tables may be consolidated into one shared roles model (integrator's call).
