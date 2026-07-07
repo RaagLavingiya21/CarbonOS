@@ -205,6 +205,42 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Base-year recalculation ------------------------------------------------
+
+class CreateRecalcEventRequest(BaseModel):
+    trigger_type: str = Field(
+        pattern="^(acquisition|divestiture|outsourcing|insourcing|"
+                "methodology_change|error_correction|organic_growth|organic_decline)$"
+    )
+    delta_tco2e: float
+    description: str | None = None
+    effective_date: str | None = None
+
+
+class RecalcEventDTO(BaseModel):
+    id: str
+    trigger_type: str
+    description: str | None = None
+    delta_tco2e: float
+    applied: bool
+    effective_date: str | None = None
+    is_structural: bool
+
+
+class RecalcAnalysisResponse(BaseModel):
+    inventory_id: str
+    base_year: int | None = None
+    base_year_total_tco2e: float
+    significance_threshold_pct: float | None = None
+    events: list[RecalcEventDTO]
+    structural_delta_pending: float
+    organic_delta: float
+    restated_total: float
+    pct_impact: float | None = None
+    recalc_required: bool | None = None
+    has_pending: bool
+
+
 # --- Trends & emissions intensity -------------------------------------------
 
 class SetInventoryMetricsRequest(BaseModel):

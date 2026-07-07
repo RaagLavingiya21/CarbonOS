@@ -242,6 +242,47 @@ def list_records_for_inventory(
     )
 
 
+# --- Base-year recalculation events -----------------------------------------
+
+def list_recalc_events(inventory_id: str, *, access_token: str, user_id: str) -> list[dict]:
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_base_year_recalc_event").select("*")
+        .eq("org_id", org_id).eq("inventory_id", inventory_id)
+        .order("created_at").execute().data
+    )
+
+
+def create_recalc_event(data: dict, *, access_token: str, user_id: str) -> dict:
+    org_id, client = _org_and_client(access_token, user_id)
+    row = {"org_id": org_id, "created_by": user_id, **data}
+    return client.table("s1_base_year_recalc_event").insert(row).execute().data[0]
+
+
+def delete_recalc_event(event_id: str, *, access_token: str, user_id: str) -> dict | None:
+    """Delete a not-yet-applied event (applied ones are immutable history)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_base_year_recalc_event").delete()
+        .eq("org_id", org_id).eq("id", event_id).eq("applied", False)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def mark_recalc_events_applied(
+    event_ids: list[str], applied_at: str, *, access_token: str, user_id: str
+) -> list[dict]:
+    if not event_ids:
+        return []
+    org_id, client = _org_and_client(access_token, user_id)
+    return (
+        client.table("s1_base_year_recalc_event")
+        .update({"applied": True, "applied_at": applied_at})
+        .eq("org_id", org_id).in_("id", event_ids).execute().data
+    )
+
+
 # --- Emission-factor overrides (per-org, admin-managed) ---------------------
 
 def list_ef_overrides(

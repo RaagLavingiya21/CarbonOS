@@ -255,10 +255,47 @@ export type S1Trends = {
   latest_vs_base_pct: number | null;
 };
 
+export type S1RecalcEvent = {
+  id: string;
+  trigger_type: string;
+  description: string | null;
+  delta_tco2e: number;
+  applied: boolean;
+  effective_date: string | null;
+  is_structural: boolean;
+};
+export type S1Recalc = {
+  inventory_id: string;
+  base_year: number | null;
+  base_year_total_tco2e: number;
+  significance_threshold_pct: number | null;
+  events: S1RecalcEvent[];
+  structural_delta_pending: number;
+  organic_delta: number;
+  restated_total: number;
+  pct_impact: number | null;
+  recalc_required: boolean | null;
+  has_pending: boolean;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  recalc: (inventoryId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc`),
+  addRecalcEvent: (inventoryId: string, body: Record<string, unknown>) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/events`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteRecalcEvent: (inventoryId: string, eventId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/events/${eventId}`, {
+      method: "DELETE",
+    }),
+  applyRecalc: (inventoryId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/apply`, { method: "POST" }),
 
   trends: (arVersion: string) =>
     request<S1Trends>(`/api/scope1/trends?ar_version=${encodeURIComponent(arVersion)}`),

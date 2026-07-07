@@ -26,6 +26,7 @@ from api.models.scope1_schemas import (
     CreateEntityRequest,
     CreateFacilityRequest,
     CreateInventoryRequest,
+    CreateRecalcEventRequest,
     CreateSourceRequest,
     EfFactorDTO,
     ExcludeSourceRequest,
@@ -39,6 +40,8 @@ from api.models.scope1_schemas import (
     OnboardingResponse,
     OnboardingStepDTO,
     ReadinessResponse,
+    RecalcAnalysisResponse,
+    RecalcEventDTO,
     SetBaseYearRequest,
     SetInventoryMetricsRequest,
     SetRoleRequest,
@@ -56,6 +59,7 @@ from s1_factors import EmissionFactorLibrary, MissingEmissionFactor, rows_to_fac
 from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
 from s1_onboarding import OnboardingCounts, build_onboarding
+from s1_recalc import RecalcEvent, analyze_recalc
 from s1_reporting import (
     DisclosureMeta,
     InventoryDatum,
@@ -337,6 +341,104 @@ async def import_base_year(
     return {**inv, "evidence_document_id": evidence["id"],
             "imported": {"base_year": parsed.base_year, "total_tco2e": parsed.total_tco2e,
                          "gwp_version": parsed.gwp_version}}
+
+
+# --- Base-year recalculation (GHG Protocol Ch. 5) ---------------------------
+
+def _recalc_analysis(inventory_id: str, user: CurrentUser):
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+    rows = _guard(store.list_recalc_events, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    events = [
+        RecalcEvent(
+            id=r["id"], trigger_type=r["trigger_type"], description=r.get("description"),
+            delta_tco2e=float(r["delta_tco2e"]), applied=bool(r.get("applied")),
+            effective_date=r.get("effective_date"),
+        )
+        for r in rows
+    ]
+    analysis = analyze_recalc(
+        base_year=inv.get("base_year"),
+        base_year_total_tco2e=_num(inv.get("base_year_total_tco2e")),
+        significance_threshold_pct=_num(inv.get("significance_threshold_pct")),
+        events=events,
+    )
+    return inv, analysis
+
+
+def _recalc_response(inventory_id: str, analysis) -> RecalcAnalysisResponse:
+    return RecalcAnalysisResponse(
+        inventory_id=inventory_id,
+        base_year=analysis.base_year,
+        base_year_total_tco2e=analysis.base_year_total_tco2e,
+        significance_threshold_pct=analysis.significance_threshold_pct,
+        events=[RecalcEventDTO(**vars(e)) for e in analysis.events],
+        structural_delta_pending=analysis.structural_delta_pending,
+        organic_delta=analysis.organic_delta,
+        restated_total=analysis.restated_total,
+        pct_impact=analysis.pct_impact,
+        recalc_required=analysis.recalc_required,
+        has_pending=analysis.has_pending,
+    )
+
+
+@router.get("/inventories/{inventory_id}/recalc", response_model=RecalcAnalysisResponse)
+def get_recalc(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> RecalcAnalysisResponse:
+    """Base-year recalculation analysis: which changes are structural, the pending
+    restatement delta, % impact vs the significance threshold, and restated total."""
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.post("/inventories/{inventory_id}/recalc/events", response_model=RecalcAnalysisResponse)
+def add_recalc_event(
+    inventory_id: str, req: CreateRecalcEventRequest,
+    user: CurrentUser = Depends(require_editor),
+) -> RecalcAnalysisResponse:
+    """Record a change event (structural or organic) against the base year."""
+    _guard(store.create_recalc_event, {"inventory_id": inventory_id, **req.model_dump(exclude_none=True)},
+           access_token=user.access_token, user_id=user.user_id)
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.delete("/inventories/{inventory_id}/recalc/events/{event_id}", response_model=RecalcAnalysisResponse)
+def remove_recalc_event(
+    inventory_id: str, event_id: str, user: CurrentUser = Depends(require_editor),
+) -> RecalcAnalysisResponse:
+    """Delete a not-yet-applied event (applied events are immutable history)."""
+    deleted = _guard(store.delete_recalc_event, event_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Event not found or already applied.")
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.post("/inventories/{inventory_id}/recalc/apply", response_model=RecalcAnalysisResponse)
+def apply_recalc(inventory_id: str, user: CurrentUser = Depends(require_editor)) -> RecalcAnalysisResponse:
+    """Restate the base year: fold pending structural deltas into the base-year
+    total, mark those events applied, and log the restatement (append-only)."""
+    _, analysis = _recalc_analysis(inventory_id, user)
+    if not analysis.has_pending:
+        raise HTTPException(status_code=400, detail="No pending structural changes to apply.")
+
+    restated = analysis.restated_total
+    _guard(store.set_base_year, inventory_id, {"base_year_total_tco2e": restated},
+           access_token=user.access_token, user_id=user.user_id)
+    pending_ids = [e.id for e in analysis.events if e.is_structural and not e.applied]
+    _guard(store.mark_recalc_events_applied, pending_ids, _today(),
+           access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "recalc_base_year", user, entity_table="s1_inventory",
+         field_changes={"from_tco2e": analysis.base_year_total_tco2e, "to_tco2e": restated,
+                        "structural_delta": analysis.structural_delta_pending,
+                        "events_applied": len(pending_ids)})
+
+    _, refreshed = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, refreshed)
 
 
 @router.post("/inventories/{inventory_id}/metrics")
