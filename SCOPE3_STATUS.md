@@ -18,6 +18,8 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic B — question→datapoint mapper (B4 🔴):** `s3_questionnaire/question_mapper.py` + `evals/test_question_mapping.py` — numbers looked-up-only, no-fabrication invariant. *(post-PR-#24)*
 - **Epic B — DB layer (unapplied):** migrations `054–057` (requests/questions/mappings/answer_library) + `db/s3_questionnaire_store.py` + `api/routes/scope3_questionnaire.py` (create/list/detect/map/get/submit). *(post-PR-#24)*
 - **Epic D — DB layer (unapplied):** migrations `310–312` (s3_targets/target_categories/flag_targets) + `db/s3_target_store.py` + `api/routes/scope3_targets.py` (wizard preview / create+persist / list); reuses `s3_targets` math + `s3_obligations.sbti_readiness` + Epic A inventory + Epic C profile. *(post-PR-#24)*
+- **Epic E — progress logic (first mid-term epic):** `s3_progress/` (decompose real-vs-method · tracker on/off-track + base-year recalc · deterministic narrative) + `tests/test_s3_progress.py`. Pure logic; DB layer not yet built. *(post-PR-#24)*
+- **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
 
 ## 3. Decisions (+ why)
