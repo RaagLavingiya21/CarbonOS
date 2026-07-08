@@ -332,10 +332,42 @@ export type S1Process = {
   total_tco2e: number;
 };
 
+export type S1BayouStatus = {
+  id: string;
+  org_id: string;
+  is_active: boolean;
+  configured: boolean;
+  last_sync: string | null;
+  next_sync: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type S1BayouSync = {
+  synced: boolean;
+  bills_fetched: number;
+  mocked: boolean;
+  reason: string | null;
+  last_sync: string | null;
+  next_sync: string | null;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
   onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  bayouStatus: () => request<S1BayouStatus>("/api/scope1/bayou-credentials"),
+  setBayouApiKey: (apiKey: string) =>
+    request<S1BayouStatus>("/api/scope1/bayou-credentials", {
+      method: "POST",
+      body: JSON.stringify({ bayou_api_key: apiKey }),
+    }),
+  disconnectBayou: () =>
+    request<S1BayouStatus>("/api/scope1/bayou-credentials", { method: "DELETE" }),
+  syncBayou: (force = false) =>
+    request<S1BayouSync>(`/api/scope1/bayou-credentials/sync${force ? "?force=true" : ""}`, {
+      method: "POST",
+    }),
 
   processFactors: () => request<S1ProcessFactor[]>("/api/scope1/process-factors"),
   process: (inventoryId: string, arVersion: string) =>

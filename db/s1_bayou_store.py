@@ -39,19 +39,20 @@ def get_or_create_credentials(
     *,
     access_token: str,
 ) -> BayouCredentialRow:
-    """Fetch org's Bayou credentials, or create an empty row (needs API key)."""
-    try:
-        resp = (
-            client.table("s1_bayou_credentials")
-            .select("*")
-            .eq("org_id", org_id)
-            .limit(1)
-            .execute()
-        )
-        if resp.data:
-            return resp.data[0]
-    except Exception:
-        pass
+    """Fetch org's Bayou credentials, or create an empty row (needs API key).
+
+    Called with a service-role client (RLS on this table denies clients), so the
+    insert is permitted and the key is never reachable from the frontend.
+    """
+    resp = (
+        client.table("s1_bayou_credentials")
+        .select("*")
+        .eq("org_id", org_id)
+        .limit(1)
+        .execute()
+    )
+    if resp.data:
+        return resp.data[0]
     # Create an empty (inactive) row so org-admin can fill in the key
     resp = (
         client.table("s1_bayou_credentials")
@@ -120,6 +121,24 @@ def mark_sync_complete(
             "next_sync": next_sync_time.isoformat(),
             "updated_at": now.isoformat(),
         })
+        .eq("org_id", org_id)
+        .execute()
+    )
+    if not resp.data:
+        raise NoCredentialsError(f"No Bayou credentials row for org {org_id}")
+    return resp.data[0]
+
+
+def deactivate_credentials(
+    org_id: str,
+    client: Client,
+    *,
+    access_token: str,
+) -> BayouCredentialRow:
+    """Disconnect Bayou: set is_active=False (keeps the row/history)."""
+    resp = (
+        client.table("s1_bayou_credentials")
+        .update({"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()})
         .eq("org_id", org_id)
         .execute()
     )

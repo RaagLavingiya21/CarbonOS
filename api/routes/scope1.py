@@ -18,6 +18,8 @@ from api.graphs.scope1_ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
     AssignOwnerRequest,
+    BayouCredentialsResponse,
+    BayouSyncResponse,
     CollectionStatusRequest,
     ConsolidationPreviewRequest,
     ConsolidationPreviewResponse,
@@ -49,6 +51,7 @@ from api.models.scope1_schemas import (
     RecalcAnalysisResponse,
     RecalcEventDTO,
     SetBaseYearRequest,
+    SetBayouApiKeyRequest,
     SetInventoryMetricsRequest,
     SetRoleRequest,
     StationaryRecordRequest,
@@ -57,7 +60,9 @@ from api.models.scope1_schemas import (
     UpsertBoundaryRequest,
 )
 from db import org_store
+from db import s1_bayou_store as bayou_store
 from db import scope1_store as store
+from db.client import get_service_client
 from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
@@ -175,6 +180,81 @@ def invite_member(req: InviteMemberRequest, user: CurrentUser = Depends(require_
     org_store.add_member(target_id, org.id, access_token=user.access_token, role="member")
     return _guard(store.set_member_role, target_id, req.role,
                   access_token=user.access_token, user_id=user.user_id)
+
+
+# --- Bayou credential-connect -----------------------------------------------
+
+def _active_org_id(user: CurrentUser) -> str:
+    org = org_store.get_active_org(user.access_token, user_id=user.user_id)
+    if org is None:
+        raise HTTPException(status_code=400, detail="No active organization.")
+    return org.id
+
+
+def _bayou_status(row: dict) -> BayouCredentialsResponse:
+    """Status view — never includes the raw key."""
+    return BayouCredentialsResponse(
+        id=row["id"], org_id=row["org_id"], is_active=bool(row.get("is_active")),
+        configured=bool(row.get("bayou_api_key")),
+        last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
+        created_at=row["created_at"], updated_at=row["updated_at"],
+    )
+
+
+@router.get("/bayou-credentials", response_model=BayouCredentialsResponse)
+def get_bayou_credentials(user: CurrentUser = Depends(require_editor)) -> BayouCredentialsResponse:
+    """Bayou connection status for the org (never returns the API key)."""
+    org_id = _active_org_id(user)
+    row = bayou_store.get_or_create_credentials(
+        org_id, get_service_client(), access_token=user.access_token)
+    return _bayou_status(row)
+
+
+@router.post("/bayou-credentials", response_model=BayouCredentialsResponse)
+def set_bayou_credentials(
+    req: SetBayouApiKeyRequest, user: CurrentUser = Depends(require_admin)
+) -> BayouCredentialsResponse:
+    """Admin sets/updates the org's Bayou API key (stored service-role only)."""
+    org_id = _active_org_id(user)
+    client = get_service_client()
+    bayou_store.get_or_create_credentials(org_id, client, access_token=user.access_token)
+    row = bayou_store.set_api_key(org_id, req.bayou_api_key, client, access_token=user.access_token)
+    _log(row["id"], "set_bayou_key", user, entity_table="s1_bayou_credentials")  # key never logged
+    return _bayou_status(row)
+
+
+@router.delete("/bayou-credentials", response_model=BayouCredentialsResponse)
+def disconnect_bayou_credentials(user: CurrentUser = Depends(require_admin)) -> BayouCredentialsResponse:
+    """Admin disconnects Bayou (deactivates; keeps the row/history)."""
+    org_id = _active_org_id(user)
+    try:
+        row = bayou_store.deactivate_credentials(
+            org_id, get_service_client(), access_token=user.access_token)
+    except bayou_store.NoCredentialsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _log(row["id"], "disconnect_bayou", user, entity_table="s1_bayou_credentials")
+    return _bayou_status(row)
+
+
+@router.post("/bayou-credentials/sync", response_model=BayouSyncResponse)
+def sync_bayou(
+    force: bool = Query(False), user: CurrentUser = Depends(require_editor)
+) -> BayouSyncResponse:
+    """Trigger a Bayou bill sync if due (or forced). PDF fetch/OCR is mocked for
+    now — this advances the sync schedule so the background poller can be wired
+    on top without changing the surface."""
+    org_id = _active_org_id(user)
+    client = get_service_client()
+    if not (force or bayou_store.should_sync(org_id, client, access_token=user.access_token)):
+        return BayouSyncResponse(synced=False, reason="not due")
+    try:
+        row = bayou_store.mark_sync_complete(org_id, client, access_token=user.access_token)
+    except bayou_store.NoCredentialsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return BayouSyncResponse(
+        synced=True, bills_fetched=0, mocked=True,
+        last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
+    )
 
 
 # --- Emission factors (admin overrides) -------------------------------------

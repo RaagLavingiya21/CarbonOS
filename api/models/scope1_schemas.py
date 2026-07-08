@@ -419,7 +419,7 @@ class OnboardingResponse(BaseModel):
 # --- Bayou credentials (credential-connect) --------------------------------
 
 class SetBayouApiKeyRequest(BaseModel):
-    """Org-admin sets their Bayou API key (encrypted at-rest by Supabase)."""
+    """Org-admin sets their Bayou API key (stored backend/service-role only)."""
     bayou_api_key: str = Field(..., min_length=1, description="Bayou API key from their console")
 
 
@@ -428,7 +428,17 @@ class BayouCredentialsResponse(BaseModel):
     id: str
     org_id: str
     is_active: bool
-    last_sync: str | None
-    next_sync: str | None
+    configured: bool = False        # a key has been set
+    last_sync: str | None = None
+    next_sync: str | None = None
     created_at: str
     updated_at: str
+
+
+class BayouSyncResponse(BaseModel):
+    synced: bool
+    bills_fetched: int = 0
+    mocked: bool = True             # real Bayou fetch/OCR is a follow-up
+    reason: str | None = None
+    last_sync: str | None = None
+    next_sync: str | None = None
