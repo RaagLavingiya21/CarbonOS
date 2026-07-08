@@ -67,6 +67,13 @@ class BayouClient:
         """Fetch the parsed bill (or its in-progress status)."""
         return _parse_bill(bill_id, self._request("GET", f"/bills/{bill_id}"))
 
+    def list_bills(self) -> list[BayouBill]:
+        """List the account's bills (credential-connect auto-pull). Bayou returns
+        either a bare array or `{"bills": [...]}`; both are handled."""
+        data = self._request("GET", "/bills")
+        items = data if isinstance(data, list) else (data.get("bills") or [])
+        return [_parse_bill(str(b.get("id") or b.get("bill_id") or ""), b) for b in items]
+
     # -- isolated transport (confirm against Bayou docs/sandbox) --------------
     def _http_request(self, method: str, path: str, *, files=None, json=None) -> dict:
         import httpx

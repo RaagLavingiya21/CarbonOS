@@ -437,8 +437,9 @@ class BayouCredentialsResponse(BaseModel):
 
 class BayouSyncResponse(BaseModel):
     synced: bool
-    bills_fetched: int = 0
-    mocked: bool = True             # real Bayou fetch/OCR is a follow-up
+    bills_fetched: int = 0          # bills returned by Bayou's /bills
+    bills_parsed: int = 0           # subset already unlocked/parsed
+    queued: int = 0                 # new extractions ingested into the review queue
     reason: str | None = None
     last_sync: str | None = None
     next_sync: str | None = None

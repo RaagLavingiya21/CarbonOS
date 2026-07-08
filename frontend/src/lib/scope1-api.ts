@@ -345,7 +345,8 @@ export type S1BayouStatus = {
 export type S1BayouSync = {
   synced: boolean;
   bills_fetched: number;
-  mocked: boolean;
+  bills_parsed: number;
+  queued: number;
   reason: string | null;
   last_sync: string | null;
   next_sync: string | null;

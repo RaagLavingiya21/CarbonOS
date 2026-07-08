@@ -9,11 +9,15 @@ unit-testable without a live key. See research/2.3 section B1.
 
 from s1_intake.bayou.client import BayouBill, BayouClient, BayouError
 from s1_intake.bayou.mapping import BAYOU_CONFIDENCE, bayou_bill_to_extraction
+from s1_intake.bayou.sync import PulledBill, PullResult, pull_parsed_extractions
 
 __all__ = [
     "BAYOU_CONFIDENCE",
     "BayouBill",
     "BayouClient",
     "BayouError",
+    "PullResult",
+    "PulledBill",
     "bayou_bill_to_extraction",
+    "pull_parsed_extractions",
 ]

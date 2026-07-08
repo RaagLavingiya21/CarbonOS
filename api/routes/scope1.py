@@ -75,7 +75,12 @@ from s1_fugitive import (
     refrigerant_gwp,
 )
 from s1_intake import parse_base_year_csv, parse_intake_csv
-from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
+from s1_intake.bayou import (
+    BayouClient,
+    BayouError,
+    bayou_bill_to_extraction,
+    pull_parsed_extractions,
+)
 from s1_onboarding import OnboardingCounts, build_onboarding
 from s1_process import compute_emission_kg, list_process_factors, process_tco2e
 from s1_recalc import RecalcEvent, analyze_recalc
@@ -236,24 +241,65 @@ def disconnect_bayou_credentials(user: CurrentUser = Depends(require_admin)) -> 
     return _bayou_status(row)
 
 
+def _ingest_bayou_bills(parsed, user: CurrentUser) -> int:
+    """Queue pulled Bayou extractions into the org's OCR review queue (against the
+    latest inventory), where a reviewer assigns the source + finalizes -> calc.
+    Deduped by bayou_bill_id against already-queued rows. Returns count queued."""
+    inventories = _guard(store.list_inventories,
+                         access_token=user.access_token, user_id=user.user_id)
+    if not inventories:
+        return 0
+    inv = max(inventories, key=lambda i: i["reporting_year"])
+    seen = {
+        e.get("bayou_bill_id")
+        for e in _guard(store.list_ocr_queue, status="approved",
+                        access_token=user.access_token, user_id=user.user_id)
+    }
+    queued = 0
+    for pb in parsed:
+        if pb.bill.bill_id in seen:
+            continue
+        _guard(store.create_ocr_extraction, {
+            "inventory_id": inv["id"],
+            "graph_session_id": pb.bill.bill_id,     # no LangGraph run for Bayou
+            "doc_kind": "utility_bill",
+            "parser": "bayou",
+            "bayou_bill_id": pb.bill.bill_id,
+            "extracted": pb.extraction.to_dict(),
+            "min_confidence": pb.extraction.min_confidence,
+            "status": "approved",                    # trained parser -> trusted Tier 2
+        }, access_token=user.access_token, user_id=user.user_id)
+        queued += 1
+    return queued
+
+
 @router.post("/bayou-credentials/sync", response_model=BayouSyncResponse)
 def sync_bayou(
     force: bool = Query(False), user: CurrentUser = Depends(require_editor)
 ) -> BayouSyncResponse:
-    """Trigger a Bayou bill sync if due (or forced). PDF fetch/OCR is mocked for
-    now — this advances the sync schedule so the background poller can be wired
-    on top without changing the surface."""
+    """Credential-connect auto-pull: if due (or forced), use the org's stored key
+    to list its Bayou bills, map the parsed ones, and ingest them into the OCR
+    review queue. Bayou parses the PDFs server-side, so there's no local fetch to
+    mock; the review->record step drives calc (unchanged)."""
     org_id = _active_org_id(user)
-    client = get_service_client()
-    if not (force or bayou_store.should_sync(org_id, client, access_token=user.access_token)):
+    svc = get_service_client()
+    if not (force or bayou_store.should_sync(org_id, svc, access_token=user.access_token)):
         return BayouSyncResponse(synced=False, reason="not due")
     try:
-        row = bayou_store.mark_sync_complete(org_id, client, access_token=user.access_token)
+        api_key = bayou_store.get_active_api_key(org_id, svc, access_token=user.access_token)
     except bayou_store.NoCredentialsError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        pull = pull_parsed_extractions(BayouClient(api_key=api_key))
+    except BayouError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    queued = _ingest_bayou_bills(pull.parsed, user)
+    row = bayou_store.mark_sync_complete(org_id, svc, access_token=user.access_token)
     return BayouSyncResponse(
-        synced=True, bills_fetched=0, mocked=True,
-        last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
+        synced=True, bills_fetched=pull.fetched, bills_parsed=pull.parsed_count,
+        queued=queued, last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
     )
 
 

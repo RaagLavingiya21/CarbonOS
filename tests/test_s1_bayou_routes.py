@@ -83,16 +83,55 @@ def test_disconnect_404_when_missing(monkeypatch) -> None:
     assert resp.status_code == 404
 
 
-def test_sync_when_due(monkeypatch) -> None:
-    monkeypatch.setattr("db.s1_bayou_store.should_sync", lambda org, c, **k: True)
+def _pull_result(bill_ids: list[str]):
+    """A fake PullResult whose parsed items expose .bill.bill_id + .extraction."""
+    from s1_intake.bayou import PullResult
+    parsed = [
+        types.SimpleNamespace(
+            bill=types.SimpleNamespace(bill_id=bid),
+            extraction=types.SimpleNamespace(to_dict=lambda: {"gas": 1}, min_confidence=0.95),
+        )
+        for bid in bill_ids
+    ]
+    return PullResult(fetched=len(bill_ids) + 1, parsed=parsed)  # +1 "still parsing" bill
+
+
+def _wire_sync(monkeypatch, bill_ids: list[str], queue_seen: list[str] | None = None) -> list[dict]:
+    monkeypatch.setattr("db.s1_bayou_store.get_active_api_key", lambda org, c, **k: "live_key")
+    monkeypatch.setattr("api.routes.scope1.pull_parsed_extractions",
+                        lambda cl: _pull_result(bill_ids))
+    monkeypatch.setattr("db.scope1_store.list_inventories",
+                        lambda **k: [{"id": "inv1", "reporting_year": 2024}])
+    monkeypatch.setattr("db.scope1_store.list_ocr_queue",
+                        lambda **k: [{"bayou_bill_id": b} for b in (queue_seen or [])])
+    created: list[dict] = []
+    monkeypatch.setattr("db.scope1_store.create_ocr_extraction",
+                        lambda row, **k: created.append(row) or {"id": "e1", **row})
     monkeypatch.setattr("db.s1_bayou_store.mark_sync_complete",
                         lambda org, c, **k: {**_ROW, "last_sync": "2026-01-02T00:00:00Z",
                                              "next_sync": "2026-01-02T01:00:00Z"})
+    return created
+
+
+def test_sync_when_due_pulls_and_queues(monkeypatch) -> None:
+    monkeypatch.setattr("db.s1_bayou_store.should_sync", lambda org, c, **k: True)
+    created = _wire_sync(monkeypatch, ["b1", "b2"])
     resp = client.post("/api/scope1/bayou-credentials/sync", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["synced"] is True and body["mocked"] is True
+    assert body["synced"] is True
+    assert body["bills_fetched"] == 3 and body["bills_parsed"] == 2 and body["queued"] == 2
+    assert {r["bayou_bill_id"] for r in created} == {"b1", "b2"}
     assert body["next_sync"] == "2026-01-02T01:00:00Z"
+
+
+def test_sync_dedupes_already_queued(monkeypatch) -> None:
+    monkeypatch.setattr("db.s1_bayou_store.should_sync", lambda org, c, **k: True)
+    created = _wire_sync(monkeypatch, ["b1", "b2"], queue_seen=["b1"])
+    resp = client.post("/api/scope1/bayou-credentials/sync", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["queued"] == 1               # b1 skipped (already queued)
+    assert {r["bayou_bill_id"] for r in created} == {"b2"}
 
 
 def test_sync_skipped_when_not_due(monkeypatch) -> None:
@@ -104,7 +143,7 @@ def test_sync_skipped_when_not_due(monkeypatch) -> None:
 
 def test_sync_force_overrides_schedule(monkeypatch) -> None:
     monkeypatch.setattr("db.s1_bayou_store.should_sync", lambda org, c, **k: False)
-    monkeypatch.setattr("db.s1_bayou_store.mark_sync_complete", lambda org, c, **k: dict(_ROW))
+    _wire_sync(monkeypatch, [])
     resp = client.post("/api/scope1/bayou-credentials/sync?force=true", headers=AUTH_HEADERS)
     assert resp.status_code == 200
     assert resp.json()["synced"] is True

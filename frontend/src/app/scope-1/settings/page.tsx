@@ -202,7 +202,11 @@ function BayouConnectCard({ onError }: { onError: (message: string) => void }) {
     setNote(null);
     try {
       const r = await scope1Api.syncBayou(true);
-      setNote(r.synced ? `Sync ran (${r.bills_fetched} bills, mocked fetch).` : `Not synced: ${r.reason ?? ""}`);
+      setNote(
+        r.synced
+          ? `Synced: ${r.bills_parsed} parsed of ${r.bills_fetched} bill(s), ${r.queued} queued for review.`
+          : `Not synced: ${r.reason ?? ""}`,
+      );
       await load();
     } catch (err) {
       onError((err as Error).message);
