@@ -1,14 +1,14 @@
 # Scope 3 — Working Status / Resume-Here
 
 Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per-epic plans `04–12` + overview `00`); this is the current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope3-v1 (off merged main, PR #24)_
+_Last updated: 2026-07-07 · Branch: feature/scope3-v2 (Epic A frontend + next phase prep)_
 
 ## 1. Where we are
 Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). **Pure business logic for ALL NINE epics (A–I) is built and tested** across 10 isolated `s3_*` packages (127 scope-3 tests). The **DB layer (migrations + stores + routes) exists for the four MVP epics A/B/C/D** (code-complete, unapplied); E–I are logic-only so far. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped, hardened, and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
 
 **`s3_*` packages (10):** `s3_factors` (vendored CEDA) · `s3_measure` (inventory) · `s3_obligations` (C) · `s3_targets` (D) · `s3_questionnaire` (B) · `s3_progress` (E) · `s3_disclosure` (G) · `s3_usephase` (H) · `s3_levers` (I) · `s3_suppliers` (F).
 
-## 2. Done (shipped to main via PR #24)
+## 2. Done (shipped + post-PR work)
 - **Planning:** `scope3-gap-analysis/00–12` — gap analysis + all 9 epic implementation plans + program overview.
 - **Vendored engine:** `s3_factors/` (ef_lookup + material_mapping, self-contained CEDA copy) — `d510728`.
 - **Epic A — inventory (logic):** `s3_measure/spend_parser.py` (A2), `s3_measure/spend_classifier.py` + `evals/test_spend_classification.py` (A3 🔴, `a1632b2`+`9579953`), `s3_measure/inventory.py` (A4, Cat-1 reconcile).
@@ -27,6 +27,7 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic F — supplier logic:** `s3_suppliers/` (cohorting by emissions/spend + program scorecard; outreach loop is shared copilot, out of scope) + `tests/test_s3_suppliers.py`. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
+- **Epic A — frontend (v2):** `/scope-3/` hub page · `/scope-3/inventory` list/create · `/scope-3/inventory/[id]` detail with category breakdown · scope3-api.ts client. Gated behind `NEXT_PUBLIC_SCOPE3_ENABLED`. *(v2, this session)*
 
 ## 3. Decisions (+ why)
 - **Migration bands (Scope 3):** `050–059` (A `050–053`, B `054–057`, C `058–059`) and **`310–319`** for Epic D onward (D uses `310–312`). The high second band was chosen (integrator) to avoid any collision with the low-numbered scopes; `060–309` intentionally left unused by Scope 3.
@@ -72,19 +73,28 @@ python3 -m ruff check s3_factors s3_measure s3_obligations s3_targets s3_questio
 - **Env:** `NEXT_PUBLIC_SCOPE3_ENABLED` (frontend flag, default OFF); backend needs `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`DATABASE_URL` (see `.env.example`). Deps: Python 3.13, `pandas rapidfuzz openpyxl pyyaml supabase fastapi`.
 
 ## 6. Next up / deferred
-**Queued:**
-1. **Apply migrations to the shared dev DB** (by hand, Supabase SQL Editor, in order): the ten `050–059`, then `310`, `311`, `312`. Then **integration-test** the A/B/C/D DB layers (stores, routes, RLS) — currently static-verified only. *(Blocked on DB access — I can't apply or run these; needs someone to apply, or a throwaway `DATABASE_URL`.)*
-2. **Frontend:** `/scope-3/*` pages + `lib/scope3-api.ts`, nav gated behind the flag (nothing built yet).
-3. Epic B follow-ups: **export packs DONE** (`s3_questionnaire/exporter.py` — CSV + Markdown, `/export` route); still deferred = methodology-narrative assembly (P.4.2.4, needs grounded LLM), PDF export (no `fpdf` in env), structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
-4. Epic A follow-ups (still): per-line classification persistence + line-level drill-down + override PATCH.
+**Queued (v2):**
+1. **Apply migrations to the shared dev DB** (by hand, Supabase SQL Editor, in order): the ten `050–059`, then `310`, `311`, `312`. Then **integration-test** the A/B/C/D DB layers (stores, routes, RLS) — currently static-verified only. *(Blocked on DB access — Scope 2 agent applies them; once live, Scope 3 frontend can test end-to-end.)*
+2. **Frontend DONE** (v2, this session): `/scope-3/*` pages + `lib/scope3-api.ts`, nav gated behind the flag.
+3. **DB layers for E–I:** deferred to later v2 milestone (focus: get A frontending successfully against DB, then expand). See proposal below.
+4. Epic B follow-ups: **export packs DONE** (`s3_questionnaire/exporter.py` — CSV + Markdown, `/export` route); still deferred = methodology-narrative assembly (P.4.2.4, needs grounded LLM), PDF export (no `fpdf` in env), structured PDF/xlsx extraction in `detect` (currently UTF-8 text only).
+5. Epic A follow-ups (still): per-line classification persistence + line-level drill-down + override PATCH.
 
 **Deferred / parked:**
 - Epic A follow-ups: per-line classification persistence, line-level drill-down to EF citation, analyst override PATCH.
 - **DB layers for E–I** (progress, disclosure, use-phase, levers, suppliers) — logic done, but tables/stores/routes not built (all in the `310+` band; most only worth wiring after A/B/C/D are applied and real inventories exist).
 - Deferred logic bits: Epic B methodology narrative (needs grounded LLM), PDF/iXBRL export (need libs not in env), claims *substantiation* is legal-gated (flagger built, don't ship claims UI without legal review).
 
-## 7. Open questions
-- **Migration band overflow:** A(4)+B(4)+C(2) fills `050–059` exactly; **Epic D onward needs an additional reserved band** — confirm with the integrator.
-- **Which shared dev DB / who applies:** confirm the target dev-DB connection and that Scope 3's `050–059` get applied there (and tracked separately for prod).
-- **Moving standards:** SBTi V2.0 net-zero coverage % (`unconfirmed`) and SB253 Scope 3 report format (open until CARB final reg ~end-2026) — revisit `s3_obligations/data/` when they land.
+## 7. Architectural Decisions & Blockers (v2)
+
+**DB layers for E–I (Epic Progress, Disclosure, Use-Phase, Levers, Suppliers):**
+- **Deferred decision:** Should E–I migrations go into `313–319` (second band) or into a new third band (e.g., `320–349`)? Context: Epic D uses `310–312` (3 tables). E–I would need ~10–15 tables total (rough estimate; needs design pass). Decision: **current plan is `313–319`** (remaining slots in the `310s`), but this leaves no buffer. **Flagging for integrator confirmation** — if E–I is MVP post-A/B/C/D, keep `313–319`; if E–I ships v1+, recommend a third band (`320–349`, `060–079`, or `080–099`).
+- **Scope:** Initial DB build targets progress tracking (base-year, on/off-track, narrative) and disclosure datapoint mapping (ESRS E1 / SB253 / IFRS S2). Use-phase, levers, suppliers are lower-priority (activity-based, offset claims, supplier outreach all have compliance/legal gates). Recommend MVP = progress + disclosure; v1+ = use-phase/levers/suppliers if there's time.
+- **Implementation order:** E (progress) > G (disclosure) > H (use-phase) > I (levers) > F (suppliers). E + G unlock KPI tracking and reporting; H/I/F are value-adds.
+
+**Open questions for Scope 2 integrator:**
+- **Which shared dev DB / who applies:** confirm the target dev-DB connection and that Scope 3's `050–059` + `310–312` get applied there (and tracked separately for prod).
 - **Per-line classification linkage:** decide whether A4 should return a record→classification map (unlocks drill-down + override) before building Epic A's UI.
+
+**Standards / compliance:**
+- **Moving standards:** SBTi V2.0 net-zero coverage % (`unconfirmed`) and SB253 Scope 3 report format (open until CARB final reg ~end-2026) — revisit `s3_obligations/data/` when they land.
