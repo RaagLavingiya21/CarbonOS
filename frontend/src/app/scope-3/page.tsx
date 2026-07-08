@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Boxes, Layers, ShieldCheck } from "lucide-react";
+import { ArrowRight, Boxes, ClipboardList, Layers, ShieldCheck } from "lucide-react";
 
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,12 @@ const ENTRIES = [
     icon: ShieldCheck,
     title: "Obligations — is this my problem?",
     body: "Screen the company against ESRS, SB253/261, IFRS S2 and more. See what applies, what's uncertain, deadlines, and customer cascade exposure.",
+  },
+  {
+    href: "/scope-3/questionnaires",
+    icon: ClipboardList,
+    title: "Answer a customer questionnaire",
+    body: "Upload an inbound CDP / EcoVadis / customer request, auto-detect the framework, map answers from your inventory, then export or submit.",
   },
 ];
 

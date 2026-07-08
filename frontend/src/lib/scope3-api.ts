@@ -119,6 +119,64 @@ export type ObligationEvaluation = {
   cascade: CascadeSignal[];
 };
 
+// --- Epic B: inbound request -> questionnaire answer -----------------------
+
+export type QuestionnaireRequest = {
+  request_id: number;
+  org_id: string;
+  customer_name: string | null;
+  framework: string;
+  status: string;
+  deadline: string | null;
+  inventory_id: number | null;
+  created_at: string | null;
+};
+
+export type CreateQuestionnairePayload = {
+  customer_name: string | null;
+  framework: string | null;
+  deadline: string | null;
+  inventory_id: number | null;
+};
+
+export type DetectResult = {
+  request_id: number;
+  framework: string;
+  is_low_confidence: boolean;
+  question_count: number;
+};
+
+export type MapResult = {
+  request_id: number;
+  mapped: number;
+  needs_human: number;
+};
+
+export type Question = {
+  question_id: number;
+  question_index: number;
+  question_text: string;
+  question_type: string;
+  framework_field_key: string | null;
+};
+
+export type QuestionMapping = {
+  question_id: number;
+  datapoint_ref: string | null;
+  mapped_value: number | null;
+  answer_text: string | null;
+  confidence_score: number;
+  method: string;
+  citation: string | null;
+  flag_status: string;
+};
+
+export type QuestionnaireDetail = {
+  request: QuestionnaireRequest;
+  questions: Question[];
+  mappings: QuestionMapping[];
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -196,6 +254,44 @@ export const scope3Api = {
   evaluateObligations: () =>
     request<ObligationEvaluation>("/scope-3/obligations/evaluate", { method: "POST" }),
   listObligations: () => request<Obligation[]>("/scope-3/obligations"),
+
+  // Epic B: inbound request -> questionnaire answer
+  listQuestionnaires: () =>
+    request<QuestionnaireRequest[]>("/scope-3/questionnaires"),
+  createQuestionnaire: (payload: CreateQuestionnairePayload) =>
+    request<QuestionnaireRequest>("/scope-3/questionnaires", {
+      method: "POST",
+      body: payload,
+    }),
+  getQuestionnaire: (id: number) =>
+    request<QuestionnaireDetail>(`/scope-3/questionnaires/${id}`),
+  detectQuestionnaire: (id: number, file: File) =>
+    upload<DetectResult>(`/scope-3/questionnaires/${id}/detect`, file),
+  mapQuestionnaire: (id: number) =>
+    request<MapResult>(`/scope-3/questionnaires/${id}/map`, { method: "POST" }),
+  submitQuestionnaire: (id: number) =>
+    request<QuestionnaireRequest>(`/scope-3/questionnaires/${id}/submit`, {
+      method: "POST",
+    }),
+  exportQuestionnaire: async (id: number, format: "csv" | "markdown") => {
+    const headers = new Headers();
+    const token = await getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(
+      `${BACKEND_URL}/scope-3/questionnaires/${id}/export?format=${format}`,
+      { method: "POST", headers },
+    );
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        detail = (await response.json())?.detail ?? detail;
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(`Scope 3 API ${response.status}: ${detail}`);
+    }
+    return response.blob();
+  },
 };
 
 export const SCOPE3_CATEGORY_NAMES: Record<number, string> = {
