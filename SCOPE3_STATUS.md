@@ -1,7 +1,19 @@
 # Scope 3 — Working Status / Resume-Here
 
 Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per-epic plans `04–12` + overview `00`); this is the current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope3-v1 (off merged main, PR #24)_
+_Last updated: 2026-07-07 · Branch: feature/scope3-v1-backend (off feature/scope3-v1). V2 lane split: backend here, frontend on feature/scope3-v2._
+
+## 0. V2 LANE SPLIT + BLOCKERS (read first — for the integrator)
+Scope 3 V2 work is split across **two branches / two worktrees** to keep one-driver-per-worktree:
+- **Backend** (this worktree, `feature/scope3-v1-backend`, off `feature/scope3-v1`): E–I DB layers + disclosure routes. Touches only `s3_*`, `db/s3_*_store.py`, `api/routes/scope3_*.py`, `supabase/migrations/`, and append-only `api/main.py`. **Pushed to `origin/feature/scope3-v1-backend`.**
+- **Frontend** (the `…-scope3` worktree, `feature/scope3-v2`, off `main`): `/scope-3` pages + `scope3-api.ts` + app-shell nav. Owned by a separate actor.
+- **These two branches touch disjoint files** (backend = no frontend files; frontend = no `s3_*`/routes) → they merge clean. Backend is off `v1` (Scope-3-only), frontend off `main` (all scopes) — integrator merges both.
+
+**BLOCKERS / TODO for the integrator:**
+- **Migrations `313–317` (E–I) are NOT applied.** `050–059` + `310–312` were hand-applied to the shared dev DB earlier; the new E–I migrations still need applying via the Supabase SQL Editor (idempotent, is_org_member RLS, band `310–319`).
+- **All V2 backend DB routes are STATIC-VERIFIED ONLY** (ruff + isolation + migration lint + import smoke). No live DB in the backend worktree, so route→DB→RLS is untested against Postgres. Verify after applying `313–317`.
+- **Epic E limitation:** stored `inventory_category_results` has `method` but no `ef_version`, so progress real-vs-method reflects method switches only (constant EF version). Add an `ef_version` column to unlock full EF-version attribution.
+- CI note: did NOT touch `ci.yml`. Ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
 
 ## 1. Where we are
 Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). **Pure business logic for ALL NINE epics (A–I) is built and tested** across 10 isolated `s3_*` packages (127 scope-3 tests). The **DB layer (migrations + stores + routes) exists for the four MVP epics A/B/C/D** (code-complete, unapplied); E–I are logic-only so far. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped, hardened, and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
@@ -27,6 +39,7 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic F — supplier logic:** `s3_suppliers/` (cohorting by emissions/spend + program scorecard; outreach loop is shared copilot, out of scope) + `tests/test_s3_suppliers.py`. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
+- **V2 backend (feature/scope3-v1-backend, unapplied):** DB layers for E–I + disclosure routes — migrations `313` progress · `314` base-year-recalc · `315` suppliers · `316` use-phase-specs · `317` claims; stores `db/s3_{progress,supplier,usephase,claims}_store.py`; routes `api/routes/scope3_{disclosure,progress,suppliers,usephase,levers}.py` (disclosure calc/export · progress track/recalc · supplier CRUD+cohort+scorecard · use-phase calc+specs · levers/MAC/claims-assess). Pure `*_from_rows`/`calc_from_request` helpers make each route path unit-testable without a DB. **146 scope-3 tests, ruff + isolation + migration lints clean.**
 
 ## 3. Decisions (+ why)
 - **Migration bands (Scope 3):** `050–059` (A `050–053`, B `054–057`, C `058–059`) and **`310–319`** for Epic D onward (D uses `310–312`). The high second band was chosen (integrator) to avoid any collision with the low-numbered scopes; `060–309` intentionally left unused by Scope 3.
