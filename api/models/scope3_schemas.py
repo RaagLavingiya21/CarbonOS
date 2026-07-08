@@ -328,3 +328,50 @@ class RecalcResultDTO(BaseModel):
     threshold_pct: float
     recalc_required: bool
     rationale: str
+
+
+# --- Epic F: suppliers ------------------------------------------------------
+
+
+class SupplierCreateRequest(BaseModel):
+    name: str
+    scope3_category: int
+    emissions_kg: float = 0.0
+    spend_usd: float = 0.0
+    pcf_received: bool = False
+    dq_score: float | None = None
+    supplier_sbt_status: str = "none"
+
+
+class SupplierDTO(BaseModel):
+    supplier_id: int
+    org_id: str
+    name: str
+    scope3_category: int
+    emissions_kg: float
+    spend_usd: float
+    pcf_received: bool
+    dq_score: float | None = None
+    supplier_sbt_status: str
+
+
+class CohortRequest(BaseModel):
+    hotspot_categories: list[int]
+    top_n: int = 20
+    basis: str = "emissions"  # emissions | spend
+
+
+class CohortDTO(BaseModel):
+    basis: str
+    hotspot_categories: list[int]
+    emissions_covered_pct: float
+    members: list[SupplierDTO] = Field(default_factory=list)
+
+
+class SupplierScorecardDTO(BaseModel):
+    supplier_count: int
+    pcf_coverage_pct: float
+    emissions_covered_pct: float
+    avg_dq: float | None = None
+    sbt_committed_count: int
+    sbt_validated_count: int
