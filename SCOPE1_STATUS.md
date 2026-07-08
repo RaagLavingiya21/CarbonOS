@@ -103,7 +103,10 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 - **E2E V2 testing**: set Bayou key → verify active → schedule sync → mock bill fetch → ingest → calculate.
 - **Target: 610+ tests by release** (currently 590; ~20 more from the real sync/ingest path + E2E).
 - **Scope 1 V2 release**: feature/scope1-v2 → main (after Scope 2/3 integration tests pass).
-- **Other open options** (not started): RLS-hard role enforcement, ESRS/CDP/GHGRP exports.
+- ~~RLS-hard role enforcement~~ ✅ done (migration 116) — see §0c. **Other open options** (not started): ESRS/CDP/GHGRP exports.
+
+## 0c. RLS-hard role enforcement (migration 116)
+Closed the "roles are app-layer only" gap. Two `SECURITY DEFINER` helpers resolve roles exactly like the app: `public.s1_can_edit(org_id)` (org member AND not an explicit viewer → editor+) and `public.s1_is_admin(org_id)` (explicit admin row, or org-admin with no explicit row). Migration 116 rewrites **all 54 s1 write policies** (INSERT/UPDATE/DELETE) to use them: `s1_member_role` + `s1_ef_override` → `s1_is_admin` (mirrors `require_admin`); everything else → `s1_can_edit` (mirrors `require_editor`). SELECT policies untouched (viewers still read). Now a viewer with the anon key + JWT can't write directly via Supabase — the DB enforces it, not just the backend. App-layer `require_editor`/`require_admin` stay as fast-fail + UX. No app code changed. **Guard test** `tests/test_s1_rls_role_enforcement.py` (6, static — true RLS behaviour needs a live DB + viewer JWT via the ephemeral-user smoke harness). **Migration 116 NOT yet applied** (safe to apply anytime; behaviour-changing at the DB, so verify with a viewer JWT after). 600 tests.
 
 ## 8. Files Modified (V2)
 - `s1_factors/epa_library.py` — 14 fuels + biogenic flags
