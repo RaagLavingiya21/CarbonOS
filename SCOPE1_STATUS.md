@@ -10,6 +10,13 @@ Wired the Bayou credential-connect routes and **fixed 3 real problems in the inh
 - Routes (`/api/scope1/bayou-credentials` GET status / POST set-key[admin] / DELETE disconnect[admin] / POST /sync[editor, PDF fetch mocked]). Frontend: admin-only "Bayou auto-connect" card on `/scope-1/settings`. **594 tests** (9 new). **Migration 115 (revised) still NOT applied to any DB.**
 
 
+## 0a. ⛔ BAYOU PARKED (product decision, 2026-07-07)
+**Do not build further Bayou work until the user has talked to real users.** Bayou is a vendor integration for utility-bill data automation; the user wants demand validation before more investment. What this means:
+- **Built already (stays, ships dark, no more work):** credential store + hardened migration 115 + routes + connect UI + auto-pull sync (commits `c91a0f2`, `2068a00`). The manual **Bayou-PDF upload (Option B)** from v1 also stays.
+- **On hold (do NOT build):** real background poller, auto-source-mapping, and **applying migration 115 to prod** (not needed until Bayou is activated — de-risks that action item).
+- **Same rule likely applies to Samsara** (fleet telematics) — also a vendor data-automation integration; park under the same "validate first" principle.
+- The `>610 test target` and any "next Bayou" items in the brief are superseded by this decision.
+
 ## 0b. V2 brief reconciliation + blockers (read at merge)
 The V2 brief was re-issued; here's how each priority maps to what's actually built, and the two places the brief's assumptions don't match the code:
 
