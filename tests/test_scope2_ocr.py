@@ -7,6 +7,7 @@ from datetime import date
 from s2_ingestion.ocr import (
     REVIEW_THRESHOLD,
     BillExtraction,
+    bill_review_reasons,
     extract_bill_document,
     normalize_bill,
     normalize_meter,
@@ -158,3 +159,17 @@ def test_extract_bill_document_flags_llm_failure() -> None:
     ext = extract_bill_document(b"x", "image/png", invoke=_boom)
     assert ext.error == "vision timeout"
     assert ext.meters == []
+
+
+def test_bill_review_reasons_flags_empty_and_errored_extractions() -> None:
+    # A normal bill with meters has no bill-level reason.
+    ext = parse_extraction(_bill([_meter()]))
+    assert bill_review_reasons(ext, normalize_bill(ext)) == []
+
+    # No meters extracted -> a bill-level reason (per-meter flags can't catch this).
+    empty = parse_extraction(_bill([]))
+    assert any("no meters" in r for r in bill_review_reasons(empty, normalize_bill(empty)))
+
+    # An errored extraction surfaces the error as a reason too.
+    errored = BillExtraction(header={}, meters=[], model="m", error="vision timeout")
+    assert any("vision timeout" in r for r in bill_review_reasons(errored, normalize_bill(errored)))

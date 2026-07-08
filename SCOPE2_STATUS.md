@@ -191,3 +191,26 @@ Synthetic-first (no real bills yet). All under `evals/scope2_ocr/` + one config 
 - Tests: synthetic determinism/labels/tiers, calibration precision-recall math, langsmith no-op-when-disabled, threshold env override. Full suite 613 passing, ruff clean.
 
 **Remaining (needs a key):** one live `run_calibration` pass over a generated corpus to read the recommended threshold, set it as the default, and confirm review_recall ≥ 0.95. Synthetic bills are a proxy for real scan messiness — re-calibrate on real redacted bills when available (drop them in the gitignored corpus dir).
+
+### P2 calibration run + empty-extraction fix (2026-07-08)
+
+Ran the live calibration over a 30-bill synthetic corpus (seed 0). Outcome: the
+threshold sweep was **flat** — extracted meters came back ≥0.99 confidence and
+correct, so there was no signal to move REVIEW_THRESHOLD (recommended 0.50 is a
+degenerate "everything passes" artifact). **Kept the default 0.85.** Real
+threshold calibration needs real messy bills; synthetic renders are too legible.
+
+The run *did* surface a real gap: **4/30 bills failed extraction entirely** (model
+returned no meters) — invisible to the per-meter review metric and silently
+excluded from the MWh coverage rate. Fixed:
+- `s2_ingestion/ocr.py::bill_review_reasons` — bill-level review reasons (errored,
+  or zero meters extracted).
+- `extract-doc` route now routes empty/failed extractions to review (was
+  `needs_review=False`) and returns bill-level `review_reasons` (schema updated).
+- Scorecard tracks `extraction_empty` per case + `extraction_failure_rate`
+  aggregate; new golden case `empty_extraction`.
+- Tests: bill_review_reasons unit, extract-doc empty-extraction route, golden
+  empty-extraction. Suite 616 passing, ruff clean.
+
+Threshold calibration itself is **deferred to real redacted bills** (drop into the
+gitignored corpus dir, `run_calibration` re-usable as-is).

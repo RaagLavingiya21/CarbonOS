@@ -224,8 +224,12 @@ class ExtractDocResponse(BaseModel):
     meters: list[ExtractedMeterDTO]
     model: str = ""
     error: str | None = None
-    # True if any meter needs review or the extraction errored — the UI's gate.
+    # True if any meter needs review, the extraction errored, or no meters were
+    # extracted from a submitted bill — the UI's gate.
     needs_review: bool = False
+    # Bill-level review reasons (e.g. "no meters extracted"); per-meter reasons
+    # live on each ExtractedMeterDTO.
+    review_reasons: list[str] = []
 
 
 class ConfirmedMeterInput(BaseModel):

@@ -791,6 +791,21 @@ def test_extract_doc_flags_low_confidence_for_review(monkeypatch) -> None:
     assert resp.json()["needs_review"] is True
 
 
+def test_extract_doc_flags_empty_extraction_for_review(monkeypatch) -> None:
+    # A bill the model returns no meters for must route to review (not silently
+    # pass as "nothing to import"), with a bill-level reason.
+    monkeypatch.setattr(
+        "api.routes.scope2_ingestion.extract_bill_document",
+        lambda data, ct, **kw: _fake_extraction([]),
+    )
+    resp = client.post("/api/scope2/bills/extract-doc", headers=AUTH_HEADERS, json=_DOC_BODY)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meters"] == []
+    assert data["needs_review"] is True
+    assert any("no meters" in r for r in data["review_reasons"])
+
+
 def test_extract_doc_rejects_bad_base64() -> None:
     resp = client.post(
         "/api/scope2/bills/extract-doc",

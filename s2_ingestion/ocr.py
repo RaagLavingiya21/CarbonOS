@@ -334,6 +334,22 @@ def normalize_bill(extraction: BillExtraction) -> list[ExtractedMeterRow]:
     return [normalize_meter(m) for m in extraction.meters]
 
 
+def bill_review_reasons(extraction: BillExtraction, rows: list[ExtractedMeterRow]) -> list[str]:
+    """Bill-level reasons to route a whole document to review.
+
+    Per-meter `needs_review` can't catch a *total* failure: if the model errors or
+    returns no meters, there are no rows to flag, so the bill would otherwise pass
+    silently as "nothing to import". A submitted bill yielding zero meters is itself
+    suspect and must be surfaced.
+    """
+    reasons: list[str] = []
+    if extraction.error:
+        reasons.append(f"extraction error: {extraction.error}")
+    if not rows:
+        reasons.append("no meters extracted from the document")
+    return reasons
+
+
 # --- live vision call ------------------------------------------------------
 
 

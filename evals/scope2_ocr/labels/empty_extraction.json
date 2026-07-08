@@ -1,0 +1,20 @@
+{
+  "doc": "empty_extraction",
+  "notes": "Model returned no meters for a real bill (total extraction failure). Must be counted as extraction_empty and routed to review — a per-meter flag cannot catch it because there are no rows.",
+  "header": {
+    "utility_name": "Duke Energy",
+    "account_number": "77700099",
+    "service_address": "9 Grid Rd, Charlotte, NC"
+  },
+  "meters": [
+    {
+      "energy_carrier": "electricity",
+      "service_period_start": "2025-02-01",
+      "service_period_end": "2025-02-28",
+      "consumption_quantity": 2400,
+      "consumption_unit": "kWh",
+      "canonical_mwh": 2.4,
+      "is_estimated_read": false
+    }
+  ]
+}

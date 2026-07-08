@@ -46,9 +46,21 @@ def test_low_confidence_correct_read_is_routed_to_review() -> None:
     assert score.review_recall == 1.0  # no wrong meter slipped through
 
 
+def test_empty_extraction_is_counted_not_hidden() -> None:
+    """A bill the model returned no meters for is a total failure the per-meter
+    review metric can't see — it must be flagged explicitly (extraction_empty)."""
+    score = run_golden_case("empty_extraction")
+    assert score.extraction_empty is True
+    assert score.mwh_meters == 0  # nothing extracted...
+    assert score.meter_count_mismatch == 1  # ...but the label expected a meter
+
+
 def test_scorecard_never_silently_passes_a_wrong_meter() -> None:
     """Aggregate invariant: review recall is 1.0 across the golden set."""
     card = run_golden_scorecard()
-    assert card.summary()["n_cases"] == 3
+    summary = card.summary()
+    assert summary["n_cases"] == 4
     assert card.review_recall == 1.0
     assert card.field_accuracy > 0.9
+    # One of the four golden bills is a total extraction failure — surfaced, not hidden.
+    assert summary["extraction_failure_rate"] == 0.25

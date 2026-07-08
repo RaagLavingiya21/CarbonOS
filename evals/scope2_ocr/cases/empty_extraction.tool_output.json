@@ -1,0 +1,6 @@
+{
+  "utility_name": {"value": "Duke Energy", "confidence": 0.90},
+  "account_number": {"value": "77700099", "confidence": 0.85},
+  "service_address": {"value": "9 Grid Rd, Charlotte, NC", "confidence": 0.80},
+  "meters": []
+}
