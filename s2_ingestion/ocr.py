@@ -22,6 +22,7 @@ its own REVIEW_THRESHOLD and models rather than importing Scope 1's OCR package.
 from __future__ import annotations
 
 import base64
+import os
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Callable
@@ -29,7 +30,10 @@ from typing import Callable
 from s2_ingestion.normalize import UnitConversionError, normalize_to_mwh
 
 _MODEL = "claude-sonnet-4-6"
-REVIEW_THRESHOLD = 0.85  # per-field confidence below this routes a bill to review
+# Per-field confidence below this routes a bill to review. Overridable via env so
+# the value calibrated by evals/scope2_ocr (run_calibration.py) can be deployed
+# without a code change; defaults to the calibrated 0.85.
+REVIEW_THRESHOLD = float(os.getenv("S2_OCR_REVIEW_THRESHOLD", "0.85"))
 
 # Bill-level fields (one per document).
 HEADER_FIELDS = ["utility_name", "account_number", "service_address"]

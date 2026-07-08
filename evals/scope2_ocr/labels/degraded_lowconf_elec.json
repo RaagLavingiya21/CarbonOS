@@ -1,0 +1,20 @@
+{
+  "doc": "degraded_lowconf_elec",
+  "notes": "Correct read but low consumption-quantity confidence (0.70) -> must route to review even though nothing is wrong (a review false-positive).",
+  "header": {
+    "utility_name": "Con Edison",
+    "account_number": "55501234",
+    "service_address": "500 Market St, New York, NY"
+  },
+  "meters": [
+    {
+      "energy_carrier": "electricity",
+      "service_period_start": "2025-03-01",
+      "service_period_end": "2025-03-31",
+      "consumption_quantity": 3200,
+      "consumption_unit": "kWh",
+      "canonical_mwh": 3.2,
+      "is_estimated_read": false
+    }
+  ]
+}

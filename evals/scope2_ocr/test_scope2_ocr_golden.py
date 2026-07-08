@@ -32,9 +32,23 @@ def test_multimeter_flags_the_wrong_gas_read() -> None:
     assert score.review_tp == 1
 
 
+def test_low_confidence_correct_read_is_routed_to_review() -> None:
+    """A correct read with sub-threshold confidence must still flag for review.
+
+    Guards the REVIEW_THRESHOLD path directly: nothing is wrong (field_accuracy
+    1.0, no false negative), yet the low quantity confidence routes the meter to
+    review — a deliberate false-positive we accept to never miss a real misread.
+    """
+    score = run_golden_case("degraded_lowconf_elec")
+    assert score.field_accuracy == 1.0
+    assert score.mwh_within_tol == score.mwh_meters == 1
+    assert (score.review_tp, score.review_fp, score.review_fn) == (0, 1, 0)
+    assert score.review_recall == 1.0  # no wrong meter slipped through
+
+
 def test_scorecard_never_silently_passes_a_wrong_meter() -> None:
     """Aggregate invariant: review recall is 1.0 across the golden set."""
     card = run_golden_scorecard()
-    assert card.summary()["n_cases"] == 2
+    assert card.summary()["n_cases"] == 3
     assert card.review_recall == 1.0
     assert card.field_accuracy > 0.9

@@ -175,3 +175,19 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
 
 ### Pending DB Tasks
 - Apply migration 049 to dev/prod databases
+
+### Priority 2 — OCR eval corpus + REVIEW_THRESHOLD calibration ✅ (infra)
+
+Synthetic-first (no real bills yet). All under `evals/scope2_ocr/` + one config knob.
+
+**Built:**
+- `synthetic.py` — Pillow bill-image generator; BillSpec/MeterSpec; clean/moderate/hard difficulty tiers (blur, rotation, low-res, fade, seeded noise); auto-labels with `canonical_mwh` from the real `normalize_to_mwh`. Deterministic per seed.
+- `generate_corpus.py` — CLI writing `<name>.png` + `<name>.json` pairs into a gitignored `corpus/` dir.
+- `calibration.py` — pure `Observation`/`sweep_threshold`/`recommend_threshold` (smallest cutoff meeting review-recall floor, default 0.95) + `observations_from_rows`.
+- `run_calibration.py` — API-gated live runner: extract→score→sweep→recommend; JSON report.
+- `langsmith_tracking.py` — opt-in, eval-layer-only adapter (`S2_OCR_LANGSMITH=1` + key); lazy-imports langsmith; logs experiment metrics + recommended threshold + dataset. Production OCR path stays LangChain-free. No-op + offline when disabled.
+- `s2_ingestion/ocr.py` — `REVIEW_THRESHOLD` now env-overridable (`S2_OCR_REVIEW_THRESHOLD`, default 0.85) so a calibrated value deploys without code change.
+- New golden case `degraded_lowconf_elec` (correct read, low confidence → review false-positive) guards the threshold path.
+- Tests: synthetic determinism/labels/tiers, calibration precision-recall math, langsmith no-op-when-disabled, threshold env override. Full suite 613 passing, ruff clean.
+
+**Remaining (needs a key):** one live `run_calibration` pass over a generated corpus to read the recommended threshold, set it as the default, and confirm review_recall ≥ 0.95. Synthetic bills are a proxy for real scan messiness — re-calibrate on real redacted bills when available (drop them in the gitignored corpus dir).
