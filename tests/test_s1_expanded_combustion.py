@@ -1,6 +1,7 @@
 """Test expanded combustion source categories (residual oils, coal types, biomass)."""
 
 import pytest
+
 from s1_calc import calculate_stationary, to_co2e
 from s1_factors import EmissionFactorLibrary
 from s1_factors.epa_library import EPA_FACTORS
@@ -74,7 +75,7 @@ def test_wood_combustion_biogenic_flag():
 
 def test_agricultural_residue_biogenic_flag():
     """Agricultural residue combustion factor is marked biogenic in the EPA library."""
-    ar_co2_factors = [f for f in EPA_FACTORS 
+    ar_co2_factors = [f for f in EPA_FACTORS
                       if f.fuel_or_activity == "agricultural_residue" and f.gas == "CO2"]
     assert len(ar_co2_factors) > 0
     assert ar_co2_factors[0].biogenic is True, "Agricultural residue CO2 should be marked biogenic"

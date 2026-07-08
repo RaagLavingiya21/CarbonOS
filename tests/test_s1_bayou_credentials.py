@@ -1,8 +1,10 @@
 """Tests for Bayou credentials storage and auth handshake."""
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
+
+import pytest
+
 from db import s1_bayou_store
 from db.s1_bayou_store import NoCredentialsError
 
@@ -29,7 +31,7 @@ def test_get_or_create_credentials_creates_row_if_missing(mock_client):
         "created_at": "2025-01-01T00:00:00Z",
         "updated_at": "2025-01-01T00:00:00Z",
     }]
-    
+
     result = s1_bayou_store.get_or_create_credentials(
         "org123", mock_client, access_token="token"
     )
@@ -53,7 +55,7 @@ def test_get_or_create_credentials_returns_existing_row(mock_client):
     }
     table_mock = mock_client.table.return_value
     table_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [existing]
-    
+
     result = s1_bayou_store.get_or_create_credentials(
         "org123", mock_client, access_token="token"
     )
@@ -74,7 +76,7 @@ def test_set_api_key_stores_and_activates(mock_client):
         "updated_at": "2025-01-01T00:05:00Z",
         "created_at": "2025-01-01T00:00:00Z",
     }]
-    
+
     result = s1_bayou_store.set_api_key(
         "org123", "new_key_xyz", mock_client, access_token="token"
     )
@@ -88,7 +90,7 @@ def test_get_active_api_key_raises_if_missing(mock_client):
     """get_active_api_key raises NoCredentialsError if not configured."""
     table_mock = mock_client.table.return_value
     table_mock.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
-    
+
     with pytest.raises(NoCredentialsError, match="No active Bayou credentials"):
         s1_bayou_store.get_active_api_key(
             "org123", mock_client, access_token="token"
@@ -101,7 +103,7 @@ def test_get_active_api_key_returns_key_if_active(mock_client):
     table_mock.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {"bayou_api_key": "live_key_abc123"}
     ]
-    
+
     result = s1_bayou_store.get_active_api_key(
         "org123", mock_client, access_token="token"
     )
@@ -121,7 +123,7 @@ def test_mark_sync_complete_updates_timestamps(mock_client):
         "updated_at": "2025-01-01T10:00:00+00:00",
         "created_at": "2025-01-01T00:00:00Z",
     }]
-    
+
     result = s1_bayou_store.mark_sync_complete(
         "org123", mock_client, access_token="token"
     )
@@ -140,7 +142,7 @@ def test_should_sync_returns_false_if_inactive(mock_client):
     table_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {"is_active": False, "next_sync": None}
     ]
-    
+
     result = s1_bayou_store.should_sync(
         "org123", mock_client, access_token="token"
     )
@@ -153,7 +155,7 @@ def test_should_sync_returns_true_if_never_synced(mock_client):
     table_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {"is_active": True, "next_sync": None}
     ]
-    
+
     result = s1_bayou_store.should_sync(
         "org123", mock_client, access_token="token"
     )
@@ -164,12 +166,12 @@ def test_should_sync_returns_true_if_past_schedule(mock_client):
     """should_sync returns True if now >= next_sync."""
     now = datetime.now(timezone.utc)
     past_sync = (now - timedelta(hours=2)).isoformat()  # 2 hours ago
-    
+
     table_mock = mock_client.table.return_value
     table_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {"is_active": True, "next_sync": past_sync}
     ]
-    
+
     result = s1_bayou_store.should_sync(
         "org123", mock_client, access_token="token"
     )
@@ -180,12 +182,12 @@ def test_should_sync_returns_false_if_future_schedule(mock_client):
     """should_sync returns False if now < next_sync."""
     now = datetime.now(timezone.utc)
     future_sync = (now + timedelta(hours=2)).isoformat()  # 2 hours from now
-    
+
     table_mock = mock_client.table.return_value
     table_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {"is_active": True, "next_sync": future_sync}
     ]
-    
+
     result = s1_bayou_store.should_sync(
         "org123", mock_client, access_token="token"
     )

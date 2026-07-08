@@ -1,6 +1,7 @@
 """Verify seed_s1_reference.py imports and generates the correct factors."""
 
 import pytest
+
 from s1_factors.epa_library import EPA_FACTORS
 
 
@@ -10,7 +11,7 @@ def test_seed_script_has_updated_factors():
     for ef in EPA_FACTORS:
         if ef.source_category == "stationary_combustion" and ef.gas == "CO2":
             factors_by_fuel[ef.fuel_or_activity] = ef
-    
+
     # All new fuels should be present
     expected_fuels = {
         "residual_oil_no4", "residual_oil_no5", "residual_oil_no6",
@@ -35,7 +36,7 @@ def test_seed_script_biogenic_flags_correct():
     wood_co2 = [f for f in EPA_FACTORS if f.fuel_or_activity == "wood" and f.gas == "CO2"]
     assert len(wood_co2) > 0
     assert wood_co2[0].biogenic is True
-    
+
     natural_gas_co2 = [f for f in EPA_FACTORS if f.fuel_or_activity == "natural_gas" and f.gas == "CO2"]
     assert len(natural_gas_co2) > 0
     assert natural_gas_co2[0].biogenic is False
