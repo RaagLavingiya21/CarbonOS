@@ -403,3 +403,56 @@ class UsePhaseResultDTO(BaseModel):
     ef_source: str
     dq_note: str
     breakdown: dict[str, float] = Field(default_factory=dict)
+
+
+# --- Epic I: levers / MAC / claims ------------------------------------------
+
+
+class LeverDTO(BaseModel):
+    lever_id: str
+    name: str
+    category: int
+    abatement_pct: float
+    cost_per_tco2e: float
+    applicability: list[str] = Field(default_factory=list)
+    source: str
+
+
+class MacRequest(BaseModel):
+    # {scope3_category: tCO2e}; JSON object keys are strings.
+    category_totals_tco2e: dict[str, float]
+    sub_sector: str | None = None
+
+
+class MacPointDTO(BaseModel):
+    lever_id: str
+    name: str
+    category: int
+    abatement_tco2e: float
+    cost_per_tco2e: float
+    cumulative_abatement_tco2e: float
+
+
+class ClaimAssessRequest(BaseModel):
+    claim_text: str
+    primary_data_share: float = 0.0
+    assured: bool = False
+    jurisdiction: str = "EU"
+    offset_based: bool = False
+
+
+class ComplianceFlagDTO(BaseModel):
+    rule_id: str
+    jurisdiction: str
+    framework: str
+    verdict: str
+    note: str
+
+
+class ClaimAssessmentDTO(BaseModel):
+    claim_text: str
+    jurisdiction: str
+    substantiable: bool
+    substantiation_reason: str
+    ruleset_version: str
+    flags: list[ComplianceFlagDTO] = Field(default_factory=list)
