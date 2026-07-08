@@ -144,3 +144,34 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
   EcoVadis) — both design-partner-driven; revisit when pilots are known.
 - Residual-mix default for non-Green-e US RECs (documented gray area).
 - Prod migration discipline — adopt Supabase migration CLI vs. manual SQL Editor.
+
+## V2 Status (2026-07-07 ongoing)
+
+### Priority 1 — Target-Setting (SBTi-style reduction tracking) ✅
+
+**Complete:** Org-level base-year + future target (amount or % reduction) with org-scoped RLS.
+
+**Backend:**
+- Migration 049: s2_targets table with immutable base/target totals, mutable status/notes
+- Store: s2_targets_store.py with list/get/create/update/delete 
+- Schemas: CreateTargetRequest, TargetDTO with from_row() factory
+- Routes: GET /targets (list), GET /targets/active, POST /targets (create with validation), PATCH (update status/notes), DELETE
+- Tests: list_targets, create_target, create_target_needs_amount_or_pct (all passing)
+- Suite: 560 passing
+
+**Frontend:**
+- Page: /scope-2/targets with empty state, active target highlight, other targets list
+- Create form: year selectors (1975–2075), base-year + target emissions, absolute/percentage toggle, trajectory type (linear/exponential), optional notes
+- Progress card: displays base/target emissions, % reduction, progress bar, status badge
+- Linked from main /scope-2 dashboard
+- Build: Next.js passes cleanly
+
+**Commits:** c423cec (backend), 66a8c73 (frontend)
+
+### Next Priorities
+
+**Priority 2:** Real-doc OCR evals (user supplies redacted bills → calibrate REVIEW_THRESHOLD ~0.85)
+**Priority 3:** Aggregator binding (fetch real PDFs from provider, pipe to OCR intake)
+
+### Pending DB Tasks
+- Apply migration 049 to dev/prod databases
