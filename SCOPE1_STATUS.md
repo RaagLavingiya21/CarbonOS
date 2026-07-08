@@ -1,17 +1,26 @@
 # Scope 1 — Working Status / Resume-Here
 Living doc. Design lives in the implementation plan (`~/.claude/plans/lucky-growing-planet.md`) + research (`~/Downloads/Scope1Research/`). This is current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope1-v2 (off main, 5 commits)_
+_Last updated: 2026-07-07 · Branch: feature/scope1-v2 (off main, 7 commits)_
 
 ## 0. Latest (commit c91a0f2) — V2 Priority 2 COMPLETE + security hardening
 Wired the Bayou credential-connect routes and **fixed 3 real problems in the inherited migration 115 / store** (it was unapplied to prod, so fixed cheaply):
 - **🔴 Key was readable by any org member.** The old RLS `SELECT ... USING (is_org_member(org_id))` exposed the raw `bayou_api_key` to any member via the anon key — contradicting "never exposed to frontend". Table is now **backend/service-role ONLY**: RLS enabled with **no anon/authenticated policies** (deny-by-default); the backend reads/writes via `get_service_client()` (bypasses RLS). Key never leaves the server; status DTOs never include it.
 - **🔴 Missing INSERT policy** → `get_or_create_credentials` would have failed on the real DB (mocked tests hid it). Moot now (service-role bypasses RLS).
 - **🔴 Destructive `DROP TABLE`** in the migration (would wipe credentials on re-run) — removed; now idempotent like the rest.
-- Routes (`/api/scope1/bayou-credentials` GET status / POST set-key[admin] / DELETE disconnect[admin] / POST /sync[editor, PDF fetch mocked]). Frontend: admin-only "Bayou auto-connect" card on `/scope-1/settings`. **590 tests** (9 new). **Migration 115 (revised) still NOT applied to any DB.**
+- Routes (`/api/scope1/bayou-credentials` GET status / POST set-key[admin] / DELETE disconnect[admin] / POST /sync[editor, PDF fetch mocked]). Frontend: admin-only "Bayou auto-connect" card on `/scope-1/settings`. **594 tests** (9 new). **Migration 115 (revised) still NOT applied to any DB.**
 
+
+## 0b. V2 brief reconciliation + blockers (read at merge)
+The V2 brief was re-issued; here's how each priority maps to what's actually built, and the two places the brief's assumptions don't match the code:
+
+- **P2 auto-pull — DONE (commit 2068a00).** `/bayou-credentials/sync` now uses the org's stored key to `list_bills()` → map parsed bills → ingest into the OCR review queue (deduped, latest inventory), trusted Tier-2. Reviewer assigns source → calc via the existing path. 3 integration tests inject the client transport to mock Bayou's `/bills`. **Note:** Bayou's API is REST v2 (Basic auth, API key as user), **not GraphQL** as the brief says — the existing REST client is correct/verified. **Follow-ups:** real background poller (cron/worker) + auto-source-mapping so trusted bills skip manual review.
+
+- **🚩 P1 blocker — IEA / Green-e / eGRID are Scope 2, not Scope 1.** The brief asks to seed "IEA defaults + Green-e residual mix" (and eGRID). Those are **purchased-electricity** emission factors = **Scope 2**. Scope 1 is direct combustion only; seeding electricity factors here would be a scope error / cross-module leakage. **Decision (kept from the prior session): deferred to Scope 2 integration — do NOT add them to `s1_factors`.** What P1 *did* deliver is real, correct: expanded EPA EF Hub combustion factors (14 fuels) with 40 CFR Part 98 citations + 4 seed-verification tests. Vintage: labeled "2025"; if a real "EF Hub 2026" table is published, values update via re-seed or the per-org EF-override feature (migration 110) — no code change needed.
+
+- **🚩 P3 note — no `s1_facility.combustion_type` enum exists.** The brief says "extend the `s1_facility.combustion_type` enum," but the schema has no such column/enum: source breadth lives in the `s1_factors` EF library (fuels) + the free `source_category` on `s1_emission_source` (no CHECK constraint). Priority 3's substance (more combustion fuels) is done via the library (5ca106c); there is no enum to extend. If facility-level `combustion_type` is desired later it'd be a new migration in band 110–199, but it would duplicate the source model — flagging rather than adding speculatively.
 
 ## 1. Where we are
-The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via PR #24** and runs end-to-end against the shared Supabase dev DB. The defensible core is complete: org/entity/facility model → standards-correct per-gas engine → intake (manual/CSV/OCR/Bayou-PDF) → orchestration/readiness → GHG-Protocol/SB-253 reporting (+ PDF/XLSX) → audit/evidence → users & roles. Ships **dark** behind `NEXT_PUBLIC_SCOPE1_ENABLED`. Roadmap-wise we're ~85% through the MVP atomic-action list + now **V2 is underway** on `feature/scope1-v2` (5 commits complete).
+The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via PR #24** and runs end-to-end against the shared Supabase dev DB. The defensible core is complete: org/entity/facility model → standards-correct per-gas engine → intake (manual/CSV/OCR/Bayou-PDF) → orchestration/readiness → GHG-Protocol/SB-253 reporting (+ PDF/XLSX) → audit/evidence → users & roles. Ships **dark** behind `NEXT_PUBLIC_SCOPE1_ENABLED`. Roadmap-wise we're ~85% through the MVP atomic-action list + now **V2 is underway** on `feature/scope1-v2` (7 commits complete).
 
 ## 2. V2 Work Complete (4 commits on feature/scope1-v2)
 ### Commit 5ca106c: V2 Priority 3 — Expanded combustion-source categories
@@ -51,14 +60,14 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 ## 3. V2 Scope (per brief)
 **Priority 1 — Real factor data**: ✅ Extended EPA EF Hub 2025 with more combustion sources + verification tests. IEA defaults + Green-e residual mix are Scope 2 factors (electricity, not combustion); deferred to Scope 2 integration.
 
-**Priority 2 — Bayou-PDF automation**: ✅ **COMPLETE** (c91a0f2). Credential store + auth handshake + **routes wired + connect UI + security-hardened** (backend/service-role only). Remaining follow-up: real background poller + real Bayou bill fetch→OCR→record (currently the sync endpoint is mocked — it advances the schedule so the poller drops in without changing the surface).
+**Priority 2 — Bayou-PDF automation**: ✅ **COMPLETE** (c91a0f2 store/routes/hardening + 2068a00 auto-pull). Credential store + auth handshake + routes + connect UI + security-hardened + **auto-pull sync** (key → `list_bills` → map parsed → ingest to OCR queue, deduped). Remaining follow-up: a real background poller (cron/worker) to call sync on schedule + auto-source-mapping so trusted bills skip manual review. See §0b.
 
 **Priority 3 — Breadth**: ✅ Extended combustion-source categories (natural gas, coal types, fuel oils all supported).
 
 ## 4. Current State of MVP + V2
 **Data model**: 14 stationary fuels (up from 7) × 3 gases (CO2/CH4/N2O) + mobile, process, fugitive, biogenic tracking.
 
-**Tests**: 590 passing (target: >610 by end of V2). Next test opportunities:
+**Tests**: 594 passing (target: >610 by end of V2). Next test opportunities:
 - Bayou credential routes (POST/GET `/api/scope1/bayou-credentials`)
 - Background sync scheduler + mocked Bayou bill fetch
 - Intake integration (Bayou bill → extraction → record)
