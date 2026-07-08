@@ -42,6 +42,7 @@ from api.routes import (
     scope3_questionnaire,
     scope3_suppliers,
     scope3_targets,
+    scope3_usephase,
     shares,
 )
 
@@ -191,6 +192,7 @@ app.include_router(scope3_targets.router)
 app.include_router(scope3_disclosure.router)
 app.include_router(scope3_progress.router)
 app.include_router(scope3_suppliers.router)
+app.include_router(scope3_usephase.router)
 
 # Scope 2 ("Grid") module — isolated; shares only auth + app instance.
 app.include_router(scope2_sites.router)

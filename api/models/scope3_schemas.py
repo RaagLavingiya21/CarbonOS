@@ -375,3 +375,31 @@ class SupplierScorecardDTO(BaseModel):
     avg_dq: float | None = None
     sbt_committed_count: int
     sbt_validated_count: int
+
+
+# --- Epic H: use-phase ------------------------------------------------------
+
+
+class UsePhaseCalcRequest(BaseModel):
+    product_ref: str = "product"
+    energy_per_use_kwh: float = 0.0
+    water_l_per_use: float = 0.0
+    standby_power_w: float = 0.0
+    fuel_kwh_per_use: float = 0.0
+    uses_per_year: float
+    lifetime_years: float
+    units_sold: float
+    region: str | None = None
+    mode: str = "direct"  # direct | indirect
+    include_standby: bool = True
+
+
+class UsePhaseResultDTO(BaseModel):
+    product_name: str
+    units_sold: float
+    kg_co2e: float
+    direct_or_indirect: str
+    method: str
+    ef_source: str
+    dq_note: str
+    breakdown: dict[str, float] = Field(default_factory=dict)
