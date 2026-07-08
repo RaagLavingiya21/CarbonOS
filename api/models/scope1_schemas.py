@@ -415,3 +415,20 @@ class OnboardingResponse(BaseModel):
     total: int
     pct: float
     next_key: str | None = None
+
+# --- Bayou credentials (credential-connect) --------------------------------
+
+class SetBayouApiKeyRequest(BaseModel):
+    """Org-admin sets their Bayou API key (encrypted at-rest by Supabase)."""
+    bayou_api_key: str = Field(..., min_length=1, description="Bayou API key from their console")
+
+
+class BayouCredentialsResponse(BaseModel):
+    """Current Bayou credential status (API key NOT exposed in response)."""
+    id: str
+    org_id: str
+    is_active: bool
+    last_sync: str | None
+    next_sync: str | None
+    created_at: str
+    updated_at: str
