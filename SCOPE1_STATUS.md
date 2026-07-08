@@ -1,9 +1,17 @@
 # Scope 1 — Working Status / Resume-Here
 Living doc. Design lives in the implementation plan (`~/.claude/plans/lucky-growing-planet.md`) + research (`~/Downloads/Scope1Research/`). This is current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope1-v2 (off main, 4 commits)_
+_Last updated: 2026-07-07 · Branch: feature/scope1-v2 (off main, 5 commits)_
+
+## 0. Latest (commit c91a0f2) — V2 Priority 2 COMPLETE + security hardening
+Wired the Bayou credential-connect routes and **fixed 3 real problems in the inherited migration 115 / store** (it was unapplied to prod, so fixed cheaply):
+- **🔴 Key was readable by any org member.** The old RLS `SELECT ... USING (is_org_member(org_id))` exposed the raw `bayou_api_key` to any member via the anon key — contradicting "never exposed to frontend". Table is now **backend/service-role ONLY**: RLS enabled with **no anon/authenticated policies** (deny-by-default); the backend reads/writes via `get_service_client()` (bypasses RLS). Key never leaves the server; status DTOs never include it.
+- **🔴 Missing INSERT policy** → `get_or_create_credentials` would have failed on the real DB (mocked tests hid it). Moot now (service-role bypasses RLS).
+- **🔴 Destructive `DROP TABLE`** in the migration (would wipe credentials on re-run) — removed; now idempotent like the rest.
+- Routes (`/api/scope1/bayou-credentials` GET status / POST set-key[admin] / DELETE disconnect[admin] / POST /sync[editor, PDF fetch mocked]). Frontend: admin-only "Bayou auto-connect" card on `/scope-1/settings`. **590 tests** (9 new). **Migration 115 (revised) still NOT applied to any DB.**
+
 
 ## 1. Where we are
-The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via PR #24** and runs end-to-end against the shared Supabase dev DB. The defensible core is complete: org/entity/facility model → standards-correct per-gas engine → intake (manual/CSV/OCR/Bayou-PDF) → orchestration/readiness → GHG-Protocol/SB-253 reporting (+ PDF/XLSX) → audit/evidence → users & roles. Ships **dark** behind `NEXT_PUBLIC_SCOPE1_ENABLED`. Roadmap-wise we're ~85% through the MVP atomic-action list + now **V2 is underway** on `feature/scope1-v2` (4 commits complete).
+The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via PR #24** and runs end-to-end against the shared Supabase dev DB. The defensible core is complete: org/entity/facility model → standards-correct per-gas engine → intake (manual/CSV/OCR/Bayou-PDF) → orchestration/readiness → GHG-Protocol/SB-253 reporting (+ PDF/XLSX) → audit/evidence → users & roles. Ships **dark** behind `NEXT_PUBLIC_SCOPE1_ENABLED`. Roadmap-wise we're ~85% through the MVP atomic-action list + now **V2 is underway** on `feature/scope1-v2` (5 commits complete).
 
 ## 2. V2 Work Complete (4 commits on feature/scope1-v2)
 ### Commit 5ca106c: V2 Priority 3 — Expanded combustion-source categories
@@ -43,20 +51,20 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 ## 3. V2 Scope (per brief)
 **Priority 1 — Real factor data**: ✅ Extended EPA EF Hub 2025 with more combustion sources + verification tests. IEA defaults + Green-e residual mix are Scope 2 factors (electricity, not combustion); deferred to Scope 2 integration.
 
-**Priority 2 — Bayou-PDF automation**: ✅ Auth handshake + credential store complete. Remaining: wire routes + background sync task (PDF fetch/OCR mocked per brief).
+**Priority 2 — Bayou-PDF automation**: ✅ **COMPLETE** (c91a0f2). Credential store + auth handshake + **routes wired + connect UI + security-hardened** (backend/service-role only). Remaining follow-up: real background poller + real Bayou bill fetch→OCR→record (currently the sync endpoint is mocked — it advances the schedule so the poller drops in without changing the surface).
 
 **Priority 3 — Breadth**: ✅ Extended combustion-source categories (natural gas, coal types, fuel oils all supported).
 
 ## 4. Current State of MVP + V2
 **Data model**: 14 stationary fuels (up from 7) × 3 gases (CO2/CH4/N2O) + mobile, process, fugitive, biogenic tracking.
 
-**Tests**: 581 passing (target: >610 by end of V2). Next test opportunities:
+**Tests**: 590 passing (target: >610 by end of V2). Next test opportunities:
 - Bayou credential routes (POST/GET `/api/scope1/bayou-credentials`)
 - Background sync scheduler + mocked Bayou bill fetch
 - Intake integration (Bayou bill → extraction → record)
 - E2E: set key → sync → ingest → calculate
 
-**Migrations unapplied**: 110–114 (EF overrides, trends, base-year recalc, fugitive, process), now **115 (Bayou credentials)**. Prod needs all 6 before V2 release.
+**Migrations**: 110–114 now LIVE in prod (user applied). **115 (Bayou credentials, revised) still unapplied** — apply before V2 release.
 
 ## 5. Decisions + Why
 **Biogenic CO2 for biomass**: marked in EPA factors (`wood`, `agricultural_residue` have `biogenic=True`), but calc engine requires explicit `biogenic=True` at intake time (app layer). Metadata for audit, behavior determined by intake layer (by design — allows orgs to declare fuels either way per their protocol).
@@ -65,20 +73,21 @@ The Scope 1 (direct combustion emissions) MVP module is **merged to `main` via P
 
 **Migration band 115**: uses second band (110–199 reserved for S1 in 2026-07-07 grant). Preserves 030–039 capacity.
 
-**Bayou credentials RLS**: org-level, not per-user. One org = one Bayou account. Admin-only management (RLS enforced).
+**Bayou credentials RLS** (revised c91a0f2): org-level, one org = one Bayou account. The table is **backend/service-role only** — RLS is on with **no anon/authenticated policies** (deny-by-default), so the secret is never client-readable. Management is admin-gated at the **app layer** (`require_admin`), and the backend touches the table via `get_service_client()`. (The earlier "admin-only via RLS / encrypted at-rest" claim was wrong: is_org_member RLS actually exposed the key to every member.)
 
 ## 6. Gotchas & Lessons (Same as before + New)
 - **Ruff import order**: pytest, stdlib (datetime, unittest), third-party (db), local imports. Auto-fix with `ruff check --fix`.
-- **Bayou credentials**: encryption is at-rest only (Supabase DATABASE_URL encryption). Never expose `bayou_api_key` in API response or logs.
+- **Bayou credentials**: the `s1_bayou_credentials` table is **service-role only** (RLS deny-by-default) — the anon/user client can't read it, so the key can't leak to the frontend. Backend accesses it via `get_service_client()`. Never put `bayou_api_key` in an API response or log. (Disk "at-rest" encryption is NOT app-level protection — don't rely on it to hide the secret from members; the RLS design does that.)
 - **Sync scheduling**: `next_sync` NULL means never synced (should_sync returns True). Timestamp comparison assumes ISO 8601 strings + UTC timezone.
 - **Test mocking**: Bayou store tests use `unittest.mock.MagicMock` (no pytest-mock installed). Chain mocks for Supabase `.table().select().eq().limit().execute()`.
 
 ## 7. Next Steps (Post-V2)
-- **V2 completion**: Wire Bayou credential routes + background sync task (2–3 integration tests; mocked PDF fetch).
-- **Apply migrations 110–115** to dev + prod DBs (manual via Supabase SQL Editor or psycopg).
+- ~~Wire Bayou credential routes~~ ✅ done (c91a0f2). Remaining Bayou follow-up: **real background poller + real bill fetch→OCR→record** (sync endpoint is mocked today).
+- **Apply migration 115 (revised)** to dev + prod (110–114 already live). Manual via Supabase SQL Editor / psycopg.
 - **E2E V2 testing**: set Bayou key → verify active → schedule sync → mock bill fetch → ingest → calculate.
-- **Target: 610+ tests by release** (currently 581; need 29+ more from Bayou routes + E2E).
+- **Target: 610+ tests by release** (currently 590; ~20 more from the real sync/ingest path + E2E).
 - **Scope 1 V2 release**: feature/scope1-v2 → main (after Scope 2/3 integration tests pass).
+- **Other open options** (not started): RLS-hard role enforcement, ESRS/CDP/GHGRP exports.
 
 ## 8. Files Modified (V2)
 - `s1_factors/epa_library.py` — 14 fuels + biogenic flags
