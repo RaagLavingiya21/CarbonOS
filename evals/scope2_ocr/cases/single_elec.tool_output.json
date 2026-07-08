@@ -1,0 +1,18 @@
+{
+  "utility_name": {"value": "PG&E", "confidence": 0.99},
+  "account_number": {"value": "1234567", "confidence": 0.97},
+  "service_address": {"value": "1 Main St, San Francisco, CA", "confidence": 0.95},
+  "meters": [
+    {
+      "meter_number": {"value": "MTR-100", "confidence": 0.96},
+      "energy_carrier": {"value": "Electricity", "confidence": 0.99},
+      "service_period_start": {"value": "2025-01-01", "confidence": 0.98},
+      "service_period_end": {"value": "2025-01-31", "confidence": 0.98},
+      "consumption_quantity": {"value": "1500", "confidence": 0.97},
+      "consumption_unit": {"value": "kWh", "confidence": 0.99},
+      "demand_kw": {"value": "42", "confidence": 0.90},
+      "total_cost_usd": {"value": "$210.50", "confidence": 0.93},
+      "is_estimated_read": {"value": "false", "confidence": 0.95}
+    }
+  ]
+}

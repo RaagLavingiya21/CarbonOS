@@ -1,0 +1,24 @@
+{
+  "_comment": "Labeled cases for the Epic B question->datapoint mapper (P.4.2.2). Inventory is fixed below. expected_ref = the datapoint the question should map to (or null => must be flagged needs_human, NEVER fabricated). Used by evals/test_question_mapping.py.",
+  "inventory": {
+    "total": 100000.0,
+    "categories": {"1": 70000.0, "4": 12000.0, "6": 8000.0}
+  },
+  "cases": [
+    {"text": "What were your gross global Scope 3 emissions in metric tons CO2e?", "question_type": "numeric", "framework_field_key": "cdp.C6.5", "expected_ref": "inventory:total", "expected_value": 100000.0},
+    {"text": "Total purchased goods and services emissions (kg CO2e)?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat1.total", "expected_value": 70000.0},
+    {"text": "What are your business travel emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat6.total", "expected_value": 8000.0},
+    {"text": "Total upstream transportation and distribution emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat4.total", "expected_value": 12000.0},
+    {"text": "What were your capital goods (category 2) emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "cat2 absent from this inventory -> needs_human"},
+    {"text": "What were your gross Scope 1 emissions in tCO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Scope 1 is out of scope for a Scope 3 module"},
+    {"text": "Describe your emissions reduction initiatives.", "question_type": "narrative", "framework_field_key": null, "expected_ref": null, "note": "non-numeric -> analyst answers"},
+    {"text": "Do you have a science-based target?", "question_type": "boolean", "framework_field_key": null, "expected_ref": null, "note": "non-numeric"},
+    {"text": "What is your total annual revenue in USD?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "no inventory datapoint -> must NOT fabricate"},
+    {"text": "Scope 3 category 1 (purchased goods and services) emissions in kg CO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat1.total", "expected_value": 70000.0, "note": "explicit category-1 phrasing"},
+    {"text": "Category 4 emissions in tCO2e?", "question_type": "numeric", "framework_field_key": null, "expected_ref": "inventory:cat4.total", "expected_value": 12000.0, "note": "category-by-number"},
+    {"text": "Combined business travel and employee commuting emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "TRAP: spans two categories (6+7) -> must flag, not answer with just one"},
+    {"text": "What percentage of your total emissions comes from Scope 3?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "TRAP: a ratio, not a datapoint -> must NOT return an absolute total"},
+    {"text": "Report your purchased electricity emissions.", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Scope 2 -> not in the Scope 3 inventory"},
+    {"text": "Downstream transportation and distribution emissions?", "question_type": "numeric", "framework_field_key": null, "expected_ref": null, "note": "Cat 9 not present in a spend-based inventory -> needs_human"}
+  ]
+}

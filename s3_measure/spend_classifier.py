@@ -183,6 +183,15 @@ _GL_LEXICON: list[_LexRule] = [
 # present the rule degrades gracefully to the fuzzy path (see _from_sector_code).
 
 
+# When these appear, a durable-goods keyword means a SERVICE on the good
+# (repair/lease/rental), which is Cat 1 — not a capital purchase (Cat 2).
+_SERVICE_CONTEXT = re.compile(
+    r"\b(repair|maintenance|r ?& ?m|rental|renting|lease|leasing|service|"
+    r"subscription|support|warranty)\b",
+    re.I,
+)
+
+
 def _clean(text: str) -> str:
     """Collapse whitespace; keep it simple and deterministic."""
     return re.sub(r"\s+", " ", text or "").strip()
@@ -279,6 +288,10 @@ def classify_spend_line(
     # 2. GL-term lexicon (curated, high-confidence, GL-oriented).
     for pattern, sector_code, category, why in _GL_LEXICON:
         if pattern.search(text):
+            # A durable-goods keyword in a service context (repair/lease/rental)
+            # is a Cat 1 service, not a Cat 2 capital purchase — skip the rule.
+            if category == 2 and _SERVICE_CONTEXT.search(text):
+                continue
             try:
                 ef = lookup_ef_by_sector_code(sector_code, country)
             except ValueError:

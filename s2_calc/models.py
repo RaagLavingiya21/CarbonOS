@@ -70,6 +70,8 @@ class SiteResult:
     location_factor_vintage: int
     market_tier: str
     market_fallback_flagged: bool
+    # Load covered by quality-passing EACs (MWh) — the site's renewable-attributed share.
+    market_covered_mwh: float = 0.0
     excluded_instruments: list[str] = field(default_factory=list)
 
 

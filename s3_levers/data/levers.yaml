@@ -1,0 +1,70 @@
+# Consumer decarbonization lever library (Epic I / P.3.5.a) — curated DATA.
+# abatement_pct = ROUGH fraction of the target category's emissions the lever can
+# cut (order of magnitude, not a guarantee). cost_per_tco2e = ROUGH $/tCO2e for
+# the MAC curve. applicability = sub-sectors it fits ("all" = any). Sources are
+# indicative; tune with company data before relying on numbers.
+
+levers:
+  - id: low_carbon_materials
+    name: Switch to lower-carbon materials / ingredients
+    category: 1
+    abatement_pct: 0.20
+    cost_per_tco2e: 40
+    applicability: [all]
+    source: consumer-goods decarbonization literature
+  - id: recycled_content_packaging
+    name: Recycled-content & mono-material packaging
+    category: 1
+    abatement_pct: 0.08
+    cost_per_tco2e: 15
+    applicability: [all]
+    source: packaging LCA
+  - id: packaging_lightweighting
+    name: Packaging lightweighting
+    category: 1
+    abatement_pct: 0.05
+    cost_per_tco2e: -10   # negative = net saving (uses less material)
+    applicability: [all]
+    source: packaging LCA
+  - id: supplier_renewable_energy
+    name: Supplier renewable-electricity sourcing
+    category: 1
+    abatement_pct: 0.15
+    cost_per_tco2e: 30
+    applicability: [all]
+    source: supplier engagement programs
+  - id: regenerative_agriculture
+    name: Regenerative agriculture (FLAG)
+    category: 1
+    abatement_pct: 0.15
+    cost_per_tco2e: 70
+    applicability: [food, beverage]
+    source: SBTi FLAG guidance
+  - id: logistics_modal_shift
+    name: Logistics modal shift (air/road → rail/sea)
+    category: 4
+    abatement_pct: 0.25
+    cost_per_tco2e: 5
+    applicability: [all]
+    source: freight decarbonization
+  - id: product_energy_efficiency
+    name: Product energy-efficiency redesign (use-phase)
+    category: 11
+    abatement_pct: 0.30
+    cost_per_tco2e: 25
+    applicability: [durables, appliances, electronics]
+    source: use-phase redesign
+  - id: low_temp_wash_design
+    name: Design for low-temperature laundering
+    category: 11
+    abatement_pct: 0.20
+    cost_per_tco2e: 10
+    applicability: [apparel, bpc]
+    source: use-phase redesign
+  - id: recyclable_end_of_life
+    name: Design for recyclability / reduced end-of-life impact
+    category: 12
+    abatement_pct: 0.12
+    cost_per_tco2e: 20
+    applicability: [all]
+    source: circularity design

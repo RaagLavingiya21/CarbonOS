@@ -20,6 +20,9 @@ class ReportSummary:
     data_coverage_pct: float
     methodology: str
     factor_versions: dict = field(default_factory=dict)
+    # True when the market-based total fell back to grid/residual mix (no contractual
+    # instruments) — the MB figure isn't substantiated by EACs. Drives compliance readiness.
+    market_based_fallback: bool = False
 
 
 def build_summary(
@@ -36,4 +39,5 @@ def build_summary(
         methodology=calc.get("methodology_notes")
         or "Dual-method (location + market-based) per GHG Protocol Scope 2.",
         factor_versions=calc.get("factor_versions") or {},
+        market_based_fallback=bool(calc.get("market_fallback_flagged", False)),
     )

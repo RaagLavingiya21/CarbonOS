@@ -199,9 +199,203 @@ export type S1OcrExtraction = {
 export type S1Member = { user_id: string; role: string; explicit: boolean; is_you: boolean };
 export type S1Members = { your_role: string; members: S1Member[] };
 
+export type S1OnboardingStep = {
+  key: string;
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+  done: boolean;
+  count: number;
+};
+export type S1Onboarding = {
+  steps: S1OnboardingStep[];
+  complete: number;
+  total: number;
+  pct: number;
+  next_key: string | null;
+};
+
+export type S1Factor = {
+  fuel_or_activity: string;
+  source_category: string;
+  gas: string;
+  value: number;
+  unit: string;
+  source: string;
+  source_version: string;
+  region: string;
+  biogenic: boolean;
+  model_year: number | null;
+  is_override: boolean;
+  basis: string | null;
+  override_id: string | null;
+};
+export type S1Factors = { your_role: string; factors: S1Factor[]; override_count: number };
+
+export type S1TrendPoint = {
+  inventory_id: string;
+  reporting_year: number;
+  total_tco2e: number;
+  is_base_year: boolean;
+  yoy_abs: number | null;
+  yoy_pct: number | null;
+  per_revenue_mm: number | null;
+  revenue_currency: string;
+  per_output: number | null;
+  output_unit: string | null;
+  per_headcount: number | null;
+};
+export type S1Trends = {
+  ar_version: string;
+  points: S1TrendPoint[];
+  base_year: number | null;
+  base_year_total_tco2e: number | null;
+  latest_vs_base_abs: number | null;
+  latest_vs_base_pct: number | null;
+};
+
+export type S1RecalcEvent = {
+  id: string;
+  trigger_type: string;
+  description: string | null;
+  delta_tco2e: number;
+  applied: boolean;
+  effective_date: string | null;
+  is_structural: boolean;
+};
+export type S1Recalc = {
+  inventory_id: string;
+  base_year: number | null;
+  base_year_total_tco2e: number;
+  significance_threshold_pct: number | null;
+  events: S1RecalcEvent[];
+  structural_delta_pending: number;
+  organic_delta: number;
+  restated_total: number;
+  pct_impact: number | null;
+  recalc_required: boolean | null;
+  has_pending: boolean;
+};
+
+export type S1Refrigerant = {
+  name: string;
+  kind: "pure" | "blend";
+  components?: Record<string, number>;
+  gwp: { AR4: number; AR5: number; AR6: number };
+};
+export type S1FugitiveRecord = {
+  id: string;
+  refrigerant: string;
+  method: string;
+  facility_id: string | null;
+  leaked_kg: number;
+  gwp: number;
+  tco2e: number;
+  description: string | null;
+  data_quality_tier: number | null;
+  evidence_document_id: string | null;
+};
+export type S1Fugitive = {
+  ar_version: string;
+  records: S1FugitiveRecord[];
+  total_tco2e: number;
+};
+
+export type S1ProcessFactor = {
+  process_type: string;
+  label: string;
+  gas: string;
+  value: number;
+  unit: string;
+  activity_unit: string;
+  source: string;
+};
+export type S1ProcessRecord = {
+  id: string;
+  process_type: string;
+  gas_species: string;
+  facility_id: string | null;
+  activity_quantity: number;
+  activity_unit: string | null;
+  ef_value: number;
+  ef_unit: string | null;
+  emission_kg: number;
+  tco2e: number;
+  description: string | null;
+  data_quality_tier: number | null;
+  evidence_document_id: string | null;
+};
+export type S1Process = {
+  ar_version: string;
+  records: S1ProcessRecord[];
+  total_tco2e: number;
+};
+
 // --- Client -----------------------------------------------------------------
 
 export const scope1Api = {
+  onboarding: () => request<S1Onboarding>("/api/scope1/onboarding"),
+
+  processFactors: () => request<S1ProcessFactor[]>("/api/scope1/process-factors"),
+  process: (inventoryId: string, arVersion: string) =>
+    request<S1Process>(
+      `/api/scope1/inventories/${inventoryId}/process?ar_version=${encodeURIComponent(arVersion)}`,
+    ),
+  createProcess: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/process", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteProcess: (recordId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/process/${recordId}`, { method: "DELETE" }),
+
+  refrigerants: () => request<S1Refrigerant[]>("/api/scope1/refrigerants"),
+  fugitive: (inventoryId: string, arVersion: string) =>
+    request<S1Fugitive>(
+      `/api/scope1/inventories/${inventoryId}/fugitive?ar_version=${encodeURIComponent(arVersion)}`,
+    ),
+  createFugitive: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/fugitive", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteFugitive: (recordId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/fugitive/${recordId}`, { method: "DELETE" }),
+
+  recalc: (inventoryId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc`),
+  addRecalcEvent: (inventoryId: string, body: Record<string, unknown>) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/events`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteRecalcEvent: (inventoryId: string, eventId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/events/${eventId}`, {
+      method: "DELETE",
+    }),
+  applyRecalc: (inventoryId: string) =>
+    request<S1Recalc>(`/api/scope1/inventories/${inventoryId}/recalc/apply`, { method: "POST" }),
+
+  trends: (arVersion: string) =>
+    request<S1Trends>(`/api/scope1/trends?ar_version=${encodeURIComponent(arVersion)}`),
+  setInventoryMetrics: (inventoryId: string, body: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/api/scope1/inventories/${inventoryId}/metrics`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  factors: () => request<S1Factors>("/api/scope1/factors"),
+  createFactorOverride: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/scope1/factors/override", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  retireFactorOverride: (overrideId: string) =>
+    request<Record<string, unknown>>(`/api/scope1/factors/override/${overrideId}`, {
+      method: "DELETE",
+    }),
+
   listEntities: () => request<S1Entity[]>("/api/scope1/entities"),
   createEntity: (body: Record<string, unknown>) =>
     request<S1Entity>("/api/scope1/entities", { method: "POST", body: JSON.stringify(body) }),
@@ -233,6 +427,24 @@ export const scope1Api = {
     request<S1Inventory>("/api/scope1/inventories", { method: "POST", body: JSON.stringify(body) }),
   lockInventory: (id: string) =>
     request<S1Inventory>(`/api/scope1/inventories/${id}/lock`, { method: "POST" }),
+  setBaseYear: (inventoryId: string, body: Record<string, unknown>) =>
+    request<S1Inventory>(`/api/scope1/inventories/${inventoryId}/base-year`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  importBaseYear: async (inventoryId: string, file: File): Promise<Record<string, unknown>> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(
+      `${BACKEND_URL}/api/scope1/inventories/${inventoryId}/base-year/import`,
+      { method: "POST", headers: { Authorization: `Bearer ${await accessToken()}` }, body: form },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  },
 
   consolidationPreview: (body: Record<string, unknown>) =>
     request<S1ConsolidationPreview>("/api/scope1/consolidation/preview", {

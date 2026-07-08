@@ -18,8 +18,13 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def _default_scope1_role(monkeypatch: pytest.MonkeyPatch) -> None:
     """Write routes require editor+; default the resolved role so these handler
-    tests run. Role gating itself is covered in tests/test_s1_roles.py."""
+    tests run. Role gating itself is covered in tests/test_s1_roles.py.
+
+    Also stub the per-org EF override lookup so intake paths (`_library`) fall
+    back to the canonical EPA library without a live Supabase call; override
+    behaviour is covered in tests/test_s1_factors_admin.py."""
     monkeypatch.setattr("db.scope1_store.get_scope1_role", lambda **k: "admin")
+    monkeypatch.setattr("db.scope1_store.list_ef_overrides", lambda **k: [])
 
 
 def test_consolidation_preview_is_pure() -> None:

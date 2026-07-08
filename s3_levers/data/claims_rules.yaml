@@ -1,0 +1,30 @@
+# Green-claims compliance rules (Epic I / P.4.5.b) — dated, versioned DATA.
+# Per research/reg-status-verified.md (2026-07-04). Legal-sensitive: this flags
+# exposure, it is NOT legal advice. `verdict` when a rule matches: prohibited |
+# watch. `jurisdiction` scopes the rule.
+
+version: v2026-07
+as_of: 2026-07-04
+
+rules:
+  - id: empco_offset_neutrality_b2c
+    jurisdiction: EU
+    framework: EU EmpCo (Directive 2024/825)
+    pattern: "carbon neutral|climate neutral|co2 neutral|climate positive|net zero product"
+    requires_offsetting: true
+    verdict: prohibited
+    note: "In force 27 Sep 2026: offset-based B2C neutrality claims outside the product's value chain are an unfair commercial practice."
+  - id: gcd_suspended
+    jurisdiction: EU
+    framework: EU Green Claims Directive
+    pattern: "environmentally friendly|eco-friendly|green"
+    requires_offsetting: false
+    verdict: watch
+    note: "GCD is suspended (not withdrawn) — build to EmpCo, monitor GCD; substantiation rules may return."
+  - id: ftc_green_guides_us
+    jurisdiction: US
+    framework: US FTC Green Guides (2012)
+    pattern: "carbon neutral|eco-friendly|green|sustainable"
+    requires_offsetting: false
+    verdict: watch
+    note: "US FTC Green Guides (2012 version operative) require competent, reliable substantiation; revision stalled."

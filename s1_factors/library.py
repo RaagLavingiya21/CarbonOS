@@ -11,22 +11,40 @@ mobile factors, the exact year is preferred, else the nearest not-newer year.
 from __future__ import annotations
 
 from s1_factors.epa_library import EPA_FACTORS
-from s1_factors.models import EmissionFactor, MissingEmissionFactor
+from s1_factors.models import (
+    RANK_MEASURED,
+    RANK_NATIONAL,
+    RANK_SUPPLIER,
+    EmissionFactor,
+    MissingEmissionFactor,
+)
+
+# An override targets exactly one factor by this key; region/model_year included
+# so mobile model-year variants and non-US factors override independently.
+_OVERRIDE_BASIS_RANK = {
+    "measured": RANK_MEASURED,
+    "supplier": RANK_SUPPLIER,
+    "custom": RANK_NATIONAL,
+}
 
 
-class EmissionFactorLibrary:
-    def __init__(self, factors: list[EmissionFactor]) -> None:
-        self._factors = list(factors)
+def _override_key(f: EmissionFactor) -> tuple:
+    return (f.fuel_or_activity, f.source_category, f.gas, f.region, f.model_year)
 
-    @classmethod
-    def default(cls) -> EmissionFactorLibrary:
-        """The canonical EPA-anchored library (no DB required)."""
-        return cls(EPA_FACTORS)
 
-    @classmethod
-    def from_db_rows(cls, rows: list[dict]) -> EmissionFactorLibrary:
-        """Build from s1_ef_record rows (only active rows: valid_to IS NULL)."""
-        factors = [
+def rows_to_factors(rows: list[dict]) -> list[EmissionFactor]:
+    """Map active (valid_to IS NULL) EF/override DB rows to EmissionFactor objects.
+
+    Honours a `basis` column (measured|supplier|custom) to set selection_rank
+    when present; otherwise falls back to the row's rank/national default.
+    """
+    factors: list[EmissionFactor] = []
+    for r in rows:
+        if r.get("valid_to") is not None:
+            continue
+        basis = r.get("basis")
+        rank = _OVERRIDE_BASIS_RANK.get(basis, RANK_NATIONAL) if basis else RANK_NATIONAL
+        factors.append(
             EmissionFactor(
                 fuel_or_activity=r["fuel_or_activity"],
                 source_category=r["source_category"],
@@ -41,11 +59,43 @@ class EmissionFactorLibrary:
                 model_year=r.get("model_year"),
                 hhv=float(r["hhv"]) if r.get("hhv") is not None else None,
                 hhv_unit=r.get("hhv_unit"),
+                selection_rank=rank,
             )
-            for r in rows
-            if r.get("valid_to") is None
-        ]
-        return cls(factors)
+        )
+    return factors
+
+
+class EmissionFactorLibrary:
+    def __init__(self, factors: list[EmissionFactor]) -> None:
+        self._factors = list(factors)
+
+    @property
+    def factors(self) -> list[EmissionFactor]:
+        return list(self._factors)
+
+    @classmethod
+    def default(cls) -> EmissionFactorLibrary:
+        """The canonical EPA-anchored library (no DB required)."""
+        return cls(EPA_FACTORS)
+
+    @classmethod
+    def from_db_rows(cls, rows: list[dict]) -> EmissionFactorLibrary:
+        """Build from s1_ef_record rows (only active rows: valid_to IS NULL)."""
+        return cls(rows_to_factors(rows))
+
+    @classmethod
+    def with_overrides(cls, override_factors: list[EmissionFactor]) -> EmissionFactorLibrary:
+        """Canonical EPA library with an org's factor overrides layered on top.
+
+        An override *replaces* the global factor(s) for the same
+        (fuel, category, gas, region, model_year) key, so an org can early-adopt
+        a new EPA year or supply a measured/supplier-specific factor without ever
+        mutating the shared reference set. If no overrides are given this is
+        byte-identical to `default()`.
+        """
+        keys = {_override_key(f) for f in override_factors}
+        base = [f for f in EPA_FACTORS if _override_key(f) not in keys]
+        return cls(base + list(override_factors))
 
     def select(
         self,

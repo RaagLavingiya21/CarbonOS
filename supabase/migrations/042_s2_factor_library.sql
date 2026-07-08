@@ -28,5 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_s2_factors_lookup
 ALTER TABLE s2_factor_library ENABLE ROW LEVEL SECURITY;
 
 -- Read-only to all authenticated users; writes only via service role (no policy).
+-- Idempotent (safe to re-run): DROP POLICY IF EXISTS precedes each CREATE POLICY.
+DROP POLICY IF EXISTS s2_factors_select_all ON s2_factor_library;
 CREATE POLICY s2_factors_select_all ON s2_factor_library
     FOR SELECT TO authenticated USING (true);

@@ -1,12 +1,15 @@
-"""Scope 2 ingestion routes — CSV bulk-import preview + commit (PRD 5.1).
+"""Scope 2 ingestion routes — CSV + PDF/OCR bill import (PRD 5.1).
 
-`preview-csv` is stateless: parse + validate + normalize under a column mapping.
-`import-csv` persists the result: it resolves each row's site_ref to an existing
-site by name, finds-or-creates a csv account per (site, carrier), and inserts bill
-rows. Rows whose site_ref matches no site are reported as unresolved, not saved.
+`preview-csv` / `extract-doc` are stateless: parse/extract + validate + normalize.
+`import-csv` / `import-doc` persist the result: they resolve a site, find-or-create
+an account per (site, carrier), insert bills, and reconcile true-up dedup. OCR is a
+two-step human-in-the-loop flow: `extract-doc` returns per-field confidence + review
+flags; the reviewed meters come back to `import-doc` to commit.
 """
 
 from __future__ import annotations
+
+import base64
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -19,13 +22,46 @@ from api.models.scope2_schemas import (
     CsvRowErrorDTO,
     EstimateRequest,
     EstimateResponse,
+    ExtractDocRequest,
+    ExtractDocResponse,
+    ExtractedMeterDTO,
+    FieldDTO,
+    ImportDocRequest,
+    ImportDocResponse,
 )
 from api.routes.scope2_deps import resolve_org_id
 from db import s2_bill_store, s2_site_store
 from s2_ingestion.csv_import import ColumnMappingError, import_bills_csv
+from s2_ingestion.dedup import BillKey, resolve_supersessions
 from s2_ingestion.estimation import EstimationError, estimate_annual_electricity_mwh
+from s2_ingestion.ocr import extract_bill_document, normalize_bill
+
+# Carriers the s2_utility_accounts CHECK constraint accepts.
+_ALLOWED_CARRIERS = {"electricity", "natural_gas", "steam", "heat", "cooling"}
 
 router = APIRouter(prefix="/api/scope2", tags=["scope2"])
+
+
+def _reconcile_dedup(account_ids: list[int], access_token: str) -> int:
+    """Supersede estimated/cost-only reads trued-up by a same-period actual (PRD 5.6).
+
+    Re-scans the affected accounts' active bills and applies the pure dedup verdict.
+    Idempotent — safe to run after every insert. Returns the count superseded.
+    """
+    active = s2_bill_store.list_active_bill_keys(account_ids, access_token)
+    keys = [
+        BillKey(
+            bill_id=row["bill_id"],
+            account_id=row["account_id"],
+            period_start=row["period_start"],
+            period_end=row["period_end"],
+            is_estimated_read=row.get("is_estimated_read", False),
+            is_cost_only=row.get("is_cost_only", False),
+        )
+        for row in active
+    ]
+    pairs = resolve_supersessions(keys)
+    return s2_bill_store.supersede_bills(pairs, access_token=access_token)
 
 
 @router.post("/bills/preview-csv", response_model=CsvPreviewResponse)
@@ -116,13 +152,15 @@ def commit_csv(
             }
         )
 
-    committed = s2_bill_store.insert_bills(
+    inserted = s2_bill_store.insert_bills(
         rows, org_id=org_id, user_id=current_user.user_id, access_token=token
     )
+    superseded = _reconcile_dedup(list(account_cache.values()), token)
     return CsvCommitResponse(
         total_rows=result.total_rows,
-        committed_count=committed,
+        committed_count=len(inserted),
         error_count=len(result.errors),
+        superseded_count=superseded,
         unresolved_site_refs=sorted(unresolved),
     )
 
@@ -178,10 +216,119 @@ def estimate_site(
         user_id=current_user.user_id,
         access_token=token,
     )
+    # A truer same-period read (e.g. a re-run estimate or an actual bill covering the
+    # full year) supersedes the older estimate; never double-count the period.
+    _reconcile_dedup([account_id], token)
     return EstimateResponse(
         site_id=site_id,
         reporting_year=request.reporting_year,
         annual_mwh=estimate.annual_mwh,
         intensity_kwh_per_sqft=estimate.intensity_kwh_per_sqft,
         method_note=estimate.method_note,
+    )
+
+
+@router.post("/bills/extract-doc", response_model=ExtractDocResponse)
+def extract_doc(
+    request: ExtractDocRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ExtractDocResponse:
+    """Stateless: run Claude vision over a bill and return meters + review flags.
+
+    Nothing is persisted — this is the review step. The user confirms/edits the
+    returned meters, then commits them via `import-doc`.
+    """
+    try:
+        file_bytes = base64.b64decode(request.file_base64, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid base64 file: {exc}") from exc
+
+    extraction = extract_bill_document(file_bytes, request.content_type)
+    rows = normalize_bill(extraction)
+    meters = [
+        ExtractedMeterDTO(
+            meter_number=r.meter_number,
+            energy_carrier=r.energy_carrier,
+            period_start=r.period_start.isoformat() if r.period_start else None,
+            period_end=r.period_end.isoformat() if r.period_end else None,
+            raw_quantity=r.raw_quantity,
+            raw_unit=r.raw_unit,
+            canonical_mwh=r.canonical_mwh,
+            cost_usd=r.cost_usd,
+            demand_kw=r.demand_kw,
+            is_estimated_read=r.is_estimated_read,
+            is_cost_only=r.is_cost_only,
+            needs_review=r.needs_review,
+            min_confidence=r.min_confidence,
+            review_reasons=r.review_reasons,
+        )
+        for r in rows
+    ]
+    header = {
+        name: FieldDTO(value=f.value, confidence=f.confidence)
+        for name, f in extraction.header.items()
+    }
+    needs_review = bool(extraction.error) or any(m.needs_review for m in meters)
+    return ExtractDocResponse(
+        header=header,
+        meters=meters,
+        model=extraction.model,
+        error=extraction.error,
+        needs_review=needs_review,
+    )
+
+
+@router.post("/bills/import-doc", response_model=ImportDocResponse)
+def import_doc(
+    request: ImportDocRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ImportDocResponse:
+    """Persist reviewed meters from an extracted bill (source_type='pdf')."""
+    org_id = resolve_org_id(current_user)
+    token = current_user.access_token
+
+    site = s2_site_store.get_site(request.site_id, token)
+    if site is None:
+        raise HTTPException(status_code=404, detail=f"Site {request.site_id} not found.")
+
+    account_cache: dict[str, int] = {}
+    rows: list[dict] = []
+    skipped = 0
+    for meter in request.meters:
+        carrier = meter.energy_carrier
+        if carrier not in _ALLOWED_CARRIERS:
+            skipped += 1
+            continue
+        if carrier not in account_cache:
+            account_cache[carrier] = s2_bill_store.get_or_create_account(
+                request.site_id,
+                carrier,
+                org_id=org_id,
+                user_id=current_user.user_id,
+                access_token=token,
+                source_type="pdf",
+            )
+        rows.append(
+            {
+                "account_id": account_cache[carrier],
+                "period_start": meter.period_start,
+                "period_end": meter.period_end,
+                "raw_quantity": meter.raw_quantity,
+                "raw_unit": meter.raw_unit,
+                "canonical_mwh": meter.canonical_mwh,
+                "cost_usd": meter.cost_usd,
+                "is_estimated_read": meter.is_estimated_read,
+                "is_cost_only": meter.is_cost_only,
+                "ingestion_method": "pdf_ocr",
+            }
+        )
+
+    inserted = s2_bill_store.insert_bills(
+        rows, org_id=org_id, user_id=current_user.user_id, access_token=token
+    )
+    superseded = _reconcile_dedup(list(account_cache.values()), token)
+    return ImportDocResponse(
+        committed_count=len(inserted),
+        superseded_count=superseded,
+        skipped_count=skipped,
     )

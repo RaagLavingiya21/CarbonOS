@@ -16,6 +16,16 @@
     {"description": "recycling rebate credit", "vendor": "", "expected_category": 5, "note": "TRAP: a credit, not a purchase; should flag"},
     {"description": "consulting - engineering", "vendor": "AECOM", "expected_category": 1, "note": "professional services"},
     {"description": "co-packing services", "vendor": "ContractPack Inc", "expected_category": 1, "note": "contract manufacturing of own product"},
-    {"description": "misc", "vendor": "", "expected_category": 1, "note": "no signal at all; must flag/no_match"}
+    {"description": "misc", "vendor": "", "expected_category": 1, "note": "no signal at all; must flag/no_match"},
+    {"description": "WHSE storage - overflow Q4", "vendor": "Prologis", "expected_category": 4, "note": "WHSE abbreviation for warehousing"},
+    {"description": "fuel surcharge on inbound freight", "vendor": "Old Dominion", "expected_category": 4, "note": "TRAP: 'fuel' present but the service is freight (Cat 4), not purchased fuel (Cat 3)"},
+    {"description": "leasehold improvements - HQ buildout", "vendor": "Turner Construction", "expected_category": 2, "note": "capitalized construction; Cat 2-ish, but ambiguous — flag ok"},
+    {"description": "IT equipment lease - 36mo", "vendor": "Dell Financial", "expected_category": 1, "note": "TRAP: a lease is a service (Cat 1/8), not a capital purchase (Cat 2)"},
+    {"description": "professional services - retainer", "vendor": "McKinsey", "expected_category": 1, "note": "generic services -> Cat 1"},
+    {"description": "membership dues - trade association", "vendor": "", "expected_category": 1, "note": "services; low materiality"},
+    {"description": "employee expense reimbursement - airfare", "vendor": "", "expected_category": 6, "note": "reimbursed business travel"},
+    {"description": "ULINE order #88231", "vendor": "ULINE", "expected_category": 1, "note": "vendor-only; packaging/industrial supplies -> Cat 1 (or flag)"},
+    {"description": "propane delivery - forklift fuel", "vendor": "AmeriGas", "expected_category": 3, "note": "purchased fuel -> Cat 3 (review Scope 1)"},
+    {"description": "R&M - production line", "vendor": "", "expected_category": 1, "note": "repair & maintenance service, not machinery purchase"}
   ]
 }

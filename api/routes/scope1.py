@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import uuid
 from collections import Counter
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -21,20 +22,38 @@ from api.models.scope1_schemas import (
     ConsolidationPreviewRequest,
     ConsolidationPreviewResponse,
     CreateDataOwnerRequest,
+    CreateEfOverrideRequest,
     CreateEntityRequest,
     CreateFacilityRequest,
+    CreateFugitiveRequest,
     CreateInventoryRequest,
+    CreateProcessRequest,
+    CreateRecalcEventRequest,
     CreateSourceRequest,
+    EfFactorDTO,
     ExcludeSourceRequest,
     FacilityBreakdownDTO,
+    FactorsResponse,
+    FugitiveRecordDTO,
+    FugitiveReportResponse,
     GasBreakdownDTO,
     InventoryReportResponse,
     InviteMemberRequest,
     MobileRecordRequest,
     OcrReviewRequest,
+    OnboardingResponse,
+    OnboardingStepDTO,
+    ProcessRecordDTO,
+    ProcessReportResponse,
     ReadinessResponse,
+    RecalcAnalysisResponse,
+    RecalcEventDTO,
+    SetBaseYearRequest,
+    SetInventoryMetricsRequest,
     SetRoleRequest,
     StationaryRecordRequest,
+    TrendPointDTO,
+    TrendsResponse,
     UpsertBoundaryRequest,
 )
 from db import org_store
@@ -42,14 +61,26 @@ from db import scope1_store as store
 from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
-from s1_factors import EmissionFactorLibrary, MissingEmissionFactor
-from s1_intake import parse_intake_csv
+from s1_factors import EmissionFactorLibrary, MissingEmissionFactor, rows_to_factors
+from s1_fugitive import (
+    UnknownRefrigerant,
+    compute_leaked_kg,
+    fugitive_tco2e,
+    list_refrigerants,
+    refrigerant_gwp,
+)
+from s1_intake import parse_base_year_csv, parse_intake_csv
 from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
+from s1_onboarding import OnboardingCounts, build_onboarding
+from s1_process import compute_emission_kg, list_process_factors, process_tco2e
+from s1_recalc import RecalcEvent, analyze_recalc
 from s1_reporting import (
     DisclosureMeta,
+    InventoryDatum,
     ReportRecord,
     build_inventory_report,
     build_pdf,
+    build_trends,
     build_xlsx,
     trace_record,
 )
@@ -59,9 +90,22 @@ router = APIRouter(prefix="/api/scope1", tags=["scope1"])
 _COMPLETE_STATUSES = {"received", "entered", "verified"}
 
 
-def _library() -> EmissionFactorLibrary:
-    """Canonical EPA library (mirrors the seeded s1_ef_record reference data)."""
-    return EmissionFactorLibrary.default()
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _library(user: CurrentUser) -> EmissionFactorLibrary:
+    """The org's effective EF library: canonical EPA set + this org's active
+    admin overrides layered on top (an override replaces the global factor for
+    its key). Falls back to the pure default if overrides can't be read."""
+    try:
+        rows = _guard(store.list_ef_overrides,
+                      access_token=user.access_token, user_id=user.user_id)
+    except HTTPException:
+        return EmissionFactorLibrary.default()
+    if not rows:
+        return EmissionFactorLibrary.default()
+    return EmissionFactorLibrary.with_overrides(rows_to_factors(rows))
 
 
 def _guard(func, *args, **kwargs):
@@ -133,6 +177,73 @@ def invite_member(req: InviteMemberRequest, user: CurrentUser = Depends(require_
                   access_token=user.access_token, user_id=user.user_id)
 
 
+# --- Emission factors (admin overrides) -------------------------------------
+
+def _override_key(row: dict) -> tuple:
+    return (row["fuel_or_activity"], row["source_category"], row["gas"],
+            row.get("region", "US"), row.get("model_year"))
+
+
+@router.get("/factors", response_model=FactorsResponse)
+def list_factors(user: CurrentUser = Depends(get_current_user)) -> FactorsResponse:
+    """The org's effective factor set: canonical EPA factors with the org's
+    active admin overrides layered on top (marked `is_override`)."""
+    overrides = _guard(store.list_ef_overrides,
+                       access_token=user.access_token, user_id=user.user_id)
+    role = _guard(store.get_scope1_role,
+                  access_token=user.access_token, user_id=user.user_id)
+    override_keys = {_override_key(o) for o in overrides}
+
+    factors: list[EfFactorDTO] = [
+        EfFactorDTO(
+            fuel_or_activity=o["fuel_or_activity"], source_category=o["source_category"],
+            gas=o["gas"], value=float(o["value"]), unit=o["unit"], source=o["source"],
+            source_version=o["source_version"], region=o.get("region", "US"),
+            biogenic=bool(o.get("biogenic", False)), model_year=o.get("model_year"),
+            is_override=True, basis=o.get("basis"), override_id=o["id"],
+        )
+        for o in overrides
+    ]
+    for f in EmissionFactorLibrary.default().factors:
+        if (f.fuel_or_activity, f.source_category, f.gas, f.region, f.model_year) in override_keys:
+            continue  # replaced by an org override
+        factors.append(EfFactorDTO(
+            fuel_or_activity=f.fuel_or_activity, source_category=f.source_category,
+            gas=f.gas, value=f.value, unit=f.unit, source=f.source,
+            source_version=f.source_version, region=f.region, biogenic=f.biogenic,
+            model_year=f.model_year, is_override=False,
+        ))
+    return FactorsResponse(your_role=role, factors=factors, override_count=len(overrides))
+
+
+@router.post("/factors/override")
+def create_factor_override(
+    req: CreateEfOverrideRequest, user: CurrentUser = Depends(require_admin)
+) -> dict:
+    """Publish an org-specific factor. Versioned: any current active override
+    for the same key is retired (valid_to set) before the new one is inserted."""
+    data = req.model_dump(exclude_none=True)
+    existing = _guard(store.find_active_ef_override, data,
+                      access_token=user.access_token, user_id=user.user_id)
+    if existing is not None:
+        _guard(store.retire_ef_override, existing["id"], _today(),
+               access_token=user.access_token, user_id=user.user_id)
+    return _guard(store.create_ef_override, data,
+                  access_token=user.access_token, user_id=user.user_id)
+
+
+@router.delete("/factors/override/{override_id}")
+def retire_factor_override(
+    override_id: str, user: CurrentUser = Depends(require_admin)
+) -> dict:
+    """Retire an override (soft; history kept). The global EPA factor resumes."""
+    retired = _guard(store.retire_ef_override, override_id, _today(),
+                     access_token=user.access_token, user_id=user.user_id)
+    if retired is None:
+        raise HTTPException(status_code=404, detail="Active override not found.")
+    return retired
+
+
 # --- Entities / facilities / data owners ------------------------------------
 
 @router.post("/entities")
@@ -199,6 +310,164 @@ def lock_inventory(inventory_id: str, user: CurrentUser = Depends(require_editor
     inv = _guard(store.lock_inventory, inventory_id,
                  access_token=user.access_token, user_id=user.user_id)
     _log(inventory_id, "lock", user, entity_table="s1_inventory")
+    return inv
+
+
+def _apply_base_year(inventory_id: str, base_year: int, total: float, gwp: str,
+                     evidence_id: str | None, user: CurrentUser) -> dict:
+    inv = _guard(
+        store.set_base_year, inventory_id,
+        {"base_year": base_year, "base_year_total_tco2e": total, "base_year_gwp_version": gwp},
+        access_token=user.access_token, user_id=user.user_id,
+    )
+    _log(inventory_id, "set_base_year", user, entity_table="s1_inventory",
+         field_changes={"base_year": base_year, "total_tco2e": total,
+                        "gwp_version": gwp, "evidence_document_id": evidence_id})
+    return inv
+
+
+@router.post("/inventories/{inventory_id}/base-year")
+def set_base_year(inventory_id: str, req: SetBaseYearRequest,
+                  user: CurrentUser = Depends(require_editor)) -> dict:
+    """Set the base year + prior-year total on an inventory (manual entry)."""
+    return _apply_base_year(inventory_id, req.base_year, req.base_year_total_tco2e,
+                            req.base_year_gwp_version, req.evidence_document_id, user)
+
+
+@router.post("/inventories/{inventory_id}/base-year/import")
+async def import_base_year(
+    inventory_id: str, file: UploadFile = File(...),
+    user: CurrentUser = Depends(require_editor),
+) -> dict:
+    """Import a prior-year inventory total from a consultant/spreadsheet CSV
+    (columns base_year, total_tco2e, gwp_version?); keeps the file as evidence."""
+    data = await file.read()
+    parsed = parse_base_year_csv(data)
+    if not parsed.is_valid:
+        raise HTTPException(status_code=422, detail="; ".join(parsed.errors) or "Invalid base-year CSV.")
+    evidence = _guard(
+        store.upload_evidence, data, file_name=file.filename or "base-year.csv",
+        content_type=file.content_type, document_type="base_year_import",
+        inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
+    )
+    inv = _apply_base_year(inventory_id, parsed.base_year, parsed.total_tco2e,
+                           parsed.gwp_version, evidence["id"], user)
+    return {**inv, "evidence_document_id": evidence["id"],
+            "imported": {"base_year": parsed.base_year, "total_tco2e": parsed.total_tco2e,
+                         "gwp_version": parsed.gwp_version}}
+
+
+# --- Base-year recalculation (GHG Protocol Ch. 5) ---------------------------
+
+def _recalc_analysis(inventory_id: str, user: CurrentUser):
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+    rows = _guard(store.list_recalc_events, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    events = [
+        RecalcEvent(
+            id=r["id"], trigger_type=r["trigger_type"], description=r.get("description"),
+            delta_tco2e=float(r["delta_tco2e"]), applied=bool(r.get("applied")),
+            effective_date=r.get("effective_date"),
+        )
+        for r in rows
+    ]
+    analysis = analyze_recalc(
+        base_year=inv.get("base_year"),
+        base_year_total_tco2e=_num(inv.get("base_year_total_tco2e")),
+        significance_threshold_pct=_num(inv.get("significance_threshold_pct")),
+        events=events,
+    )
+    return inv, analysis
+
+
+def _recalc_response(inventory_id: str, analysis) -> RecalcAnalysisResponse:
+    return RecalcAnalysisResponse(
+        inventory_id=inventory_id,
+        base_year=analysis.base_year,
+        base_year_total_tco2e=analysis.base_year_total_tco2e,
+        significance_threshold_pct=analysis.significance_threshold_pct,
+        events=[RecalcEventDTO(**vars(e)) for e in analysis.events],
+        structural_delta_pending=analysis.structural_delta_pending,
+        organic_delta=analysis.organic_delta,
+        restated_total=analysis.restated_total,
+        pct_impact=analysis.pct_impact,
+        recalc_required=analysis.recalc_required,
+        has_pending=analysis.has_pending,
+    )
+
+
+@router.get("/inventories/{inventory_id}/recalc", response_model=RecalcAnalysisResponse)
+def get_recalc(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> RecalcAnalysisResponse:
+    """Base-year recalculation analysis: which changes are structural, the pending
+    restatement delta, % impact vs the significance threshold, and restated total."""
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.post("/inventories/{inventory_id}/recalc/events", response_model=RecalcAnalysisResponse)
+def add_recalc_event(
+    inventory_id: str, req: CreateRecalcEventRequest,
+    user: CurrentUser = Depends(require_editor),
+) -> RecalcAnalysisResponse:
+    """Record a change event (structural or organic) against the base year."""
+    _guard(store.create_recalc_event, {"inventory_id": inventory_id, **req.model_dump(exclude_none=True)},
+           access_token=user.access_token, user_id=user.user_id)
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.delete("/inventories/{inventory_id}/recalc/events/{event_id}", response_model=RecalcAnalysisResponse)
+def remove_recalc_event(
+    inventory_id: str, event_id: str, user: CurrentUser = Depends(require_editor),
+) -> RecalcAnalysisResponse:
+    """Delete a not-yet-applied event (applied events are immutable history)."""
+    deleted = _guard(store.delete_recalc_event, event_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Event not found or already applied.")
+    _, analysis = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, analysis)
+
+
+@router.post("/inventories/{inventory_id}/recalc/apply", response_model=RecalcAnalysisResponse)
+def apply_recalc(inventory_id: str, user: CurrentUser = Depends(require_editor)) -> RecalcAnalysisResponse:
+    """Restate the base year: fold pending structural deltas into the base-year
+    total, mark those events applied, and log the restatement (append-only)."""
+    _, analysis = _recalc_analysis(inventory_id, user)
+    if not analysis.has_pending:
+        raise HTTPException(status_code=400, detail="No pending structural changes to apply.")
+
+    restated = analysis.restated_total
+    _guard(store.set_base_year, inventory_id, {"base_year_total_tco2e": restated},
+           access_token=user.access_token, user_id=user.user_id)
+    pending_ids = [e.id for e in analysis.events if e.is_structural and not e.applied]
+    _guard(store.mark_recalc_events_applied, pending_ids, _today(),
+           access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "recalc_base_year", user, entity_table="s1_inventory",
+         field_changes={"from_tco2e": analysis.base_year_total_tco2e, "to_tco2e": restated,
+                        "structural_delta": analysis.structural_delta_pending,
+                        "events_applied": len(pending_ids)})
+
+    _, refreshed = _recalc_analysis(inventory_id, user)
+    return _recalc_response(inventory_id, refreshed)
+
+
+@router.post("/inventories/{inventory_id}/metrics")
+def set_inventory_metrics(
+    inventory_id: str, req: SetInventoryMetricsRequest,
+    user: CurrentUser = Depends(require_editor),
+) -> dict:
+    """Set operational denominators (revenue / output / headcount) used for
+    emissions-intensity reporting."""
+    patch = req.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(status_code=422, detail="No metrics provided.")
+    inv = _guard(store.set_inventory_metrics, inventory_id, patch,
+                 access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "set_metrics", user, entity_table="s1_inventory", field_changes=patch)
     return inv
 
 
@@ -591,6 +860,220 @@ def readiness(
     )
 
 
+# --- Onboarding wizard ------------------------------------------------------
+
+@router.get("/onboarding", response_model=OnboardingResponse)
+def onboarding(user: CurrentUser = Depends(get_current_user)) -> OnboardingResponse:
+    """Backend-driven guided-setup checklist reflecting the org's real progress."""
+    kw = {"access_token": user.access_token, "user_id": user.user_id}
+    entities = _guard(store.list_entities, **kw)
+    facilities = _guard(store.list_facilities, **kw)
+    sources = _guard(store.list_sources, **kw)
+    inventories = _guard(store.list_inventories, **kw)
+
+    records = 0
+    locked = 0
+    for inv in inventories:
+        if inv.get("locked"):
+            locked += 1
+        records += len(
+            _guard(store.list_records_for_inventory, inv["id"], **kw)
+        )
+
+    checklist = build_onboarding(
+        OnboardingCounts(
+            entities=len(entities),
+            facilities=len(facilities),
+            sources=sum(1 for s in sources if not s.get("is_excluded")),
+            inventories=len(inventories),
+            records=records,
+            locked_inventories=locked,
+        )
+    )
+    return OnboardingResponse(
+        steps=[OnboardingStepDTO(**vars(s)) for s in checklist.steps],
+        complete=checklist.complete,
+        total=checklist.total,
+        pct=checklist.pct,
+        next_key=checklist.next_key,
+    )
+
+
+# --- Trends & emissions intensity -------------------------------------------
+
+def _num(x) -> float | None:
+    return float(x) if x is not None else None
+
+
+@router.get("/trends", response_model=TrendsResponse)
+def trends(
+    ar_version: str = Query("AR5"), user: CurrentUser = Depends(get_current_user)
+) -> TrendsResponse:
+    """Year-over-year Scope 1 totals + emissions intensity across the org's
+    inventories, plus a comparison of the latest year to the declared base year."""
+    inventories = _guard(store.list_inventories,
+                         access_token=user.access_token, user_id=user.user_id)
+    data = [
+        InventoryDatum(
+            inventory_id=inv["id"],
+            reporting_year=inv["reporting_year"],
+            total_tco2e=_assemble_report(inv["id"], ar_version, user).total_scope1_tco2e,
+            annual_revenue=_num(inv.get("annual_revenue")),
+            revenue_currency=inv.get("revenue_currency") or "USD",
+            output_quantity=_num(inv.get("output_quantity")),
+            output_unit=inv.get("output_unit"),
+            headcount=inv.get("headcount"),
+        )
+        for inv in inventories
+    ]
+
+    base_year = base_year_total = None
+    if inventories:
+        latest = max(inventories, key=lambda i: i["reporting_year"])
+        base_year = latest.get("base_year")
+        base_year_total = _num(latest.get("base_year_total_tco2e"))
+
+    result = build_trends(data, ar_version=ar_version,
+                          base_year=base_year, base_year_total_tco2e=base_year_total)
+    return TrendsResponse(
+        ar_version=result.ar_version,
+        points=[TrendPointDTO(**vars(p)) for p in result.points],
+        base_year=result.base_year,
+        base_year_total_tco2e=result.base_year_total_tco2e,
+        latest_vs_base_abs=result.latest_vs_base_abs,
+        latest_vs_base_pct=result.latest_vs_base_pct,
+    )
+
+
+# --- Fugitive (refrigerant) emissions ---------------------------------------
+
+@router.get("/refrigerants")
+def refrigerants(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    """Refrigerant library with GWP per AR version (for the intake picker)."""
+    return list_refrigerants()
+
+
+@router.post("/fugitive")
+def create_fugitive(req: CreateFugitiveRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+    """Record a fugitive refrigerant-leak estimate. The leaked *mass* is computed
+    server-side from the method inputs and stored; tCO2e is derived at reporting
+    time from the refrigerant GWP (never stored)."""
+    try:
+        refrigerant_gwp(req.refrigerant, "AR5")  # validate the refrigerant is known
+        leaked = compute_leaked_kg(
+            req.method, charge_kg=req.charge_kg, leak_rate_pct=req.leak_rate_pct,
+            purchases_kg=req.purchases_kg, beginning_inventory_kg=req.beginning_inventory_kg,
+            ending_inventory_kg=req.ending_inventory_kg,
+        )
+    except (ValueError, UnknownRefrigerant) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    row = {**req.model_dump(exclude_none=True), "leaked_kg": leaked}
+    record = _guard(store.create_fugitive_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _log(record["id"], "create", user, entity_table="s1_fugitive_record",
+         field_changes={"refrigerant": req.refrigerant, "method": req.method, "leaked_kg": leaked})
+    return record
+
+
+@router.get("/inventories/{inventory_id}/fugitive", response_model=FugitiveReportResponse)
+def list_fugitive(
+    inventory_id: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> FugitiveReportResponse:
+    """Fugitive records with tCO2e derived at the chosen AR version, plus a total."""
+    rows = _guard(store.list_fugitive_records, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    records: list[FugitiveRecordDTO] = []
+    total = 0.0
+    for r in rows:
+        leaked = float(r["leaked_kg"])
+        try:
+            gwp = refrigerant_gwp(r["refrigerant"], ar_version)
+        except UnknownRefrigerant:
+            gwp = 0.0
+        tco2e = fugitive_tco2e(leaked, r["refrigerant"], ar_version) if gwp else 0.0
+        total += tco2e
+        records.append(FugitiveRecordDTO(
+            id=r["id"], refrigerant=r["refrigerant"], method=r["method"],
+            facility_id=r.get("facility_id"), leaked_kg=leaked, gwp=gwp, tco2e=tco2e,
+            description=r.get("description"), data_quality_tier=r.get("data_quality_tier"),
+            evidence_document_id=r.get("evidence_document_id"),
+        ))
+    return FugitiveReportResponse(ar_version=ar_version, records=records, total_tco2e=total)
+
+
+@router.delete("/fugitive/{record_id}")
+def delete_fugitive(record_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
+    deleted = _guard(store.delete_fugitive_record, record_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Fugitive record not found.")
+    _log(record_id, "delete", user, entity_table="s1_fugitive_record")
+    return deleted
+
+
+# --- Process emissions -------------------------------------------------------
+
+@router.get("/process-factors")
+def process_factors(user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    """IPCC process emission-factor library (for the intake picker)."""
+    return list_process_factors()
+
+
+@router.post("/process")
+def create_process(req: CreateProcessRequest, user: CurrentUser = Depends(require_editor)) -> dict:
+    """Record a process-emission estimate. The emitted gas *mass* is computed
+    server-side (activity x EF) and stored; tCO2e derives at reporting time."""
+    try:
+        emission_kg = compute_emission_kg(req.activity_quantity, req.ef_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    row = {**req.model_dump(exclude_none=True), "emission_kg": emission_kg}
+    record = _guard(store.create_process_record, row,
+                    access_token=user.access_token, user_id=user.user_id)
+    _log(record["id"], "create", user, entity_table="s1_process_record",
+         field_changes={"process_type": req.process_type, "gas_species": req.gas_species,
+                        "emission_kg": emission_kg})
+    return record
+
+
+@router.get("/inventories/{inventory_id}/process", response_model=ProcessReportResponse)
+def list_process(
+    inventory_id: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProcessReportResponse:
+    """Process records with tCO2e derived at the chosen AR version, plus a total."""
+    rows = _guard(store.list_process_records, inventory_id,
+                  access_token=user.access_token, user_id=user.user_id)
+    records: list[ProcessRecordDTO] = []
+    total = 0.0
+    for r in rows:
+        emission_kg = float(r["emission_kg"])
+        tco2e = process_tco2e(emission_kg, r["gas_species"], ar_version)
+        total += tco2e
+        records.append(ProcessRecordDTO(
+            id=r["id"], process_type=r["process_type"], gas_species=r["gas_species"],
+            facility_id=r.get("facility_id"), activity_quantity=float(r["activity_quantity"]),
+            activity_unit=r.get("activity_unit"), ef_value=float(r["ef_value"]),
+            ef_unit=r.get("ef_unit"), emission_kg=emission_kg, tco2e=tco2e,
+            description=r.get("description"), data_quality_tier=r.get("data_quality_tier"),
+            evidence_document_id=r.get("evidence_document_id"),
+        ))
+    return ProcessReportResponse(ar_version=ar_version, records=records, total_tco2e=total)
+
+
+@router.delete("/process/{record_id}")
+def delete_process(record_id: str, user: CurrentUser = Depends(require_editor)) -> dict:
+    deleted = _guard(store.delete_process_record, record_id,
+                     access_token=user.access_token, user_id=user.user_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Process record not found.")
+    _log(record_id, "delete", user, entity_table="s1_process_record")
+    return deleted
+
+
 # --- Reporting --------------------------------------------------------------
 
 @router.get("/inventories/{inventory_id}/report", response_model=InventoryReportResponse)
@@ -690,7 +1173,7 @@ def record_trace(
 def _persist_stationary(req: StationaryRecordRequest, user: CurrentUser) -> dict:
     """Calculate + persist one stationary record (shared by single + CSV intake)."""
     result = calculate_stationary(
-        req.fuel_or_activity, req.activity_value, req.activity_unit, _library(),
+        req.fuel_or_activity, req.activity_value, req.activity_unit, _library(user),
         biogenic=req.biogenic, hhv_override=req.hhv_override,
         data_quality_tier=req.data_quality_tier,
     )
@@ -705,7 +1188,7 @@ def _persist_stationary(req: StationaryRecordRequest, user: CurrentUser) -> dict
 def _persist_mobile(req: MobileRecordRequest, user: CurrentUser) -> dict:
     """Calculate + persist one mobile record (shared by single + CSV intake)."""
     result = calculate_mobile(
-        req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(),
+        req.fuel_or_activity, req.fuel_quantity, req.fuel_unit, _library(user),
         miles=req.miles, model_year=req.model_year,
         distance_activity=req.distance_activity, data_quality_tier=req.data_quality_tier,
     )

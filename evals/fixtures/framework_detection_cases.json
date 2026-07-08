@@ -43,6 +43,30 @@
       "expected_framework": "generic",
       "confident": false,
       "text": "Hi team, our buyer asked us to get ready for climate reporting. Can you compile our data? Thanks."
+    },
+    {
+      "name": "ecovadis_themes_only_no_name",
+      "expected_framework": "ecovadis",
+      "confident": false,
+      "text": "Sustainability assessment. Environment theme. Labor and Human Rights. Ethics theme. Sustainable Procurement. Please upload supporting documents."
+    },
+    {
+      "name": "generic_heavy_scope3_no_framework",
+      "expected_framework": "generic",
+      "confident": false,
+      "text": "Please report your Scope 3 emissions. Include all relevant Scope 3 categories and break down Scope 3 by category with methodology."
+    },
+    {
+      "name": "two_frameworks_named_tie",
+      "expected_framework": "cdp",
+      "confident": false,
+      "text": "Our supplier program aligns with both CDP and EcoVadis reporting standards; please prepare accordingly."
+    },
+    {
+      "name": "walmart_thesis_no_gigaton",
+      "expected_framework": "walmart",
+      "confident": false,
+      "text": "THESIS Sustainability Index supplier assessment for the upcoming reporting cycle."
     }
   ]
 }

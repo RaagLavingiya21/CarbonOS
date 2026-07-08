@@ -16,15 +16,25 @@ from s1_reporting.report import (
     build_inventory_report,
     trace_record,
 )
+from s1_reporting.trends import (
+    InventoryDatum,
+    TrendPoint,
+    TrendsResult,
+    build_trends,
+)
 
 __all__ = [
     "DisclosureMeta",
     "FacilityBreakdown",
     "GasBreakdown",
+    "InventoryDatum",
     "InventoryReport",
     "ReportRecord",
+    "TrendPoint",
+    "TrendsResult",
     "build_inventory_report",
     "build_pdf",
+    "build_trends",
     "build_xlsx",
     "trace_record",
 ]

@@ -18,9 +18,18 @@ from pathlib import Path
 
 _MIG_DIR = Path(__file__).parent.parent / "supabase" / "migrations"
 
+# Scope-3 reserved migration bands: MVP 050-059, then 310+ for Epic D onward
+# (a high block to avoid any collision with the low-numbered scopes).
+_S3_BANDS = ((50, 59), (310, 319))
+
+
+def _in_band(num: int) -> bool:
+    return any(lo <= num <= hi for lo, hi in _S3_BANDS)
+
 
 def _s3_migrations() -> list[Path]:
-    return sorted(p for p in _MIG_DIR.glob("05*.sql"))
+    files = list(_MIG_DIR.glob("05*.sql")) + list(_MIG_DIR.glob("31*.sql"))
+    return sorted(f for f in files if _in_band(int(f.name[:3])))
 
 
 def test_scope3_migrations_exist():
@@ -30,7 +39,7 @@ def test_scope3_migrations_exist():
 def test_filenames_in_band():
     for p in _s3_migrations():
         num = int(p.name[:3])
-        assert 50 <= num <= 59, f"{p.name} outside Scope-3 band 050-059"
+        assert _in_band(num), f"{p.name} outside Scope-3 bands {_S3_BANDS}"
 
 
 def test_tables_are_org_scoped_and_rls_enabled():

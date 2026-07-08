@@ -30,7 +30,10 @@ CREATE INDEX IF NOT EXISTS idx_s2_audit_entity ON s2_audit_log (entity_type, ent
 ALTER TABLE s2_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Read within org; insert as the acting user. No UPDATE/DELETE policy (immutable).
+-- Idempotent (safe to re-run): DROP POLICY IF EXISTS precedes each CREATE POLICY.
+DROP POLICY IF EXISTS s2_audit_select_org ON s2_audit_log;
 CREATE POLICY s2_audit_select_org ON s2_audit_log
     FOR SELECT TO authenticated USING (public.shares_org_with(user_id));
+DROP POLICY IF EXISTS s2_audit_insert_self ON s2_audit_log;
 CREATE POLICY s2_audit_insert_self ON s2_audit_log
     FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
