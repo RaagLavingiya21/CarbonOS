@@ -1,10 +1,19 @@
 # Scope 3 — Working Status / Resume-Here
 
 Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per-epic plans `04–12` + overview `00`); this is the current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope3-v2 (Epic A frontend + next phase prep)_
+_Last updated: 2026-07-07 · Branch: feature/scope3-v2 (CANONICAL — Epic A frontend + Epics E–I backend merged)_
+
+## 0. STATUS + BLOCKERS (read first — for the integrator)
+`feature/scope3-v2` is now the **single canonical Scope 3 branch**: the Epic A frontend and the Epics E–I backend (previously `feature/scope3-v1-backend`) are merged here. All future Scope 3 work happens on this branch, in the `…-scope3` worktree; the backend worktree/branch are retired.
+
+**BLOCKERS / TODO for the integrator:**
+- **Migrations `313–317` (E–I) are NOT applied.** `050–059` + `310–312` were hand-applied to the shared dev DB earlier; the new E–I migrations still need applying via the Supabase SQL Editor (idempotent, is_org_member RLS, band `310–319`).
+- **The V2 backend DB routes are STATIC-VERIFIED ONLY** (ruff + isolation + migration lint + import smoke). Route→DB→RLS is untested against Postgres until `313–317` are applied.
+- **Epic E limitation:** stored `inventory_category_results` has `method` but no `ef_version`, so progress real-vs-method reflects method switches only (constant EF version). Add an `ef_version` column to unlock full EF-version attribution.
+- CI note: did NOT touch `ci.yml`. Ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
 
 ## 1. Where we are
-Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). **Pure business logic for ALL NINE epics (A–I) is built and tested** across 10 isolated `s3_*` packages (127 scope-3 tests). The **DB layer (migrations + stores + routes) exists for the four MVP epics A/B/C/D** (code-complete, unapplied); E–I are logic-only so far. All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped, hardened, and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward). **No migrations have been applied to any database yet**, and there is **no frontend yet**. Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
+Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9 epics A–I; MVP = A inventory + B questionnaire-answer + C obligations + D targets). **Pure business logic for ALL NINE epics (A–I) is built and tested** across 10 isolated `s3_*` packages (127 scope-3 tests). The **DB layer (migrations + stores + routes) now exists for ALL epics A–I** (code-complete; A/B/C/D + E–I). All **three** 🔴 classifiers (A3 spend→category, B3 framework detection, B4 question→datapoint mapping) are prototyped, hardened, and de-risked against labeled evals. Migrations use two reserved bands: **`050–059`** (A/B/C) and **`310–319`** (D onward: D `310–312`, E–I `313–317`). The **Epic A frontend** exists (`/scope-3` inventory pages). Migrations `050–059`+`310–312` are applied to the shared dev DB; **`313–317` are not yet applied** (see §0). Everything ships dark behind `NEXT_PUBLIC_SCOPE3_ENABLED`.
 
 **`s3_*` packages (10):** `s3_factors` (vendored CEDA) · `s3_measure` (inventory) · `s3_obligations` (C) · `s3_targets` (D) · `s3_questionnaire` (B) · `s3_progress` (E) · `s3_disclosure` (G) · `s3_usephase` (H) · `s3_levers` (I) · `s3_suppliers` (F).
 
@@ -27,7 +36,8 @@ Scope 3 is the **corporate 15-category Scope 3 platform** (research blueprint: 9
 - **Epic F — supplier logic:** `s3_suppliers/` (cohorting by emissions/spend + program scorecard; outreach loop is shared copilot, out of scope) + `tests/test_s3_suppliers.py`. Pure logic; DB layer not built. *(post-PR-#24)*
 - **Epic B — export packs:** `s3_questionnaire/exporter.py` (CSV + Markdown) + `/export` route. *(post-PR-#24)*
 - **Guardrails:** `tests/test_s3_isolation.py` (AST import lint), `tests/test_s3_migrations.py` (SQL-hygiene lint, bands `050–059`+`310–319`). `api/models/scope3_schemas.py` DTOs.
-- **Epic A — frontend (v2):** `/scope-3/` hub page · `/scope-3/inventory` list/create · `/scope-3/inventory/[id]` detail with category breakdown · scope3-api.ts client. Gated behind `NEXT_PUBLIC_SCOPE3_ENABLED`. *(v2, this session)*
+- **Epic A — frontend (v2):** `/scope-3/` hub page · `/scope-3/inventory` list/create · `/scope-3/inventory/[id]` detail with category breakdown · `scope3-api.ts` client · app-shell nav. Gated behind `NEXT_PUBLIC_SCOPE3_ENABLED`. *(v2)*
+- **V2 backend — E–I DB layers + disclosure routes (unapplied):** migrations `313` progress · `314` base-year-recalc · `315` suppliers · `316` use-phase-specs · `317` claims; stores `db/s3_{progress,supplier,usephase,claims}_store.py`; routes `api/routes/scope3_{disclosure,progress,suppliers,usephase,levers}.py` (disclosure calc/export · progress track/recalc · supplier CRUD+cohort+scorecard · use-phase calc+specs · levers/MAC/claims-assess). Pure `*_from_rows`/`calc_from_request` helpers make each route unit-testable without a DB. **146 scope-3 tests, ruff + isolation + migration lints clean.** *(v2, merged from feature/scope3-v1-backend)*
 
 ## 3. Decisions (+ why)
 - **Migration bands (Scope 3):** `050–059` (A `050–053`, B `054–057`, C `058–059`) and **`310–319`** for Epic D onward (D uses `310–312`). The high second band was chosen (integrator) to avoid any collision with the low-numbered scopes; `060–309` intentionally left unused by Scope 3.
