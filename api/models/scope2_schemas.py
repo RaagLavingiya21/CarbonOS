@@ -83,10 +83,7 @@ class EgridSubregionDTO(BaseModel):
 
 
 def all_egrid_subregion_dtos() -> list[EgridSubregionDTO]:
-    return [
-        EgridSubregionDTO(code=code, name=name)
-        for code, name in EGRID_SUBREGIONS.items()
-    ]
+    return [EgridSubregionDTO(code=code, name=name) for code, name in EGRID_SUBREGIONS.items()]
 
 
 class UpdateSiteRequest(BaseModel):
@@ -286,9 +283,7 @@ class CalculationDTO(BaseModel):
             location_based_kg_co2e=float(row["location_based_kg_co2e"]),
             market_based_kg_co2e=float(row["market_based_kg_co2e"]),
             consumption_mwh=(
-                float(row["consumption_mwh"])
-                if row.get("consumption_mwh") is not None
-                else None
+                float(row["consumption_mwh"]) if row.get("consumption_mwh") is not None else None
             ),
             market_tier=row.get("market_tier"),
             market_fallback_flagged=bool(row.get("market_fallback_flagged", False)),
@@ -476,9 +471,7 @@ class BuyerRequestDTO(BaseModel):
     def from_row(cls, row: dict) -> "BuyerRequestDTO":
         due = row.get("due_date")
         is_overdue = bool(
-            row.get("status") == "open"
-            and due
-            and date.fromisoformat(str(due)) < date.today()
+            row.get("status") == "open" and due and date.fromisoformat(str(due)) < date.today()
         )
         return cls(
             request_id=int(row["request_id"]),
@@ -545,6 +538,50 @@ class LandlordRequestDTO(BaseModel):
             responded_at=row.get("responded_at"),
             reminder_cadence_days=int(row.get("reminder_cadence_days", 14)),
             returned_data_ref=row.get("returned_data_ref"),
+            notes=row.get("notes"),
+            created_at=row.get("created_at"),
+        )
+
+
+class CreateTargetRequest(BaseModel):
+    base_year: int
+    base_year_tco2e: float
+    target_year: int
+    target_amount_tco2e: float | None = None
+    target_pct_reduction: float | None = None
+    trajectory_type: str = "linear"
+    notes: str | None = None
+
+
+class TargetDTO(BaseModel):
+    target_id: int
+    org_id: str
+    base_year: int
+    base_year_tco2e: float
+    target_year: int
+    target_amount_tco2e: float | None = None
+    target_pct_reduction: float | None = None
+    trajectory_type: str
+    status: str
+    notes: str | None = None
+    created_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "TargetDTO":
+        return cls(
+            target_id=int(row["target_id"]),
+            org_id=row["org_id"],
+            base_year=int(row["base_year"]),
+            base_year_tco2e=float(row["base_year_tco2e"]),
+            target_year=int(row["target_year"]),
+            target_amount_tco2e=float(row["target_amount_tco2e"])
+            if row.get("target_amount_tco2e")
+            else None,
+            target_pct_reduction=float(row["target_pct_reduction"])
+            if row.get("target_pct_reduction")
+            else None,
+            trajectory_type=row.get("trajectory_type", "linear"),
+            status=row.get("status", "draft"),
             notes=row.get("notes"),
             created_at=row.get("created_at"),
         )
