@@ -265,3 +265,30 @@ class TargetDTO(BaseModel):
     inventory_base_id: int | None = None
     status: str
     assurance_required: bool
+
+
+# --- Epic G: disclosure -----------------------------------------------------
+
+
+class DisclosureCalcRequest(BaseModel):
+    inventory_id: int
+    framework: str  # esrs_e1 | sb253 | ifrs_s2
+
+
+class DisclosureDatapointDTO(BaseModel):
+    key: str
+    label: str
+    value: float | None = None
+    text: str | None = None
+    unit: str
+    source_ref: str | None = None
+    flag: str
+
+
+class DisclosureResultDTO(BaseModel):
+    framework: str
+    format_version: str
+    is_provisional: bool
+    datapoints: list[DisclosureDatapointDTO] = Field(default_factory=list)
+    category_breakdown: list[DisclosureDatapointDTO] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)

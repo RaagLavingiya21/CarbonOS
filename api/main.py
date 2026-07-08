@@ -35,6 +35,7 @@ from api.routes import (
     scope2_landlord,
     scope2_reports,
     scope2_sites,
+    scope3_disclosure,
     scope3_inventory,
     scope3_obligations,
     scope3_questionnaire,
@@ -185,6 +186,7 @@ app.include_router(scope3_inventory.router)
 app.include_router(scope3_obligations.router)
 app.include_router(scope3_questionnaire.router)
 app.include_router(scope3_targets.router)
+app.include_router(scope3_disclosure.router)
 
 # Scope 2 ("Grid") module — isolated; shares only auth + app instance.
 app.include_router(scope2_sites.router)
