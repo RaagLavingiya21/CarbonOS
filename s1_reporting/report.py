@@ -24,6 +24,8 @@ class ReportRecord:
     facility_name: str | None = None
     source_id: str | None = None
     source_name: str | None = None
+    fuel: str | None = None           # fuel_or_activity (GHGRP per-fuel grouping)
+    ef_tier: str | None = None        # calculation tier, e.g. "T1"/"T2" (GHGRP)
 
 
 @dataclass
@@ -57,6 +59,50 @@ class InventoryReport:
     by_gas: GasBreakdown
     by_facility: list[FacilityBreakdown] = field(default_factory=list)
     record_count: int = 0
+
+
+@dataclass
+class SourceLine:
+    """A single non-combustion emission line for disclosure tables."""
+
+    label: str
+    gas_or_refrigerant: str
+    facility_id: str | None
+    facility_name: str | None
+    tco2e: float
+
+
+@dataclass
+class DisclosureData:
+    """Everything a disclosure needs, composing the combustion rollup with the
+    fugitive + process categories so gross Scope 1 covers all three. The
+    combustion `InventoryReport` is left unchanged (stays combustion-only); its
+    total is never mutated. `report_records` carries the raw combustion records
+    so per-gas mass / per-fuel exports (GHGRP) don't need a second DB pass."""
+
+    combustion: InventoryReport
+    fugitive_tco2e: float = 0.0
+    process_tco2e: float = 0.0
+    fugitive_lines: list[SourceLine] = field(default_factory=list)
+    process_lines: list[SourceLine] = field(default_factory=list)
+    report_records: list[ReportRecord] = field(default_factory=list)
+
+    @property
+    def ar_version(self) -> str:
+        return self.combustion.ar_version
+
+    @property
+    def combustion_tco2e(self) -> float:
+        return self.combustion.total_scope1_tco2e
+
+    @property
+    def gross_scope1_tco2e(self) -> float:
+        """Gross Scope 1 = combustion + fugitive + process (all direct emissions)."""
+        return self.combustion.total_scope1_tco2e + self.fugitive_tco2e + self.process_tco2e
+
+    @property
+    def biogenic_co2_tco2e(self) -> float:
+        return self.combustion.biogenic_co2_tco2e   # memo line, still excluded
 
 
 def _co2e_by_gas(masses: GasMasses, ar_version: str, multiplier: float) -> GasBreakdown:

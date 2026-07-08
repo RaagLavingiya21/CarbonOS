@@ -125,6 +125,31 @@ export default function Scope1ReportPage() {
           <Download className="h-4 w-4" />
           Export XLSX
         </Button>
+        {(
+          [
+            { slug: "esrs-e1", label: "ESRS E1" },
+            { slug: "cdp", label: "CDP" },
+            { slug: "epa-ghgrp", label: "EPA GHGRP" },
+          ] as const
+        ).flatMap((r) =>
+          (["pdf", "xlsx"] as const).map((ext) => (
+            <Button
+              key={`${r.slug}-${ext}`}
+              type="button"
+              variant="outline"
+              disabled={!report || !activeId}
+              onClick={() =>
+                activeId &&
+                scope1Api
+                  .downloadDisclosure(activeId, r.slug, ext, arVersion)
+                  .catch((err) => setError((err as Error).message))
+              }
+            >
+              <Download className="h-4 w-4" />
+              {r.label} ({ext.toUpperCase()})
+            </Button>
+          )),
+        )}
         <Button
           type="button"
           variant="outline"

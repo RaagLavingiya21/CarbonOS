@@ -85,13 +85,18 @@ from s1_onboarding import OnboardingCounts, build_onboarding
 from s1_process import compute_emission_kg, list_process_factors, process_tco2e
 from s1_recalc import RecalcEvent, analyze_recalc
 from s1_reporting import (
+    REGIME_MAPPERS,
+    DisclosureData,
     DisclosureMeta,
     InventoryDatum,
     ReportRecord,
+    SourceLine,
     build_inventory_report,
     build_pdf,
     build_trends,
     build_xlsx,
+    render_pdf,
+    render_xlsx,
     trace_record,
 )
 
@@ -1238,9 +1243,9 @@ def export_report_xlsx(
     user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Structured SB 253 / GHG Protocol disclosure workbook (coversheet + by gas + by facility)."""
-    report = _assemble_report(inventory_id, ar_version, user)
+    disclosure = _assemble_disclosure_data(inventory_id, ar_version, user)
     meta = _disclosure_meta(inventory_id, ar_version, user)
-    data = build_xlsx(report, meta)
+    data = build_xlsx(disclosure, meta)
     filename = f"scope1-{meta.reporting_year}-{ar_version}.xlsx"
     return StreamingResponse(
         iter([data]),
@@ -1256,15 +1261,59 @@ def export_report_pdf(
     user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Human-readable CA SB 253 / GHG Protocol Scope 1 disclosure PDF."""
-    report = _assemble_report(inventory_id, ar_version, user)
+    disclosure = _assemble_disclosure_data(inventory_id, ar_version, user)
     meta = _disclosure_meta(inventory_id, ar_version, user)
-    data = build_pdf(report, meta)
+    data = build_pdf(disclosure, meta)
     filename = f"scope1-sb253-{meta.reporting_year}-{ar_version}.pdf"
     return StreamingResponse(
         iter([data]),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# --- Multi-regime disclosure exports (ESRS E1 / CDP / EPA GHGRP) -------------
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _regime_doc(inventory_id: str, regime: str, ar_version: str, user: CurrentUser):
+    mapper = REGIME_MAPPERS.get(regime)
+    if mapper is None:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown regime '{regime}'. Use one of {sorted(REGIME_MAPPERS)}.")
+    data = _assemble_disclosure_data(inventory_id, ar_version, user)
+    meta = _disclosure_meta(inventory_id, ar_version, user)
+    return mapper(data, meta), meta
+
+
+def _disclosure_stream(payload: bytes, media_type: str, filename: str) -> StreamingResponse:
+    return StreamingResponse(
+        iter([payload]), media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/inventories/{inventory_id}/report/{regime}.pdf")
+def export_regime_pdf(
+    inventory_id: str, regime: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Human-readable disclosure PDF for a regime (esrs-e1 | cdp | epa-ghgrp)."""
+    doc, meta = _regime_doc(inventory_id, regime, ar_version, user)
+    filename = f"scope1-{doc.filename_slug}-{meta.reporting_year}-{ar_version}.pdf"
+    return _disclosure_stream(render_pdf(doc), "application/pdf", filename)
+
+
+@router.get("/inventories/{inventory_id}/report/{regime}.xlsx")
+def export_regime_xlsx(
+    inventory_id: str, regime: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Structured disclosure workbook for a regime (esrs-e1 | cdp | epa-ghgrp)."""
+    doc, meta = _regime_doc(inventory_id, regime, ar_version, user)
+    filename = f"scope1-{doc.filename_slug}-{meta.reporting_year}-{ar_version}.xlsx"
+    return _disclosure_stream(render_xlsx(doc), _XLSX_MEDIA, filename)
 
 
 @router.get("/records/{record_id}/trace")
@@ -1424,8 +1473,9 @@ def _gas_masses(row: dict) -> GasMasses:
     )
 
 
-def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
-    """Fetch records + sources + facilities + boundaries and roll up the report."""
+def _assemble_combustion(inventory_id: str, ar_version: str, user: CurrentUser):
+    """Roll up combustion records; returns (InventoryReport, list[ReportRecord],
+    facility-name map). The records + names are reused by disclosure exports."""
     records = _guard(store.list_records_for_inventory, inventory_id,
                      access_token=user.access_token, user_id=user.user_id)
     sources = {s["id"]: s for s in _guard(
@@ -1437,9 +1487,48 @@ def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
         access_token=user.access_token, user_id=user.user_id)}
     report_records = [_report_record(rec, sources, facilities, boundaries) for rec in records]
     try:
-        return build_inventory_report(report_records, ar_version)
+        report = build_inventory_report(report_records, ar_version)
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return report, report_records, facilities
+
+
+def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
+    """Combustion-only inventory report (the JSON /report + legacy exports)."""
+    return _assemble_combustion(inventory_id, ar_version, user)[0]
+
+
+def _assemble_disclosure_data(inventory_id: str, ar_version: str, user: CurrentUser) -> DisclosureData:
+    """Combustion report + fugitive + process, so a disclosed gross Scope 1 covers
+    all three direct-emission categories (not combustion only)."""
+    report, report_records, facilities = _assemble_combustion(inventory_id, ar_version, user)
+    kw = {"access_token": user.access_token, "user_id": user.user_id}
+
+    fugitive_lines: list[SourceLine] = []
+    fugitive_total = 0.0
+    for r in _guard(store.list_fugitive_records, inventory_id, **kw):
+        t = fugitive_tco2e(float(r["leaked_kg"]), r["refrigerant"], ar_version)
+        fugitive_total += t
+        fugitive_lines.append(SourceLine(
+            label=r["refrigerant"], gas_or_refrigerant=r["refrigerant"],
+            facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
+            tco2e=t))
+
+    process_lines: list[SourceLine] = []
+    process_total = 0.0
+    for r in _guard(store.list_process_records, inventory_id, **kw):
+        t = process_tco2e(float(r["emission_kg"]), r["gas_species"], ar_version)
+        process_total += t
+        process_lines.append(SourceLine(
+            label=r["process_type"], gas_or_refrigerant=r["gas_species"],
+            facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
+            tco2e=t))
+
+    return DisclosureData(
+        combustion=report, fugitive_tco2e=fugitive_total, process_tco2e=process_total,
+        fugitive_lines=fugitive_lines, process_lines=process_lines,
+        report_records=report_records,
+    )
 
 
 def _disclosure_meta(inventory_id: str, ar_version: str, user: CurrentUser) -> DisclosureMeta:
@@ -1473,4 +1562,6 @@ def _report_record(rec: dict, sources: dict, facilities: dict, boundaries: dict)
         facility_name=facilities.get(facility_id),
         source_id=rec["emission_source_id"],
         source_name=source.get("source_name"),
+        fuel=source.get("primary_fuel"),
+        ef_tier=rec.get("ef_tier"),
     )

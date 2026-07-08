@@ -588,6 +588,12 @@ export const scope1Api = {
       `/api/scope1/inventories/${inventoryId}/report/sb253.pdf?ar_version=${arVersion}`,
       `scope1-sb253-${arVersion}.pdf`,
     ),
+  // Multi-regime disclosure exports: regime = "esrs-e1" | "cdp" | "epa-ghgrp", ext = "pdf" | "xlsx"
+  downloadDisclosure: (inventoryId: string, regime: string, ext: "pdf" | "xlsx", arVersion = "AR5") =>
+    downloadBinary(
+      `/api/scope1/inventories/${inventoryId}/report/${regime}.${ext}?ar_version=${arVersion}`,
+      `scope1-${regime}-${arVersion}.${ext}`,
+    ),
   recordTrace: (recordId: string, arVersion = "AR5") =>
     request<S1Trace>(`/api/scope1/records/${recordId}/trace?ar_version=${arVersion}`),
   recordAudit: (recordId: string) =>
