@@ -50,6 +50,75 @@ export const BOUNDARY_APPROACHES = [
   "equity",
 ] as const;
 
+// --- Epic C: obligation front door -----------------------------------------
+
+export type CompanyProfile = {
+  annual_revenue_usd: number | null;
+  employee_count: number | null;
+  is_us_entity: boolean;
+  does_business_in_ca: boolean;
+  eu_turnover_eur: number | null;
+  eu_subsidiary: boolean;
+  eu_branch_turnover_eur: number | null;
+  listed_jurisdictions: string[];
+  sector: string;
+  is_flag_sector: boolean;
+  key_customers: string[];
+};
+
+export type ObligationDue = {
+  what: string;
+  date: string | null;
+  note: string | null;
+};
+
+export type Obligation = {
+  rule_id: string;
+  framework: string;
+  applies: string;
+  reason: string;
+  threshold_detail: string;
+  confidence: string;
+  status: string;
+  due: ObligationDue[];
+  assurance: string | null;
+  citation: string;
+  priority: number;
+};
+
+export type TimelineItem = {
+  date: string;
+  framework: string;
+  what: string;
+};
+
+export type CascadeSignal = {
+  customer: string;
+  matched_buyer: string;
+  regimes: string[];
+  rationale: string;
+};
+
+export type BusinessCase = {
+  headline: string;
+  primary_driver: string | null;
+  applicable_count: number;
+  uncertain_count: number;
+  at_stake: string[];
+  watch_items: string[];
+  cascade_exposure: string[];
+};
+
+export type ObligationEvaluation = {
+  ruleset_version: string;
+  applicable: Obligation[];
+  uncertain: Obligation[];
+  not_applicable: Obligation[];
+  timeline: TimelineItem[];
+  business_case: BusinessCase;
+  cascade: CascadeSignal[];
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -118,6 +187,15 @@ export const scope3Api = {
     request<InventoryDetail>(`/scope-3/inventory/${id}/calculate`, { method: "POST" }),
   lock: (id: number) =>
     request<InventoryVersion>(`/scope-3/inventory/${id}/lock`, { method: "POST" }),
+
+  // Epic C: obligation front door
+  getCompanyProfile: () =>
+    request<CompanyProfile | null>("/scope-3/company-profile"),
+  saveCompanyProfile: (payload: CompanyProfile) =>
+    request<CompanyProfile>("/scope-3/company-profile", { method: "POST", body: payload }),
+  evaluateObligations: () =>
+    request<ObligationEvaluation>("/scope-3/obligations/evaluate", { method: "POST" }),
+  listObligations: () => request<Obligation[]>("/scope-3/obligations"),
 };
 
 export const SCOPE3_CATEGORY_NAMES: Record<number, string> = {

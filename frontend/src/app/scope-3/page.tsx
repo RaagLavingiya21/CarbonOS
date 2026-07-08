@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Boxes, Layers } from "lucide-react";
+import { ArrowRight, Boxes, Layers, ShieldCheck } from "lucide-react";
 
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,12 @@ const ENTRIES = [
     icon: Layers,
     title: "Corporate Scope 3 inventory",
     body: "Create a reporting-year inventory, import GL/ERP spend, and calculate a 15-category, spend-based Scope 3 footprint.",
+  },
+  {
+    href: "/scope-3/obligations",
+    icon: ShieldCheck,
+    title: "Obligations — is this my problem?",
+    body: "Screen the company against ESRS, SB253/261, IFRS S2 and more. See what applies, what's uncertain, deadlines, and customer cascade exposure.",
   },
 ];
 
