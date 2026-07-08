@@ -24,6 +24,8 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from evals.scope2_ocr import langsmith_tracking as ls
 from evals.scope2_ocr.calibration import (
     Observation,
@@ -90,6 +92,10 @@ def run(corpus_dir: Path, *, min_recall: float) -> dict:
 
 
 def main() -> int:
+    # Load .env so ANTHROPIC_API_KEY / LANGSMITH_* are picked up for a `python -m`
+    # run, matching the API layer (which calls load_dotenv). Shell env still wins.
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Calibrate REVIEW_THRESHOLD over an OCR corpus.")
     parser.add_argument("corpus_dir", help="directory of <name>.png + <name>.json pairs")
     parser.add_argument("--min-recall", type=float, default=0.95, help="review-recall floor")
