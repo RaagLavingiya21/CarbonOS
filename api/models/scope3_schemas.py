@@ -292,3 +292,39 @@ class DisclosureResultDTO(BaseModel):
     datapoints: list[DisclosureDatapointDTO] = Field(default_factory=list)
     category_breakdown: list[DisclosureDatapointDTO] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+# --- Epic E: progress -------------------------------------------------------
+
+
+class ProgressTrackRequest(BaseModel):
+    base_inventory_id: int
+    current_inventory_id: int
+    target_id: int | None = None
+    # {reporting_year: target_kg_co2e}; JSON object keys are strings.
+    trajectory: dict[str, float] = Field(default_factory=dict)
+
+
+class ProgressResultDTO(BaseModel):
+    current_year: int
+    base_total_kg: float
+    real_total_kg: float
+    actual_total_kg: float
+    trajectory_target_kg: float | None = None
+    on_track: bool | None = None
+    method_delta_kg: float
+    notes: list[str] = Field(default_factory=list)
+
+
+class RecalcRequest(BaseModel):
+    trigger: str
+    significance_pct: float
+    threshold_pct: float | None = None
+
+
+class RecalcResultDTO(BaseModel):
+    trigger: str
+    significance_pct: float
+    threshold_pct: float
+    recalc_required: bool
+    rationale: str
