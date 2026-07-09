@@ -791,6 +791,21 @@ def test_extract_doc_flags_low_confidence_for_review(monkeypatch) -> None:
     assert resp.json()["needs_review"] is True
 
 
+def test_extract_doc_flags_empty_extraction_for_review(monkeypatch) -> None:
+    # A bill the model returns no meters for must route to review (not silently
+    # pass as "nothing to import"), with a bill-level reason.
+    monkeypatch.setattr(
+        "api.routes.scope2_ingestion.extract_bill_document",
+        lambda data, ct, **kw: _fake_extraction([]),
+    )
+    resp = client.post("/api/scope2/bills/extract-doc", headers=AUTH_HEADERS, json=_DOC_BODY)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["meters"] == []
+    assert data["needs_review"] is True
+    assert any("no meters" in r for r in data["review_reasons"])
+
+
 def test_extract_doc_rejects_bad_base64() -> None:
     resp = client.post(
         "/api/scope2/bills/extract-doc",
@@ -1010,3 +1025,68 @@ def test_delete_eac(monkeypatch) -> None:
     resp = client.delete("/api/scope2/eacs/3", headers=AUTH_HEADERS)
     assert resp.status_code == 204
     assert called["id"] == 3
+
+
+# --- Targets ----------------------------------------------------------------
+
+
+def _target_row(**kw) -> dict:
+    r = {
+        "target_id": 1,
+        "org_id": "org-1",
+        "base_year": 2022,
+        "base_year_tco2e": 1000.0,
+        "target_year": 2030,
+        "target_amount_tco2e": 500.0,
+        "target_pct_reduction": None,
+        "trajectory_type": "linear",
+        "status": "active",
+        "notes": None,
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    r.update(kw)
+    return r
+
+
+def test_list_targets(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_targets.resolve_org_id", lambda cu: "org-1")
+    monkeypatch.setattr("db.s2_targets_store.list_targets", lambda org, token: [_target_row()])
+    resp = client.get("/api/scope2/targets", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+    assert resp.json()[0]["base_year"] == 2022
+
+
+def test_create_target(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr("api.routes.scope2_targets.resolve_org_id", lambda cu: "org-1")
+
+    def _create(payload, *, org_id, user_id, access_token):
+        captured["payload"] = payload
+        return 1
+
+    monkeypatch.setattr("db.s2_targets_store.create_target", _create)
+    monkeypatch.setattr("db.s2_targets_store.get_target", lambda iid, token: _target_row())
+    resp = client.post(
+        "/api/scope2/targets",
+        headers=AUTH_HEADERS,
+        json={
+            "base_year": 2022,
+            "base_year_tco2e": 1000.0,
+            "target_year": 2030,
+            "target_amount_tco2e": 500.0,
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["target_id"] == 1
+    assert captured["payload"]["base_year"] == 2022
+
+
+def test_create_target_needs_amount_or_pct(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.scope2_targets.resolve_org_id", lambda cu: "org-1")
+    resp = client.post(
+        "/api/scope2/targets",
+        headers=AUTH_HEADERS,
+        json={"base_year": 2022, "base_year_tco2e": 1000.0, "target_year": 2030},
+    )
+    assert resp.status_code == 422

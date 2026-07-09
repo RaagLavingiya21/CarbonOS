@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Award, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
+import { ArrowRight, Award, Target, Building2, Calculator, FileText, Mail, Upload, Zap } from "lucide-react";
 
 import { KpiStrip } from "@/components/portfolio/KpiStrip";
 import { ErrorState } from "@/components/ui/error-state";
@@ -52,6 +52,12 @@ const ENTRIES = [
     icon: FileText,
     title: "Buyer & CDP response",
     body: "Prefill CDP Supply Chain and buyer templates (Amazon) from one calculation — one number, many formats.",
+  },
+  {
+    href: "/scope-2/targets",
+    icon: Target,
+    title: "Reduction targets",
+    body: "Set SBTi-style emission reduction targets and track progress against linear or exponential trajectories.",
   },
 ];
 

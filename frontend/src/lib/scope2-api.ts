@@ -419,4 +419,45 @@ export const scope2Api = {
       method: "POST",
       body: { floor_area_sqft: floorAreaSqft, reporting_year: reportingYear },
     }),
+
+  listTargets: () => request<Target[]>("/api/scope2/targets"),
+  getActiveTarget: () => request<Target | null>("/api/scope2/targets/active"),
+  createTarget: (payload: CreateTargetPayload) =>
+    request<Target>("/api/scope2/targets", {
+      method: "POST",
+      body: payload,
+    }),
+  updateTarget: (targetId: number, updates: Record<string, unknown>) =>
+    request<Target>(`/api/scope2/targets/${targetId}`, {
+      method: "PATCH",
+      body: updates,
+    }),
+  deleteTarget: (targetId: number) =>
+    request<void>(`/api/scope2/targets/${targetId}`, { method: "DELETE" }),
+};
+
+
+// Target-setting (SBTi-style reduction trajectories)
+export type Target = {
+  target_id: number;
+  org_id: string;
+  base_year: number;
+  base_year_tco2e: number;
+  target_year: number;
+  target_amount_tco2e?: number;
+  target_pct_reduction?: number;
+  trajectory_type: string;
+  status: string;
+  notes?: string;
+  created_at?: string;
+};
+
+export type CreateTargetPayload = {
+  base_year: number;
+  base_year_tco2e: number;
+  target_year: number;
+  target_amount_tco2e?: number;
+  target_pct_reduction?: number;
+  trajectory_type?: string;
+  notes?: string;
 };

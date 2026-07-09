@@ -34,7 +34,7 @@ from db import s2_bill_store, s2_site_store
 from s2_ingestion.csv_import import ColumnMappingError, import_bills_csv
 from s2_ingestion.dedup import BillKey, resolve_supersessions
 from s2_ingestion.estimation import EstimationError, estimate_annual_electricity_mwh
-from s2_ingestion.ocr import extract_bill_document, normalize_bill
+from s2_ingestion.ocr import bill_review_reasons, extract_bill_document, normalize_bill
 
 # Carriers the s2_utility_accounts CHECK constraint accepts.
 _ALLOWED_CARRIERS = {"electricity", "natural_gas", "steam", "heat", "cooling"}
@@ -268,13 +268,17 @@ def extract_doc(
         name: FieldDTO(value=f.value, confidence=f.confidence)
         for name, f in extraction.header.items()
     }
-    needs_review = bool(extraction.error) or any(m.needs_review for m in meters)
+    # Bill-level reasons (e.g. a total extraction failure that yields no meters)
+    # plus any per-meter flag together gate the review step.
+    bill_reasons = bill_review_reasons(extraction, rows)
+    needs_review = bool(bill_reasons) or any(m.needs_review for m in meters)
     return ExtractDocResponse(
         header=header,
         meters=meters,
         model=extraction.model,
         error=extraction.error,
         needs_review=needs_review,
+        review_reasons=bill_reasons,
     )
 
 
