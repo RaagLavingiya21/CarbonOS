@@ -9,8 +9,11 @@ import {
   FileText,
   Layers,
   ShieldCheck,
+  SlidersHorizontal,
   Target,
   TrendingDown,
+  Users,
+  Zap,
 } from "lucide-react";
 
 import { ErrorState } from "@/components/ui/error-state";
@@ -55,6 +58,24 @@ const ENTRIES = [
     icon: FileText,
     title: "Generate a disclosure",
     body: "Map your inventory onto ESRS E1 / SB253 / IFRS S2 datapoints — every value sourced — then export CSV or Markdown.",
+  },
+  {
+    href: "/scope-3/suppliers",
+    icon: Users,
+    title: "Run the supplier program",
+    body: "Track suppliers and PCF coverage, build a hotspot cohort for outreach, and watch program-level emissions coverage.",
+  },
+  {
+    href: "/scope-3/use-phase",
+    icon: Zap,
+    title: "Calculate use-phase (Cat 11)",
+    body: "Estimate lifetime emissions from customers using your sold products, with a contributor breakdown and saved per-SKU specs.",
+  },
+  {
+    href: "/scope-3/levers",
+    icon: SlidersHorizontal,
+    title: "Decarbonization & claims",
+    body: "Browse abatement levers, build a marginal-abatement-cost curve, and check green claims for EU/US compliance.",
   },
 ];
 

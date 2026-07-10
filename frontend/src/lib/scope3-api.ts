@@ -293,6 +293,125 @@ export type DisclosureResult = {
   notes: string[];
 };
 
+// --- Epic F: suppliers -----------------------------------------------------
+
+export type SupplierCreatePayload = {
+  name: string;
+  scope3_category: number;
+  emissions_kg: number;
+  spend_usd: number;
+  pcf_received: boolean;
+  dq_score: number | null;
+  supplier_sbt_status: string;
+};
+
+export type Supplier = {
+  supplier_id: number;
+  org_id: string;
+  name: string;
+  scope3_category: number;
+  emissions_kg: number;
+  spend_usd: number;
+  pcf_received: boolean;
+  dq_score: number | null;
+  supplier_sbt_status: string;
+};
+
+export type CohortPayload = {
+  hotspot_categories: number[];
+  top_n: number;
+  basis: string;
+};
+
+export type Cohort = {
+  basis: string;
+  hotspot_categories: number[];
+  emissions_covered_pct: number;
+  members: Supplier[];
+};
+
+export type SupplierScorecard = {
+  supplier_count: number;
+  pcf_coverage_pct: number;
+  emissions_covered_pct: number;
+  avg_dq: number | null;
+  sbt_committed_count: number;
+  sbt_validated_count: number;
+};
+
+// --- Epic H: use-phase (Category 11) ---------------------------------------
+
+export type UsePhasePayload = {
+  product_ref: string;
+  energy_per_use_kwh: number;
+  water_l_per_use: number;
+  standby_power_w: number;
+  fuel_kwh_per_use: number;
+  uses_per_year: number;
+  lifetime_years: number;
+  units_sold: number;
+  region: string | null;
+  mode: string;
+  include_standby: boolean;
+};
+
+export type UsePhaseResult = {
+  product_name: string;
+  units_sold: number;
+  kg_co2e: number;
+  direct_or_indirect: string;
+  method: string;
+  ef_source: string;
+  dq_note: string;
+  breakdown: Record<string, number>;
+};
+
+// --- Epic I: levers / MAC / claims -----------------------------------------
+
+export type Lever = {
+  lever_id: string;
+  name: string;
+  category: number;
+  abatement_pct: number;
+  cost_per_tco2e: number;
+  applicability: string[];
+  source: string;
+};
+
+export type MacPoint = {
+  lever_id: string;
+  name: string;
+  category: number;
+  abatement_tco2e: number;
+  cost_per_tco2e: number;
+  cumulative_abatement_tco2e: number;
+};
+
+export type ComplianceFlag = {
+  rule_id: string;
+  jurisdiction: string;
+  framework: string;
+  verdict: string;
+  note: string;
+};
+
+export type ClaimAssessment = {
+  claim_text: string;
+  jurisdiction: string;
+  substantiable: boolean;
+  substantiation_reason: string;
+  ruleset_version: string;
+  flags: ComplianceFlag[];
+};
+
+export type ClaimAssessPayload = {
+  claim_text: string;
+  primary_data_share: number;
+  assured: boolean;
+  jurisdiction: string;
+  offset_based: boolean;
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -455,6 +574,45 @@ export const scope3Api = {
     }
     return response.blob();
   },
+
+  // Epic F: suppliers
+  listSuppliers: () => request<Supplier[]>("/scope-3/suppliers"),
+  createSupplier: (payload: SupplierCreatePayload) =>
+    request<Supplier>("/scope-3/suppliers", { method: "POST", body: payload }),
+  deleteSupplier: (id: number) =>
+    request<void>(`/scope-3/suppliers/${id}`, { method: "DELETE" }),
+  supplierCohort: (payload: CohortPayload) =>
+    request<Cohort>("/scope-3/suppliers/cohort", { method: "POST", body: payload }),
+  supplierScorecard: () =>
+    request<SupplierScorecard>("/scope-3/suppliers/scorecard"),
+
+  // Epic H: use-phase
+  usePhaseSubSectors: () => request<string[]>("/scope-3/use-phase/sub-sectors"),
+  calcUsePhase: (payload: UsePhasePayload) =>
+    request<UsePhaseResult>("/scope-3/use-phase/calc", { method: "POST", body: payload }),
+  listSpecs: () => request<Record<string, unknown>[]>("/scope-3/use-phase/specs"),
+  createSpec: (payload: UsePhasePayload) =>
+    request<Record<string, unknown>>("/scope-3/use-phase/specs", {
+      method: "POST",
+      body: payload,
+    }),
+  deleteSpec: (id: number) =>
+    request<void>(`/scope-3/use-phase/specs/${id}`, { method: "DELETE" }),
+
+  // Epic I: levers / MAC / claims
+  listLevers: (categories: number[], subSector?: string) =>
+    request<Lever[]>(
+      `/scope-3/levers?categories=${categories.join(",")}` +
+        (subSector ? `&sub_sector=${encodeURIComponent(subSector)}` : ""),
+    ),
+  buildMac: (categoryTotalsTco2e: Record<string, number>, subSector?: string) =>
+    request<MacPoint[]>("/scope-3/mac", {
+      method: "POST",
+      body: { category_totals_tco2e: categoryTotalsTco2e, sub_sector: subSector ?? null },
+    }),
+  assessClaim: (payload: ClaimAssessPayload) =>
+    request<ClaimAssessment>("/scope-3/claims/assess", { method: "POST", body: payload }),
+  listClaims: () => request<Record<string, unknown>[]>("/scope-3/claims"),
 };
 
 export const SCOPE3_CATEGORY_NAMES: Record<number, string> = {
