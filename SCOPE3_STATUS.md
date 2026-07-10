@@ -1,10 +1,10 @@
 # Scope 3 — Working Status / Resume-Here
 
 Living doc. Design lives in `scope3-gap-analysis/` (gap analysis `01–03` + per-epic plans `04–12` + overview `00`); this is the current position + gotchas.
-_Last updated: 2026-07-09 · Branch: feature/scope3-v2 (CANONICAL — Epic A frontend + Epics E–I backend merged)_
+_Last updated: 2026-07-09 · Branch: feature/scope3-v3 (CANONICAL — branched off main after the v2 integration merge; carries the 300–399 renumber)_
 
 ## 0. STATUS + BLOCKERS (read first — for the integrator)
-`feature/scope3-v2` is now the **single canonical Scope 3 branch**: the Epic A frontend and the Epics E–I backend (previously `feature/scope3-v1-backend`) are merged here. All future Scope 3 work happens on this branch, in the `…-scope3` worktree; the backend worktree/branch are retired.
+`feature/scope3-v3` is now the **single canonical Scope 3 branch**. It was cut from `main` after the v2 integration merge (PR #26), so it has all scopes' work plus the two post-merge Scope 3 commits cherry-picked on top (prod bundle + the `050–059 → 300–309` renumber). All future Scope 3 work happens on this branch, in the `…-scope3` worktree. `feature/scope3-v2` is retired (fully integrated).
 
 **BLOCKERS / TODO for the integrator:**
 - ~~**Migrations `313–317` (E–I) are NOT applied.**~~ **RESOLVED 2026-07-07** — `313–317` are now applied to the shared dev DB (all five tables created, RLS enabled, 4 policies each verified). All `300–317` are live on dev.
