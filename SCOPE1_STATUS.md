@@ -2,7 +2,12 @@
 Living doc. Design lives in the implementation plan (`~/.claude/plans/lucky-growing-planet.md`) + research (`~/Downloads/Scope1Research/`). This is current position + gotchas.
 _Last updated: 2026-07-09 · Branch: **feature/scope1-v3** (off origin/main cf3cab1). v2 is merged to main; migrations 110–114 + 116 applied to prod._
 
-## 0. Latest (commit 4689877, feature/scope1-v3) — Assurance & verification workflow
+## 0. Latest (commit 9c685a9, feature/scope1-v3) — Polish: member emails + data-quality tiers
+Two zero-migration polish items.
+- **Member emails:** Team page showed truncated `user_id` (auth.users is RLS-locked). `GET /members` now resolves emails server-side via `store.resolve_member_emails` (service-role `auth.admin.list_users` — same mechanism as invites, kept **in-lane in `db/scope1_store`, NOT `db/org_store`**). Best-effort; unresolved → falls back to the id.
+- **Data-quality tiers:** every record stores a `data_quality_tier` (1 measured … 5 estimated), never surfaced. Added a breakdown by **record count + % of emissions (tCO₂e)**, across **all three categories** (combustion + fugitive + process). Pure `s1_reporting.build_tier_breakdown` + `record_tco2e`; `ReportRecord` carries the tier; `_assemble_disclosure_data` attaches `DisclosureData.tier_breakdown`. `GET /inventories/{id}/data-quality` for the UI; a "Data quality by tier" section added to **every disclosure export**. Frontend: report-page table + dashboard "% measured" card. **643 tests. No DB changes to apply.**
+
+## 0z. Prior (commit 4689877, feature/scope1-v3) — Assurance & verification workflow
 Turns the disclosures from self-declared into **audit-grade**. Record an inventory's assurance **level** (none/limited/reasonable) + **standard** (ISAE 3410 / ISSA 5000 / ISO 14064-3), upload the **assurance statement** as evidence, and every export (SB 253, ESRS E1, CDP, GHGRP) shows the **real verification status** instead of the hardcoded "Not yet third-party verified" placeholder.
 - **Zero migration** — reuses existing `s1_inventory.assurance_level`/`assurance_standard` cols; allowed values validated app-layer (`SetAssuranceRequest` patterns); statement stored via the existing evidence pipeline (`document_type='assurance_statement'`). Mirrors the base-year setter+import pattern.
 - Routes: `GET/POST /inventories/{id}/assurance` (status / set, editor+), `POST /inventories/{id}/assurance/statement` (upload, editor+). `store.set_assurance` + `store.get_assurance_statement`.
