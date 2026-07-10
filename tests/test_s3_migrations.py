@@ -34,6 +34,13 @@ def _s3_migrations() -> list[Path]:
     return sorted(f for f in files if _in_band(int(f.name[:3])))
 
 
+def _s3_table_migrations() -> list[Path]:
+    """S3 migrations that CREATE a table. The tenancy/RLS invariants only apply
+    to these; a patch migration (e.g. an ALTER TABLE ... ADD COLUMN) legitimately
+    creates no table and carries no RLS of its own."""
+    return [p for p in _s3_migrations() if "create table if not exists" in p.read_text().lower()]
+
+
 def test_scope3_migrations_exist():
     assert _s3_migrations(), "no Scope-3 (300-399) migrations found"
 
@@ -45,7 +52,7 @@ def test_filenames_in_band():
 
 
 def test_tables_are_org_scoped_and_rls_enabled():
-    for p in _s3_migrations():
+    for p in _s3_table_migrations():
         sql = p.read_text()
         low = sql.lower()
         assert "create table if not exists" in low, f"{p.name}: not re-runnable CREATE TABLE"
@@ -56,7 +63,7 @@ def test_tables_are_org_scoped_and_rls_enabled():
 
 
 def test_rls_uses_is_org_member_and_not_user_id():
-    for p in _s3_migrations():
+    for p in _s3_table_migrations():
         sql = p.read_text()
         assert "is_org_member(org_id)" in sql, f"{p.name}: RLS must use is_org_member(org_id)"
         assert "shares_org_with" not in sql, f"{p.name}: uses deprecated shares_org_with"
@@ -69,7 +76,7 @@ def test_rls_uses_is_org_member_and_not_user_id():
 
 
 def test_every_create_policy_has_a_preceding_drop():
-    for p in _s3_migrations():
+    for p in _s3_table_migrations():
         sql = p.read_text()
         created = set(re.findall(r"create policy\s+(\w+)", sql, re.I))
         dropped = set(re.findall(r"drop policy if exists\s+(\w+)", sql, re.I))

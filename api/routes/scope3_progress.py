@@ -51,7 +51,7 @@ def snapshot_from_rows(version: dict, rows: list[dict]) -> InventorySnapshot:
                 scope3_category=int(r["scope3_category"]),
                 kg_co2e=float(r["total_kg_co2e"] or 0),
                 method=r.get("method") or "spend",
-                ef_version=_EF_VERSION,
+                ef_version=r.get("ef_version") or _EF_VERSION,
             )
             for r in rows
         ],

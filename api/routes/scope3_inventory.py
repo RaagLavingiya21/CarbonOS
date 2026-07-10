@@ -28,6 +28,12 @@ from s3_measure.spend_parser import ParsedSpend, SpendLine, parse_spend_csv
 
 router = APIRouter(tags=["scope3-inventory"])
 
+# Emission-factor library version stamped on each category rollup. Persisting it
+# lets Epic E progress decomposition attribute EF-version changes (not just
+# method switches) as method-driven change. Matches the vendored s3_factors
+# dataset (Open CEDA 2025) and the DB default on s3_inventory_category_results.
+EF_VERSION = "CEDA-2025"
+
 
 def _org_id(current_user: CurrentUser) -> str:
     org = get_active_org(current_user.access_token, user_id=current_user.user_id)
@@ -120,6 +126,7 @@ def calculate_inventory(
         {
             "scope3_category": c.scope3_category,
             "method": c.method,
+            "ef_version": EF_VERSION,
             "total_kg_co2e": c.total_kg_co2e,
             "line_count": c.line_count,
         }

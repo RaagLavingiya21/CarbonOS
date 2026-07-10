@@ -1,8 +1,8 @@
 -- ============================================================
 -- Scope 3 — full production migration bundle
 -- Apply once to the PRODUCTION database (Supabase SQL Editor).
--- Ordered 300-317 (contiguous S3 band 300-399). Every statement
--- is idempotent
+-- Ordered 300-317 + 320 (contiguous S3 band 300-399). Every
+-- statement is idempotent
 -- (CREATE TABLE IF NOT EXISTS / DROP POLICY IF EXISTS) so this
 -- whole file is safe to re-run. Wrapped in one transaction.
 -- Prereqs (already in prod, <=029): organizations, org_members,
@@ -855,5 +855,19 @@ DROP POLICY IF EXISTS s3_claims_delete ON s3_claims;
 CREATE POLICY s3_claims_delete ON s3_claims
     FOR DELETE TO authenticated
     USING (public.is_org_member(org_id));
+
+-- ----------------------------------------------------------
+-- 320_category_results_ef_version.sql
+-- ----------------------------------------------------------
+-- Scope 3 · Epic E · add the emission-factor library version to the per-category
+-- rollup so progress decomposition can attribute EF-version changes (not just
+-- method switches) as method-driven change rather than a real reduction.
+--
+-- Patch migration (ALTER only — no new table/RLS; s3_inventory_category_results
+-- already carries org_id + is_org_member RLS from migration 303). Band 320+
+-- (Scope 3 owns 300-399). Re-runnable via ADD COLUMN IF NOT EXISTS.
+
+ALTER TABLE s3_inventory_category_results
+    ADD COLUMN IF NOT EXISTS ef_version TEXT NOT NULL DEFAULT 'CEDA-2025';
 
 COMMIT;
