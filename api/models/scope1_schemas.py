@@ -48,6 +48,26 @@ class SetBaseYearRequest(BaseModel):
     evidence_document_id: str | None = None
 
 
+class SetAssuranceRequest(BaseModel):
+    """Record an inventory's third-party assurance level + standard.
+
+    Allowed values are validated here (app layer) rather than a DB CHECK, so no
+    migration is needed — the columns already exist on s1_inventory.
+    """
+    assurance_level: str = Field(pattern="^(none|limited|reasonable)$")
+    assurance_standard: str | None = Field(
+        default=None, pattern="^(ISAE_3410|ISSA_5000|ISO_14064-3)$"
+    )
+    evidence_document_id: str | None = None
+
+
+class AssuranceStatusResponse(BaseModel):
+    assurance_level: str | None = None
+    assurance_standard: str | None = None
+    statement_on_file: bool = False
+    statement_id: str | None = None
+
+
 class CreateInventoryRequest(BaseModel):
     reporting_entity_id: str
     reporting_year: int

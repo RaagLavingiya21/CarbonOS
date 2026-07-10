@@ -90,19 +90,48 @@ def _methodology_note(meta) -> Section:
     return Section(title="", kind="note", note=f"Methodology: {meta.methodology_summary}")
 
 
+_STANDARD_LABELS = {
+    "ISAE_3410": "ISAE 3410", "ISSA_5000": "ISSA 5000", "ISO_14064-3": "ISO 14064-3",
+}
+
+
+def assurance_line(meta) -> str:
+    """Human-readable third-party verification status from the inventory's
+    assurance fields; falls back to the placeholder when unset / level=none."""
+    level = (getattr(meta, "assurance_level", None) or "none").lower()
+    if level not in ("limited", "reasonable"):
+        return "Not yet third-party verified"
+    line = f"{level.capitalize()} assurance"
+    std = _STANDARD_LABELS.get(getattr(meta, "assurance_standard", None) or "",
+                               getattr(meta, "assurance_standard", None) or "")
+    if std:
+        line += f" ({std})"
+    if getattr(meta, "assurance_statement_on_file", False):
+        line += "; assurance statement on file"
+    return line
+
+
+def _verification_section(meta) -> Section:
+    return Section(
+        title="Verification / assurance", kind="keyvalue",
+        rows=[["Scope 1 verification/assurance status", assurance_line(meta)]],
+    )
+
+
 # --- SB 253 / GHG Protocol (existing export, now gross = all three categories) ---
 
 def map_sb253(data: DisclosureData, meta) -> Disclosure:
     cover, gross = _coversheet(data, meta), _gross_breakdown_table(data)
     by_gas, by_fac = _combustion_by_gas_table(data), _by_facility_table(data)
     biogenic, method = _biogenic_note(data), _methodology_note(meta)
+    verification = _verification_section(meta)
     return Disclosure(
         regime="SB 253",
         doc_title="Scope 1 Emissions Disclosure",
         subtitle=f"CA SB 253 / GHG Protocol Corporate Standard  ({data.ar_version})",
         filename_slug="sb253",
-        sections=[cover, gross, by_gas, by_fac, biogenic, method],
-        sheet_map=[("Disclosure", [cover, gross, biogenic, method]),
+        sections=[cover, gross, by_gas, by_fac, verification, biogenic, method],
+        sheet_map=[("Disclosure", [cover, gross, verification, biogenic, method]),
                    ("By gas", [by_gas]), ("By facility", [by_fac])],
     )
 
@@ -119,13 +148,15 @@ def map_esrs_e1(data: DisclosureData, meta) -> Disclosure:
     )
     gross, by_gas = _gross_breakdown_table(data), _combustion_by_gas_table(data)
     biogenic, method = _biogenic_note(data), _methodology_note(meta)
+    verification = _verification_section(meta)
     return Disclosure(
         regime="ESRS E1",
         doc_title="ESRS E1 Climate Change — Scope 1",
         subtitle=f"ESRS E1-6 (CSRD)  ({data.ar_version})",
         filename_slug="esrs-e1",
-        sections=[cover, e16, gross, by_gas, biogenic, method],
-        sheet_map=[("ESRS E1", [cover, e16, gross, biogenic, method]), ("By gas", [by_gas])],
+        sections=[cover, e16, gross, by_gas, verification, biogenic, method],
+        sheet_map=[("ESRS E1", [cover, e16, gross, verification, biogenic, method]),
+                   ("By gas", [by_gas])],
     )
 
 
@@ -142,7 +173,7 @@ def map_cdp(data: DisclosureData, meta) -> Disclosure:
     by_fac = _by_facility_table(data)
     verification = Section(
         title="C10 — Verification", kind="keyvalue",
-        rows=[["Scope 1 verification/assurance status", "Not yet third-party verified"],
+        rows=[["Scope 1 verification/assurance status", assurance_line(meta)],
               ["Methodology", meta.methodology_summary]],
     )
     return Disclosure(
@@ -184,13 +215,15 @@ def map_ghgrp(data: DisclosureData, meta) -> Disclosure:
               f"threshold (40 CFR Part 98). {'Reporting is likely required.' if over else 'Reporting may not be required.'}"),
     )
     cover, units, method = _coversheet(data, meta), _ghgrp_units_table(data), _methodology_note(meta)
+    verification = _verification_section(meta)
     return Disclosure(
         regime="EPA GHGRP Subpart C",
         doc_title="EPA GHGRP — Scope 1 Stationary Combustion",
         subtitle=f"40 CFR Part 98 Subpart C  ({data.ar_version})",
         filename_slug="epa-ghgrp",
-        sections=[cover, units, threshold, method],
-        sheet_map=[("GHGRP Subpart C", [cover, threshold, method]), ("Units", [units])],
+        sections=[cover, units, threshold, verification, method],
+        sheet_map=[("GHGRP Subpart C", [cover, threshold, verification, method]),
+                   ("Units", [units])],
     )
 
 

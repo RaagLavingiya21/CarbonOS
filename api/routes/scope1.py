@@ -18,6 +18,7 @@ from api.graphs.scope1_ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
     AssignOwnerRequest,
+    AssuranceStatusResponse,
     BayouCredentialsResponse,
     BayouSyncResponse,
     CollectionStatusRequest,
@@ -50,6 +51,7 @@ from api.models.scope1_schemas import (
     ReadinessResponse,
     RecalcAnalysisResponse,
     RecalcEventDTO,
+    SetAssuranceRequest,
     SetBaseYearRequest,
     SetBayouApiKeyRequest,
     SetInventoryMetricsRequest,
@@ -486,6 +488,58 @@ async def import_base_year(
     return {**inv, "evidence_document_id": evidence["id"],
             "imported": {"base_year": parsed.base_year, "total_tco2e": parsed.total_tco2e,
                          "gwp_version": parsed.gwp_version}}
+
+
+# --- Assurance & verification -----------------------------------------------
+
+def _assurance_status(inv: dict, user: CurrentUser) -> AssuranceStatusResponse:
+    """Assurance level/standard on the inventory + whether a statement is on file."""
+    stmt = _guard(store.get_assurance_statement, inv["id"],
+                  access_token=user.access_token, user_id=user.user_id)
+    return AssuranceStatusResponse(
+        assurance_level=inv.get("assurance_level"),
+        assurance_standard=inv.get("assurance_standard"),
+        statement_on_file=stmt is not None,
+        statement_id=stmt["id"] if stmt else None,
+    )
+
+
+@router.get("/inventories/{inventory_id}/assurance", response_model=AssuranceStatusResponse)
+def get_assurance(inventory_id: str, user: CurrentUser = Depends(get_current_user)) -> AssuranceStatusResponse:
+    inv = _guard(store.get_inventory, inventory_id,
+                 access_token=user.access_token, user_id=user.user_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Inventory not found.")
+    return _assurance_status(inv, user)
+
+
+@router.post("/inventories/{inventory_id}/assurance", response_model=AssuranceStatusResponse)
+def set_assurance(inventory_id: str, req: SetAssuranceRequest,
+                  user: CurrentUser = Depends(require_editor)) -> AssuranceStatusResponse:
+    """Record the inventory's assurance level + standard."""
+    patch = {"assurance_level": req.assurance_level, "assurance_standard": req.assurance_standard}
+    inv = _guard(store.set_assurance, inventory_id, patch,
+                 access_token=user.access_token, user_id=user.user_id)
+    _log(inventory_id, "set_assurance", user, entity_table="s1_inventory",
+         field_changes={**patch, "evidence_document_id": req.evidence_document_id})
+    return _assurance_status(inv, user)
+
+
+@router.post("/inventories/{inventory_id}/assurance/statement")
+async def upload_assurance_statement(
+    inventory_id: str, file: UploadFile = File(...),
+    user: CurrentUser = Depends(require_editor),
+) -> dict:
+    """Upload the third-party assurance statement (PDF) and keep it as evidence."""
+    data = await file.read()
+    evidence = _guard(
+        store.upload_evidence, data, file_name=file.filename or "assurance-statement.pdf",
+        content_type=file.content_type, document_type="assurance_statement",
+        inventory_id=inventory_id, access_token=user.access_token, user_id=user.user_id,
+    )
+    _log(inventory_id, "upload_assurance_statement", user, entity_table="s1_inventory",
+         field_changes={"evidence_document_id": evidence["id"]})
+    return {"evidence_document_id": evidence["id"]}
 
 
 # --- Base-year recalculation (GHG Protocol Ch. 5) ---------------------------
@@ -1538,6 +1592,8 @@ def _disclosure_meta(inventory_id: str, ar_version: str, user: CurrentUser) -> D
         raise HTTPException(status_code=404, detail="Inventory not found.")
     entity = _guard(store.get_entity, inv["reporting_entity_id"],
                     access_token=user.access_token, user_id=user.user_id) or {}
+    statement = _guard(store.get_assurance_statement, inventory_id,
+                       access_token=user.access_token, user_id=user.user_id)
     return DisclosureMeta(
         entity_name=entity.get("name", "-"),
         jurisdiction=entity.get("jurisdiction", "US"),
@@ -1547,6 +1603,9 @@ def _disclosure_meta(inventory_id: str, ar_version: str, user: CurrentUser) -> D
         consolidation_approach=inv["consolidation_approach"],
         gwp_version=ar_version,
         base_year=inv["base_year"],
+        assurance_level=inv.get("assurance_level"),
+        assurance_standard=inv.get("assurance_standard"),
+        assurance_statement_on_file=statement is not None,
     )
 
 

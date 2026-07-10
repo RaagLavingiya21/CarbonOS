@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { scope1Api, type S1AuditEntry, type S1Report, type S1Trace } from "@/lib/scope1-api";
+import {
+  scope1Api,
+  type S1AssuranceStatus,
+  type S1AuditEntry,
+  type S1Report,
+  type S1Trace,
+} from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "../_lib";
 
@@ -33,16 +39,23 @@ export default function Scope1ReportPage() {
   const [traceId, setTraceId] = useState("");
   const [trace, setTrace] = useState<S1Trace | null>(null);
   const [audit, setAudit] = useState<S1AuditEntry[]>([]);
+  const [assurance, setAssurance] = useState<S1AssuranceStatus | null>(null);
 
   const load = useCallback(async () => {
     if (!activeId) {
       setReport(null);
+      setAssurance(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      setReport(await scope1Api.report(activeId, arVersion));
+      const [rep, assur] = await Promise.all([
+        scope1Api.report(activeId, arVersion),
+        scope1Api.getAssurance(activeId).catch(() => null),
+      ]);
+      setReport(rep);
+      setAssurance(assur);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -99,6 +112,26 @@ export default function Scope1ReportPage() {
           <ArToggle value={arVersion} onChange={setArVersion} />
         </div>
       </div>
+
+      {activeId ? (
+        <p className="text-small text-muted-foreground">
+          Assurance:{" "}
+          <span className="font-medium text-foreground">
+            {assurance && assurance.assurance_level && assurance.assurance_level !== "none"
+              ? `${assurance.assurance_level} assurance${
+                  assurance.assurance_standard
+                    ? ` (${assurance.assurance_standard.replace(/_/g, " ")})`
+                    : ""
+                }${assurance.statement_on_file ? " · statement on file" : ""}`
+              : "Not yet third-party verified"}
+          </span>{" "}
+          — set it in{" "}
+          <Link href="/scope-1/setup" className="underline-offset-4 hover:underline">
+            Setup
+          </Link>
+          . Exports reflect this status.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Button

@@ -70,6 +70,28 @@ def test_esrs_has_e16_boundary_biogenic_methodology() -> None:
     assert any(s.kind == "table" and "gas" in s.title.lower() for s in doc.sections)
 
 
+def test_assurance_line_defaults_to_placeholder() -> None:
+    from s1_reporting.disclosures.mappers import assurance_line
+    assert assurance_line(_meta()) == "Not yet third-party verified"     # no assurance set
+
+
+def test_assurance_line_reports_real_status() -> None:
+    from s1_reporting.disclosures.mappers import assurance_line
+    m = DisclosureMeta(
+        entity_name="Acme", jurisdiction="US", reporting_year=2024,
+        period_start="2024-01-01", period_end="2024-12-31",
+        consolidation_approach="operational_control", gwp_version="AR5", base_year=2020,
+        assurance_level="limited", assurance_standard="ISAE_3410",
+        assurance_statement_on_file=True,
+    )
+    line = assurance_line(m)
+    assert line == "Limited assurance (ISAE 3410); assurance statement on file"
+    # and it flows into every regime's verification section
+    for mapper in (map_sb253, map_esrs_e1, map_cdp, map_ghgrp):
+        doc = mapper(_data(), m)
+        assert any(line in str(c) for s in doc.sections for r in (s.rows or []) for c in r)
+
+
 def test_cdp_has_bygas_byfacility_verification() -> None:
     doc = map_cdp(_data(), _meta())
     titles = " ".join(s.title for s in doc.sections).lower()

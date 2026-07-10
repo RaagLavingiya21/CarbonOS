@@ -153,6 +153,28 @@ def set_inventory_metrics(inventory_id: str, patch: dict, *, access_token: str, 
     return resp.data[0]
 
 
+def set_assurance(inventory_id: str, patch: dict, *, access_token: str, user_id: str) -> dict:
+    """Update an inventory's assurance fields (assurance_level / assurance_standard)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_inventory").update(patch)
+        .eq("org_id", org_id).eq("id", inventory_id).execute()
+    )
+    return resp.data[0]
+
+
+def get_assurance_statement(inventory_id: str, *, access_token: str, user_id: str) -> dict | None:
+    """Latest non-deleted assurance-statement evidence doc for the inventory (or None)."""
+    org_id, client = _org_and_client(access_token, user_id)
+    resp = (
+        client.table("s1_evidence_document").select("*")
+        .eq("org_id", org_id).eq("inventory_id", inventory_id)
+        .eq("document_type", "assurance_statement").is_("deleted_at", "null")
+        .order("uploaded_at", desc=True).limit(1).execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
 def lock_inventory(inventory_id: str, *, access_token: str, user_id: str) -> dict:
     org_id, client = _org_and_client(access_token, user_id)
     resp = (

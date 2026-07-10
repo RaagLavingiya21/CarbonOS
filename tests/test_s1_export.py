@@ -76,6 +76,8 @@ def _mock_report_data(monkeypatch) -> None:
     # Disclosure exports now fold in fugitive + process (default: none for these tests)
     monkeypatch.setattr("db.scope1_store.list_fugitive_records", lambda inv, **k: [])
     monkeypatch.setattr("db.scope1_store.list_process_records", lambda inv, **k: [])
+    # Assurance status threaded into DisclosureMeta (default: no statement on file)
+    monkeypatch.setattr("db.scope1_store.get_assurance_statement", lambda inv, **k: None)
 
 
 def test_export_xlsx_route(monkeypatch) -> None:

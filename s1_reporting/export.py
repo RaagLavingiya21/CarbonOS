@@ -38,6 +38,10 @@ class DisclosureMeta:
         "Fuel-based (GHG Protocol Tier 1); EPA Emission Factors Hub 2025 / "
         "40 CFR Part 98; per-gas masses with GWP applied at reporting time."
     )
+    # Third-party assurance (drives the disclosure verification line):
+    assurance_level: str | None = None          # none | limited | reasonable
+    assurance_standard: str | None = None        # ISAE_3410 | ISSA_5000 | ISO_14064-3
+    assurance_statement_on_file: bool = False
 
 
 def _as_disclosure_data(report: InventoryReport | DisclosureData) -> DisclosureData:

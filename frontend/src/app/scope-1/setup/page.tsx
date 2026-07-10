@@ -172,6 +172,8 @@ export default function Scope1SetupPage() {
       <BaseYearSection inventories={inventories} onSaved={reload} onError={setError} />
 
       <OperationalMetricsSection inventories={inventories} onSaved={reload} onError={setError} />
+
+      <AssuranceSection inventories={inventories} onSaved={reload} onError={setError} />
       <SourceSection
         sources={sources}
         entityOptions={entityOptions}
@@ -547,6 +549,106 @@ function BaseYearSection({
           <label className="text-small text-muted-foreground">
             or import CSV:
             <input type="file" accept=".csv" onChange={importCsv} disabled={!inventoryId} className="ml-2 text-small" />
+          </label>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssuranceSection({
+  inventories,
+  onSaved,
+  onError,
+}: {
+  inventories: S1Inventory[];
+  onSaved: () => void;
+  onError: (message: string) => void;
+}) {
+  const [inventoryId, setInventoryId] = useState("");
+  const [level, setLevel] = useState("none");
+  const [standard, setStandard] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const options = inventories.map((inv) => ({ value: inv.id, label: String(inv.reporting_year) }));
+
+  async function save() {
+    if (!inventoryId) return;
+    setSaving(true);
+    try {
+      await scope1Api.setAssurance(inventoryId, {
+        assurance_level: level,
+        ...(standard ? { assurance_standard: standard } : {}),
+      });
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadStatement(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !inventoryId) return;
+    try {
+      await scope1Api.uploadAssuranceStatement(inventoryId, file);
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assurance &amp; verification</CardTitle>
+        <CardDescription>
+          Record third-party assurance (SB 253 requires limited assurance from 2026, reasonable
+          from 2030) and upload the assurance statement. This drives the verification line on every
+          disclosure export.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <SelectField label="Inventory" value={inventoryId} onChange={setInventoryId} options={options} />
+          <SelectField
+            label="Assurance level"
+            value={level}
+            onChange={setLevel}
+            options={[
+              { value: "none", label: "None (not verified)" },
+              { value: "limited", label: "Limited assurance" },
+              { value: "reasonable", label: "Reasonable assurance" },
+            ]}
+          />
+          <SelectField
+            label="Standard"
+            value={standard}
+            onChange={setStandard}
+            options={[
+              { value: "", label: "—" },
+              { value: "ISAE_3410", label: "ISAE 3410" },
+              { value: "ISSA_5000", label: "ISSA 5000" },
+              { value: "ISO_14064-3", label: "ISO 14064-3" },
+            ]}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={save} disabled={saving || !inventoryId}>
+            Save assurance
+          </Button>
+          <label className="text-small text-muted-foreground">
+            assurance statement (PDF):
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={uploadStatement}
+              disabled={!inventoryId}
+              className="ml-2 text-small"
+            />
           </label>
         </div>
       </CardContent>

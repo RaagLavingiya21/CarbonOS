@@ -78,6 +78,15 @@ export type S1Inventory = {
   base_year: number;
   status: string;
   locked: boolean;
+  assurance_level?: string | null;
+  assurance_standard?: string | null;
+};
+
+export type S1AssuranceStatus = {
+  assurance_level: string | null;
+  assurance_standard: string | null;
+  statement_on_file: boolean;
+  statement_id: string | null;
 };
 
 export type S1Source = {
@@ -470,6 +479,27 @@ export const scope1Api = {
     form.append("file", file);
     const response = await fetch(
       `${BACKEND_URL}/api/scope1/inventories/${inventoryId}/base-year/import`,
+      { method: "POST", headers: { Authorization: `Bearer ${await accessToken()}` }, body: form },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  },
+
+  getAssurance: (inventoryId: string) =>
+    request<S1AssuranceStatus>(`/api/scope1/inventories/${inventoryId}/assurance`),
+  setAssurance: (inventoryId: string, body: Record<string, unknown>) =>
+    request<S1AssuranceStatus>(`/api/scope1/inventories/${inventoryId}/assurance`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  uploadAssuranceStatement: async (inventoryId: string, file: File): Promise<Record<string, unknown>> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(
+      `${BACKEND_URL}/api/scope1/inventories/${inventoryId}/assurance/statement`,
       { method: "POST", headers: { Authorization: `Bearer ${await accessToken()}` }, body: form },
     );
     if (!response.ok) {
