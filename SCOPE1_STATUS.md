@@ -1,8 +1,14 @@
 # Scope 1 — Working Status / Resume-Here
 Living doc. Design lives in the implementation plan (`~/.claude/plans/lucky-growing-planet.md`) + research (`~/Downloads/Scope1Research/`). This is current position + gotchas.
-_Last updated: 2026-07-07 · Branch: feature/scope1-v2 (off main, 7 commits)_
+_Last updated: 2026-07-09 · Branch: **feature/scope1-v3** (off origin/main cf3cab1). v2 is merged to main; migrations 110–114 + 116 applied to prod._
 
-## 0. Latest (commit c91a0f2) — V2 Priority 2 COMPLETE + security hardening
+## 0. Latest (commit 4689877, feature/scope1-v3) — Assurance & verification workflow
+Turns the disclosures from self-declared into **audit-grade**. Record an inventory's assurance **level** (none/limited/reasonable) + **standard** (ISAE 3410 / ISSA 5000 / ISO 14064-3), upload the **assurance statement** as evidence, and every export (SB 253, ESRS E1, CDP, GHGRP) shows the **real verification status** instead of the hardcoded "Not yet third-party verified" placeholder.
+- **Zero migration** — reuses existing `s1_inventory.assurance_level`/`assurance_standard` cols; allowed values validated app-layer (`SetAssuranceRequest` patterns); statement stored via the existing evidence pipeline (`document_type='assurance_statement'`). Mirrors the base-year setter+import pattern.
+- Routes: `GET/POST /inventories/{id}/assurance` (status / set, editor+), `POST /inventories/{id}/assurance/statement` (upload, editor+). `store.set_assurance` + `store.get_assurance_statement`.
+- `DisclosureMeta` gains assurance fields; `_disclosure_meta` populates them; `mappers.assurance_line()` renders real status in all 4 regimes. Frontend: `AssuranceSection` on `/scope-1/setup` + status line on `/scope-1/report`. **638 tests. No DB changes to apply.**
+
+## 0a. Prior (commit c91a0f2) — V2 Priority 2 COMPLETE + security hardening
 Wired the Bayou credential-connect routes and **fixed 3 real problems in the inherited migration 115 / store** (it was unapplied to prod, so fixed cheaply):
 - **🔴 Key was readable by any org member.** The old RLS `SELECT ... USING (is_org_member(org_id))` exposed the raw `bayou_api_key` to any member via the anon key — contradicting "never exposed to frontend". Table is now **backend/service-role ONLY**: RLS enabled with **no anon/authenticated policies** (deny-by-default); the backend reads/writes via `get_service_client()` (bypasses RLS). Key never leaves the server; status DTOs never include it.
 - **🔴 Missing INSERT policy** → `get_or_create_credentials` would have failed on the real DB (mocked tests hid it). Moot now (service-role bypasses RLS).
