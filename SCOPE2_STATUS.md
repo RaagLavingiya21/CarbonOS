@@ -25,7 +25,7 @@ true-up dedup (`115022c`), overlap dedup (`eb2ef11`), aggregator adapter (`d22a6
 idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`fbe81ef`…
 `203261f`). **V1 compliance**: SB 253 + CSRD ESRS E1 disclosure generators + UI (`9fd8e54`, `afc5073`)
 **EAC registry linkage** (`afcacd6`, `1b67579`), and **assurance-ready XLSX/PDF export**
-(`d055813`, `227d722`). Next V1 = target-setting. ⚠ migrations 047 + 048 unapplied.
+(`d055813`, `227d722`). Next V1 = target-setting. (migrations 047 + 048 ✅ applied to prod 2026-07-09.)
 
 ## 2. Done (shipped)
 - **M0** — data model (migrations `040–046`), dual-method calc engine (LB + market-based,
@@ -107,8 +107,8 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
   `cd frontend && npm run build && npm run lint`.
 - **Flow**: sites (+eGRID+CSV import) → import (PDF/OCR review) → EACs (RECs/GOs) → calculate →
   coverage KPI → landlord (+estimate) → reports (CDP/Amazon + SB253/CSRD disclosure + queue).
-- **Unapplied migrations** (apply to the shared dev DB / prod before those features work):
-  `047_s2_eac_instruments`, `048_s2_calc_renewable_mwh`.
+- **Migrations**: all S2 migrations `040–049` ✅ applied to prod (2026-07-09), incl.
+  `047_s2_eac_instruments`, `048_s2_calc_renewable_mwh`, `049_s2_targets`.
 
 ## 6. Next up / deferred
 - **M1 hardening**: ✅ true-up/estimated-read **dedup** · ✅ **aggregator adapter** interface
@@ -135,7 +135,7 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
     Calc loads EACs for the year → engine quality-screens (8 GHGP criteria) → market-based
     reflects real coverage; EAC-covered MWh persisted (`renewable_mwh`, migration 048) →
     feeds CSRD ESRS E1-5 renewable mix (closed that readiness warning).
-    **⚠ migrations 047 + 048 must be applied to the shared dev DB (and prod) before use.**
+    **migrations 047 + 048 ✅ applied to prod (2026-07-09).**
   - ✅ **Assurance-ready export** done (`d055813` backend, `227d722` UI) — `s2_reporting/export.py`
     build_disclosure_xlsx (field-tagged + readiness sheet) / build_disclosure_pdf (readiness
     banner + per-section tables); routes `/calculations/{id}/disclosure.xlsx` + `.pdf`; XLSX/PDF
@@ -179,7 +179,7 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
 **Priority 3:** Aggregator binding (fetch real PDFs from provider, pipe to OCR intake)
 
 ### Pending DB Tasks
-- Apply migration 049 to dev/prod databases
+- ✅ Migration 049 applied to prod (2026-07-09).
 
 ### Priority 2 — OCR eval corpus + REVIEW_THRESHOLD calibration ✅ (infra)
 
@@ -226,10 +226,10 @@ Scope 2 V2 (P1 target-setting + P2 OCR calibration / empty-extraction fix) merge
 via **PR #26** (`integration/scopes-v2`, the three-lane S1/S2/S3 integration). `origin/main`
 now at `cf3cab1`. The S2 lane branch `feature/scope2-v2` is fully contained in main.
 
-**Remaining prod actions (user, not the lane):**
-- Apply migration **049** (`s2_targets`) to prod; **047 + 048** (EAC instruments / renewable
-  MWh) per existing tracking above.
-- Set `NEXT_PUBLIC_SCOPE2_ENABLED=true` in Vercel to un-dark Scope 2.
+**Prod actions:**
+- ✅ Migrations **047 + 048 + 049** applied to prod (2026-07-09) — all S2 migrations
+  `040–049` are now in prod. (Earlier `⚠ unapplied` notes in this doc are superseded.)
+- ☐ **Still pending:** set `NEXT_PUBLIC_SCOPE2_ENABLED=true` in Vercel to un-dark Scope 2.
 
 **Next S2 work (both blocked):**
 - **P3 — aggregator binding**: bind a real provider (Arcadia/UtilityAPI) to
