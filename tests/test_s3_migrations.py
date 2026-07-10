@@ -1,9 +1,9 @@
-"""Migration-hygiene lint for the Scope-3 SQL migrations (band 050-059).
+"""Migration-hygiene lint for the Scope-3 SQL migrations (band 300-399).
 
 Runs without a database — it parses the .sql text and enforces the tenancy /
 re-runnability conventions so the migrations are validated before they are ever
 applied:
-  - filename number is in the Scope-3 band 050-059,
+  - filename number is in the Scope-3 band 300-399,
   - CREATE TABLE IF NOT EXISTS (re-runnable),
   - every table carries `org_id UUID NOT NULL` and enables RLS,
   - RLS uses public.is_org_member(org_id); never shares_org_with; user_id never
@@ -18,9 +18,11 @@ from pathlib import Path
 
 _MIG_DIR = Path(__file__).parent.parent / "supabase" / "migrations"
 
-# Scope-3 reserved migration bands: MVP 050-059, then 310+ for Epic D onward
-# (a high block to avoid any collision with the low-numbered scopes).
-_S3_BANDS = ((50, 59), (310, 319))
+# Scope-3 reserved migration band: the whole 300-399 block (integrator grant,
+# 2026-07-09), chosen high to avoid any collision with the low-numbered scopes.
+# The earlier 050-059 assignment was retired — those A/B/C migrations were
+# renumbered into 300-309, so Scope 3 now lives in one contiguous band.
+_S3_BANDS = ((300, 399),)
 
 
 def _in_band(num: int) -> bool:
@@ -28,12 +30,12 @@ def _in_band(num: int) -> bool:
 
 
 def _s3_migrations() -> list[Path]:
-    files = list(_MIG_DIR.glob("05*.sql")) + list(_MIG_DIR.glob("31*.sql"))
+    files = _MIG_DIR.glob("3*.sql")
     return sorted(f for f in files if _in_band(int(f.name[:3])))
 
 
 def test_scope3_migrations_exist():
-    assert _s3_migrations(), "no Scope-3 (050-059) migrations found"
+    assert _s3_migrations(), "no Scope-3 (300-399) migrations found"
 
 
 def test_filenames_in_band():

@@ -1,7 +1,8 @@
 -- ============================================================
 -- Scope 3 — full production migration bundle
 -- Apply once to the PRODUCTION database (Supabase SQL Editor).
--- Ordered 050-059 + 310-317. Every statement is idempotent
+-- Ordered 300-317 (contiguous S3 band 300-399). Every statement
+-- is idempotent
 -- (CREATE TABLE IF NOT EXISTS / DROP POLICY IF EXISTS) so this
 -- whole file is safe to re-run. Wrapped in one transaction.
 -- Prereqs (already in prod, <=029): organizations, org_members,
@@ -11,7 +12,7 @@
 BEGIN;
 
 -- ----------------------------------------------------------
--- 050_inventory_versions.sql
+-- 300_inventory_versions.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic A · corporate inventory version (snapshot of a company's
 -- Scope 3 inventory for a reporting year). Band 050-059 (Scope 3 lane).
@@ -60,7 +61,7 @@ CREATE POLICY s3_inventory_versions_delete ON s3_inventory_versions
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 051_spend_records.sql
+-- 301_spend_records.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic A · normalized GL/ERP spend lines feeding an inventory version.
 -- org_id is carried (denormalized) on every table so RLS is a direct
@@ -109,7 +110,7 @@ CREATE POLICY s3_spend_records_delete ON s3_spend_records
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 052_spend_classifications.sql
+-- 302_spend_classifications.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic A · classifier output per spend line (separate table so
 -- re-classification is versionable and analyst overrides are auditable).
@@ -159,7 +160,7 @@ CREATE POLICY s3_spend_classifications_delete ON s3_spend_classifications
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 053_inventory_category_results.sql
+-- 303_inventory_category_results.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic A · per-category rollup for an inventory version. Cat 1 may be
 -- sourced from the product-PCF rollup (method='product_rollup') instead of
@@ -207,7 +208,7 @@ CREATE POLICY s3_inventory_category_results_delete ON s3_inventory_category_resu
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 054_questionnaire_requests.sql
+-- 304_questionnaire_requests.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic B · inbound questionnaire requests (a customer/retailer/CDP/
 -- EcoVadis questionnaire to answer). Band 050-059. org_id RLS via is_org_member.
@@ -253,7 +254,7 @@ CREATE POLICY s3_questionnaire_requests_delete ON s3_questionnaire_requests
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 055_questionnaire_questions.sql
+-- 305_questionnaire_questions.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic B · parsed questions for a questionnaire request.
 
@@ -297,7 +298,7 @@ CREATE POLICY s3_questionnaire_questions_delete ON s3_questionnaire_questions
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 056_question_datapoint_mappings.sql
+-- 306_question_datapoint_mappings.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic B · question -> inventory-datapoint mapping + drafted answer.
 -- mapped_value is ALWAYS a looked-up inventory datapoint (never generated);
@@ -346,7 +347,7 @@ CREATE POLICY s3_qd_mappings_delete ON s3_question_datapoint_mappings
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 057_answer_library.sql
+-- 307_answer_library.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic B · reusable prior answers (the compounding moat). On submit,
 -- answered questions are written here keyed by framework_field_key /
@@ -391,7 +392,7 @@ CREATE POLICY s3_answer_library_delete ON s3_answer_library
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 058_company_profiles.sql
+-- 308_company_profiles.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic C · persisted company profile that drives the obligation
 -- engine (one per org). Band 050-059. org_id is the RLS key via
@@ -442,7 +443,7 @@ CREATE POLICY s3_company_profiles_delete ON s3_company_profiles
     USING (public.is_org_member(org_id));
 
 -- ----------------------------------------------------------
--- 059_obligations.sql
+-- 309_obligations.sql
 -- ----------------------------------------------------------
 -- Scope 3 · Epic C · evaluated obligations per org (snapshot of an engine run).
 -- The ruleset itself is versioned DATA in the s3_obligations package, not a

@@ -6,7 +6,7 @@ Base path `/scope-3` per the module URL convention. Ships behind
 NEXT_PUBLIC_SCOPE3_ENABLED (nav hidden until GA).
 
 NOTE: written but NOT yet run against a live DB ("write code now, apply later").
-Verify once migrations 050-053 are applied to an isolated database.
+Verify once migrations 300-303 are applied to an isolated database.
 """
 
 from __future__ import annotations

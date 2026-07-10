@@ -5,7 +5,7 @@ the route layer (via db.org_store) and passed in. All access goes through the
 user-scoped client so RLS (public.is_org_member(org_id)) is enforced by Postgres.
 
 NOTE: written but NOT yet exercised against a live database ("write code now,
-apply later"). Verify once migrations 050-053 are applied to an isolated DB.
+apply later"). Verify once migrations 300-303 are applied to an isolated DB.
 """
 
 from __future__ import annotations
