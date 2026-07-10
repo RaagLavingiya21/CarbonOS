@@ -4,7 +4,7 @@
 Design lives in `SCOPE2_IMPLEMENTATION_PLAN.md`; this is current position + gotchas.
 Update it at the end of each work chunk.
 
-_Last updated: 2026-07-07 · Branch: `feature/scope2-v1` (off `main` after PR #24)_
+_Last updated: 2026-07-09 · Branch: `feature/scope2-v2` · **V2 shipped to `main` via PR #26** (`integration/scopes-v2`)_
 
 ---
 
@@ -14,6 +14,11 @@ via PR #24 (`integration/scopes`), shipping **dark** (nav flag off). It's one is
 `s2_*` module on the Carbon OS platform, sharing infra (auth, DB client, deploy, shadcn
 UI) but no business logic/data with Scope 1/3 or the Scope 3/PACT product. 419-test
 suite, CI-green.
+
+**V2 is merged to `main`** (2026-07-09) as part of the three-lane `integration/scopes-v2`
+PR #26 — P1 target-setting + P2 OCR eval calibration / empty-extraction fix. Still ships
+**dark** behind `NEXT_PUBLIC_SCOPE2_ENABLED` (flag off until the user flips it in Vercel).
+See the V2 Status section below for the shipped scope and the remaining prod actions.
 
 **V1 in progress on `feature/scope2-v1`** (local, unpushed). M1 ingestion hardening done:
 true-up dedup (`115022c`), overlap dedup (`eb2ef11`), aggregator adapter (`d22a63b`),
@@ -214,3 +219,20 @@ excluded from the MWh coverage rate. Fixed:
 
 Threshold calibration itself is **deferred to real redacted bills** (drop into the
 gitignored corpus dir, `run_calibration` re-usable as-is).
+
+### V2 shipped → merged to `main` (2026-07-09)
+
+Scope 2 V2 (P1 target-setting + P2 OCR calibration / empty-extraction fix) merged to `main`
+via **PR #26** (`integration/scopes-v2`, the three-lane S1/S2/S3 integration). `origin/main`
+now at `cf3cab1`. The S2 lane branch `feature/scope2-v2` is fully contained in main.
+
+**Remaining prod actions (user, not the lane):**
+- Apply migration **049** (`s2_targets`) to prod; **047 + 048** (EAC instruments / renewable
+  MWh) per existing tracking above.
+- Set `NEXT_PUBLIC_SCOPE2_ENABLED=true` in Vercel to un-dark Scope 2.
+
+**Next S2 work (both blocked):**
+- **P3 — aggregator binding**: bind a real provider (Arcadia/UtilityAPI) to
+  `s2_ingestion/aggregator.py` + a pull route. Blocked on a design partner + provider creds.
+- **Real-bill `REVIEW_THRESHOLD` calibration**: re-run `run_calibration` over real redacted
+  bills to move the threshold off the synthetic-proxy default (0.85). Blocked on redacted bills.
