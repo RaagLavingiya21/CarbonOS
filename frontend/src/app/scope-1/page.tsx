@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { scope1Api, type S1Fugitive, type S1Process, type S1Readiness, type S1Report } from "@/lib/scope1-api";
+import { scope1Api, type S1Fugitive, type S1Process, type S1Readiness, type S1Report, type S1TierBreakdown } from "@/lib/scope1-api";
 
 import { ArToggle, InventoryPicker, fmtT, useInventories } from "./_lib";
 import { OnboardingChecklist } from "./_onboarding";
@@ -24,6 +24,7 @@ export default function Scope1Dashboard() {
   const [readiness, setReadiness] = useState<S1Readiness | null>(null);
   const [fugitive, setFugitive] = useState<S1Fugitive | null>(null);
   const [process, setProcess] = useState<S1Process | null>(null);
+  const [dataQuality, setDataQuality] = useState<S1TierBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadMetrics = useCallback(async () => {
@@ -32,20 +33,23 @@ export default function Scope1Dashboard() {
       setReadiness(null);
       setFugitive(null);
       setProcess(null);
+      setDataQuality(null);
       return;
     }
     setError(null);
     try {
-      const [rep, ready, fug, proc] = await Promise.all([
+      const [rep, ready, fug, proc, dq] = await Promise.all([
         scope1Api.report(activeId, arVersion),
         scope1Api.readiness(activeId),
         scope1Api.fugitive(activeId, arVersion).catch(() => null),
         scope1Api.process(activeId, arVersion).catch(() => null),
+        scope1Api.getDataQuality(activeId, arVersion).catch(() => null),
       ]);
       setReport(rep);
       setReadiness(ready);
       setFugitive(fug);
       setProcess(proc);
+      setDataQuality(dq);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -176,7 +180,7 @@ export default function Scope1Dashboard() {
         </Alert>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <MetricCard
               label={`Gross Scope 1 (${arVersion})`}
               value={fmtT(
@@ -214,6 +218,15 @@ export default function Scope1Dashboard() {
                   <Progress value={readiness.completeness_pct} />
                 ) : null
               }
+            />
+            <MetricCard
+              label="Data quality"
+              value={
+                dataQuality && dataQuality.rows.length > 0
+                  ? `${Math.round(dataQuality.rows.find((r) => r.tier === 1)?.pct ?? 0)}%`
+                  : "—"
+              }
+              hint="on measured data (T1) · full mix in Report"
             />
           </div>
 

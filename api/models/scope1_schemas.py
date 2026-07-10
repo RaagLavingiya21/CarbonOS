@@ -225,6 +225,23 @@ class InventoryReportResponse(BaseModel):
     record_count: int
 
 
+# --- Data-quality tiers ------------------------------------------------------
+
+class TierStatDTO(BaseModel):
+    tier: int
+    label: str
+    count: int
+    tco2e: float
+    pct: float
+
+
+class TierBreakdownResponse(BaseModel):
+    ar_version: str
+    rows: list[TierStatDTO]
+    total_tco2e: float
+    total_count: int
+
+
 # --- Process emissions -------------------------------------------------------
 
 class CreateProcessRequest(BaseModel):

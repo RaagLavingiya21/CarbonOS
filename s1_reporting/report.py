@@ -26,6 +26,7 @@ class ReportRecord:
     source_name: str | None = None
     fuel: str | None = None           # fuel_or_activity (GHGRP per-fuel grouping)
     ef_tier: str | None = None        # calculation tier, e.g. "T1"/"T2" (GHGRP)
+    data_quality_tier: int | None = None   # 1 measured … 5 estimated (data-quality mix)
 
 
 @dataclass
@@ -86,6 +87,7 @@ class DisclosureData:
     fugitive_lines: list[SourceLine] = field(default_factory=list)
     process_lines: list[SourceLine] = field(default_factory=list)
     report_records: list[ReportRecord] = field(default_factory=list)
+    tier_breakdown: TierBreakdown | None = None   # data-quality mix over all categories
 
     @property
     def ar_version(self) -> str:
@@ -103,6 +105,61 @@ class DisclosureData:
     @property
     def biogenic_co2_tco2e(self) -> float:
         return self.combustion.biogenic_co2_tco2e   # memo line, still excluded
+
+
+# --- Data-quality tiers (GHG Protocol / assurance transparency) --------------
+
+TIER_LABELS: dict[int, str] = {
+    1: "Measured (CEMS/meter)",
+    2: "Utility bill / metered",
+    3: "Carbon content",
+    4: "Emission factor / screening",
+    5: "Estimated / default",
+}
+
+
+@dataclass(frozen=True)
+class TierStat:
+    tier: int
+    label: str
+    count: int
+    tco2e: float
+    pct: float          # share of total tco2e (0-100)
+
+
+@dataclass(frozen=True)
+class TierBreakdown:
+    rows: list[TierStat]        # sorted ascending by tier
+    total_tco2e: float
+    total_count: int
+
+
+def build_tier_breakdown(contributions: list[tuple[int, float]]) -> TierBreakdown:
+    """Group (data_quality_tier, tco2e) contributions into a per-tier breakdown
+    with record count, tCO2e, and % of the total footprint. Pure, DB-free."""
+    agg: dict[int, list[float]] = {}     # tier -> [count, tco2e]
+    total = 0.0
+    for tier, tco2e in contributions:
+        acc = agg.setdefault(int(tier), [0.0, 0.0])
+        acc[0] += 1
+        acc[1] += tco2e
+        total += tco2e
+    rows = [
+        TierStat(
+            tier=tier,
+            label=TIER_LABELS.get(tier, f"Tier {tier}"),
+            count=int(count),
+            tco2e=tco2e,
+            pct=(tco2e / total * 100.0) if total else 0.0,
+        )
+        for tier, (count, tco2e) in sorted(agg.items())
+    ]
+    return TierBreakdown(rows=rows, total_tco2e=total, total_count=len(contributions))
+
+
+def record_tco2e(record: ReportRecord, ar_version: str) -> float:
+    """Combustion gross tCO2e for one record (biogenic excluded) — for tier mixes."""
+    return _co2e_by_gas(record.gas_masses, ar_version, record.multiplier).total_tco2e
 
 
 def _co2e_by_gas(masses: GasMasses, ar_version: str, multiplier: float) -> GasBreakdown:

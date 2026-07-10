@@ -131,8 +131,12 @@ export default function Scope1SettingsPage() {
                 <tbody>
                   {members.map((member) => (
                     <tr key={member.user_id} className="border-t bg-card">
-                      <td className="px-3 py-2 font-mono text-caption">
-                        {member.user_id.slice(0, 8)}…
+                      <td className="px-3 py-2 text-small">
+                        {member.email ? (
+                          member.email
+                        ) : (
+                          <span className="font-mono text-caption">{member.user_id.slice(0, 8)}…</span>
+                        )}
                         {member.is_you ? <span className="ml-2 text-muted-foreground">(you)</span> : null}
                       </td>
                       <td className="px-3 py-2">

@@ -89,6 +89,14 @@ export type S1AssuranceStatus = {
   statement_id: string | null;
 };
 
+export type S1TierStat = { tier: number; label: string; count: number; tco2e: number; pct: number };
+export type S1TierBreakdown = {
+  ar_version: string;
+  rows: S1TierStat[];
+  total_tco2e: number;
+  total_count: number;
+};
+
 export type S1Source = {
   id: string;
   entity_id: string;
@@ -205,7 +213,7 @@ export type S1OcrExtraction = {
   needs_review?: boolean;
 };
 
-export type S1Member = { user_id: string; role: string; explicit: boolean; is_you: boolean };
+export type S1Member = { user_id: string; role: string; explicit: boolean; is_you: boolean; email?: string | null };
 export type S1Members = { your_role: string; members: S1Member[] };
 
 export type S1OnboardingStep = {
@@ -490,6 +498,10 @@ export const scope1Api = {
 
   getAssurance: (inventoryId: string) =>
     request<S1AssuranceStatus>(`/api/scope1/inventories/${inventoryId}/assurance`),
+  getDataQuality: (inventoryId: string, arVersion: string) =>
+    request<S1TierBreakdown>(
+      `/api/scope1/inventories/${inventoryId}/data-quality?ar_version=${encodeURIComponent(arVersion)}`,
+    ),
   setAssurance: (inventoryId: string, body: Record<string, unknown>) =>
     request<S1AssuranceStatus>(`/api/scope1/inventories/${inventoryId}/assurance`, {
       method: "POST",

@@ -15,6 +15,7 @@ import {
   type S1AssuranceStatus,
   type S1AuditEntry,
   type S1Report,
+  type S1TierBreakdown,
   type S1Trace,
 } from "@/lib/scope1-api";
 
@@ -40,22 +41,26 @@ export default function Scope1ReportPage() {
   const [trace, setTrace] = useState<S1Trace | null>(null);
   const [audit, setAudit] = useState<S1AuditEntry[]>([]);
   const [assurance, setAssurance] = useState<S1AssuranceStatus | null>(null);
+  const [dataQuality, setDataQuality] = useState<S1TierBreakdown | null>(null);
 
   const load = useCallback(async () => {
     if (!activeId) {
       setReport(null);
+      setDataQuality(null);
       setAssurance(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const [rep, assur] = await Promise.all([
+      const [rep, assur, dq] = await Promise.all([
         scope1Api.report(activeId, arVersion),
         scope1Api.getAssurance(activeId).catch(() => null),
+        scope1Api.getDataQuality(activeId, arVersion).catch(() => null),
       ]);
       setReport(rep);
       setAssurance(assur);
+      setDataQuality(dq);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -263,6 +268,43 @@ export default function Scope1ReportPage() {
                     ))}
                   </tbody>
                 </table>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {dataQuality && dataQuality.rows.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Data quality by tier</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-left text-sm">
+                  <thead className="text-caption text-muted-foreground">
+                    <tr>
+                      <th className="py-1.5">Tier</th>
+                      <th className="py-1.5 text-right">Records</th>
+                      <th className="py-1.5 text-right">tCO₂e</th>
+                      <th className="py-1.5 text-right">% of total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dataQuality.rows.map((row) => (
+                      <tr key={row.tier} className="border-t">
+                        <td className="py-1.5">
+                          <span className="font-mono">T{row.tier}</span>{" "}
+                          <span className="text-muted-foreground">{row.label}</span>
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums">{row.count}</td>
+                        <td className="py-1.5 text-right tabular-nums">{fmtT(row.tco2e)}</td>
+                        <td className="py-1.5 text-right tabular-nums">{row.pct.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-caption text-muted-foreground">
+                  Share of gross Scope 1 (combustion + fugitive + process) by input data quality
+                  (T1 measured … T5 estimated). Included in the disclosure exports.
+                </p>
               </CardContent>
             </Card>
           ) : null}

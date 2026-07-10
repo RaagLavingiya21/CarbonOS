@@ -10,13 +10,18 @@ ar_version recomputes from identical stored masses — no mutation.
 from s1_reporting.disclosures import REGIME_MAPPERS, render_pdf, render_xlsx
 from s1_reporting.export import DisclosureMeta, build_pdf, build_xlsx
 from s1_reporting.report import (
+    TIER_LABELS,
     DisclosureData,
     FacilityBreakdown,
     GasBreakdown,
     InventoryReport,
     ReportRecord,
     SourceLine,
+    TierBreakdown,
+    TierStat,
     build_inventory_report,
+    build_tier_breakdown,
+    record_tco2e,
     trace_record,
 )
 from s1_reporting.trends import (
@@ -28,10 +33,15 @@ from s1_reporting.trends import (
 
 __all__ = [
     "REGIME_MAPPERS",
+    "TIER_LABELS",
     "DisclosureData",
     "DisclosureMeta",
     "FacilityBreakdown",
     "GasBreakdown",
+    "TierBreakdown",
+    "TierStat",
+    "build_tier_breakdown",
+    "record_tco2e",
     "InventoryDatum",
     "InventoryReport",
     "ReportRecord",

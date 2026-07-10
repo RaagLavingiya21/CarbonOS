@@ -57,6 +57,7 @@ from api.models.scope1_schemas import (
     SetInventoryMetricsRequest,
     SetRoleRequest,
     StationaryRecordRequest,
+    TierBreakdownResponse,
     TrendPointDTO,
     TrendsResponse,
     UpsertBoundaryRequest,
@@ -95,8 +96,10 @@ from s1_reporting import (
     SourceLine,
     build_inventory_report,
     build_pdf,
+    build_tier_breakdown,
     build_trends,
     build_xlsx,
+    record_tco2e,
     render_pdf,
     render_xlsx,
     trace_record,
@@ -162,9 +165,17 @@ def list_members(user: CurrentUser = Depends(get_current_user)) -> dict:
     """Org members with their resolved Scope-1 role, plus the caller's own role."""
     members = _guard(store.list_member_roles, access_token=user.access_token, user_id=user.user_id)
     your_role = _guard(store.get_scope1_role, access_token=user.access_token, user_id=user.user_id)
+    emails: dict[str, str] = {}
+    try:
+        emails = store.resolve_member_emails({m["user_id"] for m in members})
+    except Exception:
+        emails = {}     # best-effort — fall back to user_id in the UI
     return {
         "your_role": your_role,
-        "members": [{**m, "is_you": m["user_id"] == user.user_id} for m in members],
+        "members": [
+            {**m, "is_you": m["user_id"] == user.user_id, "email": emails.get(m["user_id"])}
+            for m in members
+        ],
     }
 
 
@@ -1290,6 +1301,24 @@ def inventory_report(
     )
 
 
+@router.get("/inventories/{inventory_id}/data-quality", response_model=TierBreakdownResponse)
+def data_quality(
+    inventory_id: str,
+    ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> TierBreakdownResponse:
+    """Data-quality tier mix (T1 measured … T5 estimated) across combustion +
+    fugitive + process, by record count and % of emissions."""
+    tb = _assemble_disclosure_data(inventory_id, ar_version, user).tier_breakdown
+    return TierBreakdownResponse(
+        ar_version=ar_version,
+        rows=[{"tier": r.tier, "label": r.label, "count": r.count,
+               "tco2e": r.tco2e, "pct": r.pct} for r in (tb.rows if tb else [])],
+        total_tco2e=tb.total_tco2e if tb else 0.0,
+        total_count=tb.total_count if tb else 0,
+    )
+
+
 @router.get("/inventories/{inventory_id}/report/xlsx")
 def export_report_xlsx(
     inventory_id: str,
@@ -1558,11 +1587,18 @@ def _assemble_disclosure_data(inventory_id: str, ar_version: str, user: CurrentU
     report, report_records, facilities = _assemble_combustion(inventory_id, ar_version, user)
     kw = {"access_token": user.access_token, "user_id": user.user_id}
 
+    # (data_quality_tier, tco2e) contributions across all three categories.
+    contributions: list[tuple[int, float]] = [
+        (int(rec.data_quality_tier or 4), record_tco2e(rec, ar_version))
+        for rec in report_records
+    ]
+
     fugitive_lines: list[SourceLine] = []
     fugitive_total = 0.0
     for r in _guard(store.list_fugitive_records, inventory_id, **kw):
         t = fugitive_tco2e(float(r["leaked_kg"]), r["refrigerant"], ar_version)
         fugitive_total += t
+        contributions.append((int(r.get("data_quality_tier") or 4), t))
         fugitive_lines.append(SourceLine(
             label=r["refrigerant"], gas_or_refrigerant=r["refrigerant"],
             facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
@@ -1573,6 +1609,7 @@ def _assemble_disclosure_data(inventory_id: str, ar_version: str, user: CurrentU
     for r in _guard(store.list_process_records, inventory_id, **kw):
         t = process_tco2e(float(r["emission_kg"]), r["gas_species"], ar_version)
         process_total += t
+        contributions.append((int(r.get("data_quality_tier") or 4), t))
         process_lines.append(SourceLine(
             label=r["process_type"], gas_or_refrigerant=r["gas_species"],
             facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
@@ -1582,6 +1619,7 @@ def _assemble_disclosure_data(inventory_id: str, ar_version: str, user: CurrentU
         combustion=report, fugitive_tco2e=fugitive_total, process_tco2e=process_total,
         fugitive_lines=fugitive_lines, process_lines=process_lines,
         report_records=report_records,
+        tier_breakdown=build_tier_breakdown(contributions),
     )
 
 
@@ -1622,5 +1660,6 @@ def _report_record(rec: dict, sources: dict, facilities: dict, boundaries: dict)
         source_id=rec["emission_source_id"],
         source_name=source.get("source_name"),
         fuel=source.get("primary_fuel"),
+        data_quality_tier=rec.get("data_quality_tier"),
         ef_tier=rec.get("ef_tier"),
     )

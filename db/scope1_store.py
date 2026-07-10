@@ -601,6 +601,36 @@ def list_member_roles(*, access_token: str, user_id: str) -> list[dict]:
     return out
 
 
+def resolve_member_emails(user_ids: set[str]) -> dict[str, str]:
+    """Map user_id -> email for the given ids via the service-role admin API.
+
+    auth.users isn't readable by the user client (RLS), so we use the same admin
+    lookup as org_store.find_user_id_by_email. Best-effort: only ids found are
+    returned; callers fall back to the id. Backend-only (never expose the map's
+    source table to a client)."""
+    wanted = {u for u in user_ids if u}
+    if not wanted:
+        return {}
+    from db.org_store import _users_from_list_response  # reuse response parsing
+
+    client = get_service_client()
+    found: dict[str, str] = {}
+    page, per_page = 1, 200
+    while True:
+        users = _users_from_list_response(
+            client.auth.admin.list_users(page=page, per_page=per_page))
+        if not users:
+            break
+        for user in users:
+            uid = str(getattr(user, "id", ""))
+            if uid in wanted and getattr(user, "email", None):
+                found[uid] = user.email
+        if len(found) >= len(wanted) or len(users) < per_page:
+            break
+        page += 1
+    return found
+
+
 def set_member_role(target_user_id: str, role: str, *, access_token: str, user_id: str) -> dict:
     """Upsert an explicit Scope-1 role for a member of the caller's active org."""
     org_id, client = _org_and_client(access_token, user_id)

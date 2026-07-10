@@ -118,6 +118,22 @@ def _verification_section(meta) -> Section:
     )
 
 
+def _dq_sections(data: DisclosureData) -> list[Section]:
+    """Data-quality tier mix (empty list when there are no records)."""
+    tb = data.tier_breakdown
+    if tb is None or not tb.rows:
+        return []
+    rows: list = [["Tier", "Data quality", "Records", "tCO2e", "% of total"]]
+    for r in tb.rows:
+        rows.append([f"T{r.tier}", r.label, r.count, round(r.tco2e, 4), f"{r.pct:.1f}%"])
+    return [Section(title="Data quality by tier", kind="table", rows=rows)]
+
+
+def _dq_sheet(dq: list[Section]) -> list[tuple]:
+    """An XLSX 'Data quality' sheet entry, only when there's a section."""
+    return [("Data quality", dq)] if dq else []
+
+
 # --- SB 253 / GHG Protocol (existing export, now gross = all three categories) ---
 
 def map_sb253(data: DisclosureData, meta) -> Disclosure:
@@ -125,14 +141,15 @@ def map_sb253(data: DisclosureData, meta) -> Disclosure:
     by_gas, by_fac = _combustion_by_gas_table(data), _by_facility_table(data)
     biogenic, method = _biogenic_note(data), _methodology_note(meta)
     verification = _verification_section(meta)
+    dq = _dq_sections(data)
     return Disclosure(
         regime="SB 253",
         doc_title="Scope 1 Emissions Disclosure",
         subtitle=f"CA SB 253 / GHG Protocol Corporate Standard  ({data.ar_version})",
         filename_slug="sb253",
-        sections=[cover, gross, by_gas, by_fac, verification, biogenic, method],
+        sections=[cover, gross, by_gas, by_fac, *dq, verification, biogenic, method],
         sheet_map=[("Disclosure", [cover, gross, verification, biogenic, method]),
-                   ("By gas", [by_gas]), ("By facility", [by_fac])],
+                   ("By gas", [by_gas]), ("By facility", [by_fac]), *_dq_sheet(dq)],
     )
 
 
@@ -149,14 +166,15 @@ def map_esrs_e1(data: DisclosureData, meta) -> Disclosure:
     gross, by_gas = _gross_breakdown_table(data), _combustion_by_gas_table(data)
     biogenic, method = _biogenic_note(data), _methodology_note(meta)
     verification = _verification_section(meta)
+    dq = _dq_sections(data)
     return Disclosure(
         regime="ESRS E1",
         doc_title="ESRS E1 Climate Change — Scope 1",
         subtitle=f"ESRS E1-6 (CSRD)  ({data.ar_version})",
         filename_slug="esrs-e1",
-        sections=[cover, e16, gross, by_gas, verification, biogenic, method],
+        sections=[cover, e16, gross, by_gas, *dq, verification, biogenic, method],
         sheet_map=[("ESRS E1", [cover, e16, gross, verification, biogenic, method]),
-                   ("By gas", [by_gas])],
+                   ("By gas", [by_gas]), *_dq_sheet(dq)],
     )
 
 
@@ -176,14 +194,15 @@ def map_cdp(data: DisclosureData, meta) -> Disclosure:
         rows=[["Scope 1 verification/assurance status", assurance_line(meta)],
               ["Methodology", meta.methodology_summary]],
     )
+    dq = _dq_sections(data)
     return Disclosure(
         regime="CDP",
         doc_title="CDP Climate Change — Scope 1",
         subtitle=f"CDP C6 / C7  ({data.ar_version})",
         filename_slug="cdp",
-        sections=[cover, c61, gross, by_gas, by_fac, verification],
+        sections=[cover, c61, gross, by_gas, by_fac, *dq, verification],
         sheet_map=[("CDP", [cover, c61, gross, verification]),
-                   ("By gas", [by_gas]), ("By facility", [by_fac])],
+                   ("By gas", [by_gas]), ("By facility", [by_fac]), *_dq_sheet(dq)],
     )
 
 
@@ -216,14 +235,15 @@ def map_ghgrp(data: DisclosureData, meta) -> Disclosure:
     )
     cover, units, method = _coversheet(data, meta), _ghgrp_units_table(data), _methodology_note(meta)
     verification = _verification_section(meta)
+    dq = _dq_sections(data)
     return Disclosure(
         regime="EPA GHGRP Subpart C",
         doc_title="EPA GHGRP — Scope 1 Stationary Combustion",
         subtitle=f"40 CFR Part 98 Subpart C  ({data.ar_version})",
         filename_slug="epa-ghgrp",
-        sections=[cover, units, threshold, verification, method],
+        sections=[cover, units, threshold, *dq, verification, method],
         sheet_map=[("GHGRP Subpart C", [cover, threshold, verification, method]),
-                   ("Units", [units])],
+                   ("Units", [units]), *_dq_sheet(dq)],
     )
 
 
