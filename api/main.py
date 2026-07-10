@@ -36,10 +36,16 @@ from api.routes import (
     scope2_landlord,
     scope2_reports,
     scope2_sites,
+    scope2_targets,
+    scope3_disclosure,
     scope3_inventory,
+    scope3_levers,
     scope3_obligations,
+    scope3_progress,
     scope3_questionnaire,
+    scope3_suppliers,
     scope3_targets,
+    scope3_usephase,
     shares,
 )
 
@@ -186,6 +192,11 @@ app.include_router(scope3_inventory.router)
 app.include_router(scope3_obligations.router)
 app.include_router(scope3_questionnaire.router)
 app.include_router(scope3_targets.router)
+app.include_router(scope3_disclosure.router)
+app.include_router(scope3_progress.router)
+app.include_router(scope3_suppliers.router)
+app.include_router(scope3_usephase.router)
+app.include_router(scope3_levers.router)
 
 # Scope 2 ("Grid") module — isolated; shares only auth + app instance.
 app.include_router(scope2_sites.router)
@@ -194,6 +205,7 @@ app.include_router(scope2_calc.router)
 app.include_router(scope2_eac.router)
 app.include_router(scope2_landlord.router)
 app.include_router(scope2_reports.router)
+app.include_router(scope2_targets.router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

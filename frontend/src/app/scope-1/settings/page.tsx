@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { scope1Api, type S1Member } from "@/lib/scope1-api";
+import { scope1Api, type S1BayouStatus, type S1Member } from "@/lib/scope1-api";
 
 const ROLES = ["admin", "editor", "viewer"];
 
@@ -108,6 +108,8 @@ export default function Scope1SettingsPage() {
 
       {isAdmin ? <InviteCard onInvited={load} onError={setError} /> : null}
 
+      {isAdmin ? <BayouConnectCard onError={setError} /> : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Members</CardTitle>
@@ -157,6 +159,112 @@ export default function Scope1SettingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function BayouConnectCard({ onError }: { onError: (message: string) => void }) {
+  const [status, setStatus] = useState<S1BayouStatus | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await scope1Api.bayouStatus());
+    } catch (err) {
+      onError((err as Error).message);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const connected = !!status?.is_active && !!status?.configured;
+
+  async function saveKey() {
+    if (!apiKey.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      setStatus(await scope1Api.setBayouApiKey(apiKey.trim()));
+      setApiKey("");
+      setNote("API key saved.");
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncNow() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await scope1Api.syncBayou(true);
+      setNote(
+        r.synced
+          ? `Synced: ${r.bills_parsed} parsed of ${r.bills_fetched} bill(s), ${r.queued} queued for review.`
+          : `Not synced: ${r.reason ?? ""}`,
+      );
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    try {
+      setStatus(await scope1Api.disconnectBayou());
+      setNote("Disconnected.");
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Bayou auto-connect
+          <Badge variant={connected ? "info" : "neutral"}>{connected ? "connected" : "not connected"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Connect your Bayou account so the backend can auto-fetch utility bills. The key is stored
+          server-side only and never shown here. {status?.last_sync ? `Last sync: ${status.last_sync}.` : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-56 flex-1 space-y-1.5">
+            <Label>Bayou API key</Label>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={connected ? "•••••••• (set — enter a new key to replace)" : "Paste your Bayou API key"}
+            />
+          </div>
+          <Button type="button" onClick={saveKey} disabled={busy || !apiKey.trim()}>
+            {connected ? "Update key" : "Connect"}
+          </Button>
+          <Button type="button" variant="outline" onClick={syncNow} disabled={busy || !connected}>
+            Sync now
+          </Button>
+          {connected ? (
+            <Button type="button" variant="ghost" onClick={disconnect} disabled={busy}>
+              Disconnect
+            </Button>
+          ) : null}
+        </div>
+        {note ? <p className="mt-3 text-caption text-muted-foreground">{note}</p> : null}
+      </CardContent>
+    </Card>
   );
 }
 

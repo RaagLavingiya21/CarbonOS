@@ -12,6 +12,7 @@ import {
   FileSearch,
   Flame,
   Inbox,
+  Layers,
   Leaf,
   LayoutDashboard,
   LogOut,
@@ -36,6 +37,8 @@ import { cn } from "@/lib/utils";
 // Scope 2 ("Grid") module nav entry — gated so it can ship dark in prod until
 // design-partner pilots. Enable with NEXT_PUBLIC_SCOPE2_ENABLED=true.
 const SCOPE2_ENABLED = process.env.NEXT_PUBLIC_SCOPE2_ENABLED === "true";
+// Scope 3 module nav entry — ships dark until GA. Enable with NEXT_PUBLIC_SCOPE3_ENABLED=true.
+const SCOPE3_ENABLED = process.env.NEXT_PUBLIC_SCOPE3_ENABLED === "true";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, shortcut: "G D" },
@@ -52,6 +55,9 @@ const navItems = [
   { href: "/suppliers", label: "Supplier Copilot", icon: Factory, shortcut: "G S" },
   ...(SCOPE2_ENABLED
     ? [{ href: "/scope-2", label: "Scope 2", icon: Zap, shortcut: "G 2" }]
+    : []),
+  ...(SCOPE3_ENABLED
+    ? [{ href: "/scope-3", label: "Scope 3", icon: Layers, shortcut: "G 3" }]
     : []),
   { href: "/settings/org", label: "Settings", icon: Settings, shortcut: "" },
 ];

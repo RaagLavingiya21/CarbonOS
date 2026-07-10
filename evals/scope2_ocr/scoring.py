@@ -99,6 +99,10 @@ class CaseScore:
     review_fp: int = 0
     review_fn: int = 0
     meter_count_mismatch: int = 0
+    # A submitted bill that the model returned *no* meters for. Invisible to the
+    # per-meter review metric (no rows to flag), so tracked explicitly — otherwise
+    # a total extraction failure silently inflates the MWh coverage rate.
+    extraction_empty: bool = False
     cost_usd: float | None = None
     latency_s: float | None = None
 
@@ -124,6 +128,7 @@ class CaseScore:
             "review_precision": round(self.review_precision, 4),
             "review_recall": round(self.review_recall, 4),
             "meter_count_mismatch": self.meter_count_mismatch,
+            "extraction_empty": self.extraction_empty,
             "cost_usd": self.cost_usd,
             "latency_s": self.latency_s,
         }
@@ -156,6 +161,8 @@ def score_case(
     got_rows = sorted(rows, key=_sort_key_row)
     label_meters = sorted(label.get("meters", []), key=_sort_key_label)
     meter_count_mismatch = abs(len(got_rows) - len(label_meters))
+    # A submitted bill expected to have meters but from which none were extracted.
+    extraction_empty = bool(label_meters) and not got_rows
 
     mwh_within = 0
     mwh_meters = 0
@@ -196,6 +203,7 @@ def score_case(
         review_fp=review_fp,
         review_fn=review_fn,
         meter_count_mismatch=meter_count_mismatch,
+        extraction_empty=extraction_empty,
         cost_usd=cost_usd,
         latency_s=latency_s,
     )
@@ -234,6 +242,13 @@ class Scorecard:
         fn = sum(c.review_fn for c in self.cases)
         return tp / (tp + fn) if (tp + fn) else 1.0
 
+    @property
+    def extraction_failure_rate(self) -> float:
+        """Fraction of bills that yielded no meters — a total extraction failure
+        that the MWh coverage rate would otherwise hide (those bills are absent
+        from the per-meter averages entirely)."""
+        return sum(c.extraction_empty for c in self.cases) / len(self.cases) if self.cases else 0.0
+
     def summary(self) -> dict:
         return {
             "n_cases": len(self.cases),
@@ -241,6 +256,7 @@ class Scorecard:
             "mwh_within_tol_rate": round(self.mwh_within_tol_rate, 4),
             "review_precision": round(self.review_precision, 4),
             "review_recall": round(self.review_recall, 4),
+            "extraction_failure_rate": round(self.extraction_failure_rate, 4),
             "cases": [c.to_dict() for c in self.cases],
         }
 

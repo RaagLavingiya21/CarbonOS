@@ -1,0 +1,18 @@
+{
+  "utility_name": {"value": "Con Edison", "confidence": 0.96},
+  "account_number": {"value": "55501234", "confidence": 0.94},
+  "service_address": {"value": "500 Market St, New York, NY", "confidence": 0.90},
+  "meters": [
+    {
+      "meter_number": {"value": "MTR-2001", "confidence": 0.88},
+      "energy_carrier": {"value": "Electricity", "confidence": 0.95},
+      "service_period_start": {"value": "2025-03-01", "confidence": 0.92},
+      "service_period_end": {"value": "2025-03-31", "confidence": 0.92},
+      "consumption_quantity": {"value": "3200", "confidence": 0.70},
+      "consumption_unit": {"value": "kWh", "confidence": 0.90},
+      "demand_kw": {"value": "55", "confidence": 0.60},
+      "total_cost_usd": {"value": "$480.00", "confidence": 0.80},
+      "is_estimated_read": {"value": "false", "confidence": 0.90}
+    }
+  ]
+}

@@ -73,6 +73,9 @@ def _mock_report_data(monkeypatch) -> None:
         "consolidation_approach": "operational_control", "base_year": 2025})
     monkeypatch.setattr("db.scope1_store.get_entity", lambda eid, **k: {
         "id": eid, "name": "Acme Mfg", "jurisdiction": "US"})
+    # Disclosure exports now fold in fugitive + process (default: none for these tests)
+    monkeypatch.setattr("db.scope1_store.list_fugitive_records", lambda inv, **k: [])
+    monkeypatch.setattr("db.scope1_store.list_process_records", lambda inv, **k: [])
 
 
 def test_export_xlsx_route(monkeypatch) -> None:
@@ -90,3 +93,41 @@ def test_export_pdf_route(monkeypatch) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/pdf"
     assert resp.content[:4] == b"%PDF"
+
+
+def test_sb253_gross_now_includes_fugitive_and_process(monkeypatch) -> None:
+    """The corrected gross Scope 1 = combustion + fugitive + process."""
+    _mock_report_data(monkeypatch)
+    monkeypatch.setattr("db.scope1_store.list_fugitive_records", lambda inv, **k: [
+        {"id": "fg1", "refrigerant": "R-410A", "leaked_kg": 10.0, "facility_id": "f1"}])
+    monkeypatch.setattr("db.scope1_store.list_process_records", lambda inv, **k: [
+        {"id": "pr1", "process_type": "cement_clinker", "gas_species": "Carbon dioxide",
+         "emission_kg": 2000.0, "facility_id": "f1"}])
+    from openpyxl import load_workbook
+    resp = client.get("/api/scope1/inventories/inv1/report/xlsx", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    wb = load_workbook(BytesIO(resp.content))
+    disc = wb["Disclosure"]
+    total_row = [r for r in disc.iter_rows(values_only=True) if r and r[0] == "Gross Scope 1 (total)"]
+    assert total_row, "gross-by-category total row missing"
+    # combustion (~5.31) + R-410A 10kg (AR5 GWP 1923.5 -> ~19.235 t) + cement 2000kg CO2 (2.0 t) > 25
+    assert total_row[0][1] > 25.0
+
+
+# --- Multi-regime disclosure exports ----------------------------------------
+
+def test_regime_exports_all_formats(monkeypatch) -> None:
+    _mock_report_data(monkeypatch)
+    for regime in ("esrs-e1", "cdp", "epa-ghgrp"):
+        pdf = client.get(f"/api/scope1/inventories/inv1/report/{regime}.pdf", headers=AUTH_HEADERS)
+        assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+        assert regime in pdf.headers["content-disposition"]
+        xlsx = client.get(f"/api/scope1/inventories/inv1/report/{regime}.xlsx", headers=AUTH_HEADERS)
+        assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+        assert regime in xlsx.headers["content-disposition"]
+
+
+def test_unknown_regime_422(monkeypatch) -> None:
+    _mock_report_data(monkeypatch)
+    resp = client.get("/api/scope1/inventories/inv1/report/nonsense.pdf", headers=AUTH_HEADERS)
+    assert resp.status_code == 422

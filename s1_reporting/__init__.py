@@ -7,12 +7,15 @@ line. The same content is the SB 253 disclosure body (research/2.4). Switching
 ar_version recomputes from identical stored masses — no mutation.
 """
 
+from s1_reporting.disclosures import REGIME_MAPPERS, render_pdf, render_xlsx
 from s1_reporting.export import DisclosureMeta, build_pdf, build_xlsx
 from s1_reporting.report import (
+    DisclosureData,
     FacilityBreakdown,
     GasBreakdown,
     InventoryReport,
     ReportRecord,
+    SourceLine,
     build_inventory_report,
     trace_record,
 )
@@ -24,17 +27,22 @@ from s1_reporting.trends import (
 )
 
 __all__ = [
+    "REGIME_MAPPERS",
+    "DisclosureData",
     "DisclosureMeta",
     "FacilityBreakdown",
     "GasBreakdown",
     "InventoryDatum",
     "InventoryReport",
     "ReportRecord",
+    "SourceLine",
     "TrendPoint",
     "TrendsResult",
     "build_inventory_report",
     "build_pdf",
     "build_trends",
     "build_xlsx",
+    "render_pdf",
+    "render_xlsx",
     "trace_record",
 ]

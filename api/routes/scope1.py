@@ -18,6 +18,8 @@ from api.graphs.scope1_ocr_graph import get_ocr_state, review_ocr, start_ocr
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.scope1_schemas import (
     AssignOwnerRequest,
+    BayouCredentialsResponse,
+    BayouSyncResponse,
     CollectionStatusRequest,
     ConsolidationPreviewRequest,
     ConsolidationPreviewResponse,
@@ -49,6 +51,7 @@ from api.models.scope1_schemas import (
     RecalcAnalysisResponse,
     RecalcEventDTO,
     SetBaseYearRequest,
+    SetBayouApiKeyRequest,
     SetInventoryMetricsRequest,
     SetRoleRequest,
     StationaryRecordRequest,
@@ -57,7 +60,9 @@ from api.models.scope1_schemas import (
     UpsertBoundaryRequest,
 )
 from db import org_store
+from db import s1_bayou_store as bayou_store
 from db import scope1_store as store
+from db.client import get_service_client
 from db.scope1_store import NoActiveOrgError
 from s1_calc import GasMasses, calculate_mobile, calculate_stationary
 from s1_consolidation import compute_consolidation_multiplier
@@ -70,18 +75,28 @@ from s1_fugitive import (
     refrigerant_gwp,
 )
 from s1_intake import parse_base_year_csv, parse_intake_csv
-from s1_intake.bayou import BayouClient, BayouError, bayou_bill_to_extraction
+from s1_intake.bayou import (
+    BayouClient,
+    BayouError,
+    bayou_bill_to_extraction,
+    pull_parsed_extractions,
+)
 from s1_onboarding import OnboardingCounts, build_onboarding
 from s1_process import compute_emission_kg, list_process_factors, process_tco2e
 from s1_recalc import RecalcEvent, analyze_recalc
 from s1_reporting import (
+    REGIME_MAPPERS,
+    DisclosureData,
     DisclosureMeta,
     InventoryDatum,
     ReportRecord,
+    SourceLine,
     build_inventory_report,
     build_pdf,
     build_trends,
     build_xlsx,
+    render_pdf,
+    render_xlsx,
     trace_record,
 )
 
@@ -175,6 +190,122 @@ def invite_member(req: InviteMemberRequest, user: CurrentUser = Depends(require_
     org_store.add_member(target_id, org.id, access_token=user.access_token, role="member")
     return _guard(store.set_member_role, target_id, req.role,
                   access_token=user.access_token, user_id=user.user_id)
+
+
+# --- Bayou credential-connect -----------------------------------------------
+
+def _active_org_id(user: CurrentUser) -> str:
+    org = org_store.get_active_org(user.access_token, user_id=user.user_id)
+    if org is None:
+        raise HTTPException(status_code=400, detail="No active organization.")
+    return org.id
+
+
+def _bayou_status(row: dict) -> BayouCredentialsResponse:
+    """Status view — never includes the raw key."""
+    return BayouCredentialsResponse(
+        id=row["id"], org_id=row["org_id"], is_active=bool(row.get("is_active")),
+        configured=bool(row.get("bayou_api_key")),
+        last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
+        created_at=row["created_at"], updated_at=row["updated_at"],
+    )
+
+
+@router.get("/bayou-credentials", response_model=BayouCredentialsResponse)
+def get_bayou_credentials(user: CurrentUser = Depends(require_editor)) -> BayouCredentialsResponse:
+    """Bayou connection status for the org (never returns the API key)."""
+    org_id = _active_org_id(user)
+    row = bayou_store.get_or_create_credentials(
+        org_id, get_service_client(), access_token=user.access_token)
+    return _bayou_status(row)
+
+
+@router.post("/bayou-credentials", response_model=BayouCredentialsResponse)
+def set_bayou_credentials(
+    req: SetBayouApiKeyRequest, user: CurrentUser = Depends(require_admin)
+) -> BayouCredentialsResponse:
+    """Admin sets/updates the org's Bayou API key (stored service-role only)."""
+    org_id = _active_org_id(user)
+    client = get_service_client()
+    bayou_store.get_or_create_credentials(org_id, client, access_token=user.access_token)
+    row = bayou_store.set_api_key(org_id, req.bayou_api_key, client, access_token=user.access_token)
+    _log(row["id"], "set_bayou_key", user, entity_table="s1_bayou_credentials")  # key never logged
+    return _bayou_status(row)
+
+
+@router.delete("/bayou-credentials", response_model=BayouCredentialsResponse)
+def disconnect_bayou_credentials(user: CurrentUser = Depends(require_admin)) -> BayouCredentialsResponse:
+    """Admin disconnects Bayou (deactivates; keeps the row/history)."""
+    org_id = _active_org_id(user)
+    try:
+        row = bayou_store.deactivate_credentials(
+            org_id, get_service_client(), access_token=user.access_token)
+    except bayou_store.NoCredentialsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _log(row["id"], "disconnect_bayou", user, entity_table="s1_bayou_credentials")
+    return _bayou_status(row)
+
+
+def _ingest_bayou_bills(parsed, user: CurrentUser) -> int:
+    """Queue pulled Bayou extractions into the org's OCR review queue (against the
+    latest inventory), where a reviewer assigns the source + finalizes -> calc.
+    Deduped by bayou_bill_id against already-queued rows. Returns count queued."""
+    inventories = _guard(store.list_inventories,
+                         access_token=user.access_token, user_id=user.user_id)
+    if not inventories:
+        return 0
+    inv = max(inventories, key=lambda i: i["reporting_year"])
+    seen = {
+        e.get("bayou_bill_id")
+        for e in _guard(store.list_ocr_queue, status="approved",
+                        access_token=user.access_token, user_id=user.user_id)
+    }
+    queued = 0
+    for pb in parsed:
+        if pb.bill.bill_id in seen:
+            continue
+        _guard(store.create_ocr_extraction, {
+            "inventory_id": inv["id"],
+            "graph_session_id": pb.bill.bill_id,     # no LangGraph run for Bayou
+            "doc_kind": "utility_bill",
+            "parser": "bayou",
+            "bayou_bill_id": pb.bill.bill_id,
+            "extracted": pb.extraction.to_dict(),
+            "min_confidence": pb.extraction.min_confidence,
+            "status": "approved",                    # trained parser -> trusted Tier 2
+        }, access_token=user.access_token, user_id=user.user_id)
+        queued += 1
+    return queued
+
+
+@router.post("/bayou-credentials/sync", response_model=BayouSyncResponse)
+def sync_bayou(
+    force: bool = Query(False), user: CurrentUser = Depends(require_editor)
+) -> BayouSyncResponse:
+    """Credential-connect auto-pull: if due (or forced), use the org's stored key
+    to list its Bayou bills, map the parsed ones, and ingest them into the OCR
+    review queue. Bayou parses the PDFs server-side, so there's no local fetch to
+    mock; the review->record step drives calc (unchanged)."""
+    org_id = _active_org_id(user)
+    svc = get_service_client()
+    if not (force or bayou_store.should_sync(org_id, svc, access_token=user.access_token)):
+        return BayouSyncResponse(synced=False, reason="not due")
+    try:
+        api_key = bayou_store.get_active_api_key(org_id, svc, access_token=user.access_token)
+    except bayou_store.NoCredentialsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        pull = pull_parsed_extractions(BayouClient(api_key=api_key))
+    except BayouError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    queued = _ingest_bayou_bills(pull.parsed, user)
+    row = bayou_store.mark_sync_complete(org_id, svc, access_token=user.access_token)
+    return BayouSyncResponse(
+        synced=True, bills_fetched=pull.fetched, bills_parsed=pull.parsed_count,
+        queued=queued, last_sync=row.get("last_sync"), next_sync=row.get("next_sync"),
+    )
 
 
 # --- Emission factors (admin overrides) -------------------------------------
@@ -1112,9 +1243,9 @@ def export_report_xlsx(
     user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Structured SB 253 / GHG Protocol disclosure workbook (coversheet + by gas + by facility)."""
-    report = _assemble_report(inventory_id, ar_version, user)
+    disclosure = _assemble_disclosure_data(inventory_id, ar_version, user)
     meta = _disclosure_meta(inventory_id, ar_version, user)
-    data = build_xlsx(report, meta)
+    data = build_xlsx(disclosure, meta)
     filename = f"scope1-{meta.reporting_year}-{ar_version}.xlsx"
     return StreamingResponse(
         iter([data]),
@@ -1130,15 +1261,59 @@ def export_report_pdf(
     user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Human-readable CA SB 253 / GHG Protocol Scope 1 disclosure PDF."""
-    report = _assemble_report(inventory_id, ar_version, user)
+    disclosure = _assemble_disclosure_data(inventory_id, ar_version, user)
     meta = _disclosure_meta(inventory_id, ar_version, user)
-    data = build_pdf(report, meta)
+    data = build_pdf(disclosure, meta)
     filename = f"scope1-sb253-{meta.reporting_year}-{ar_version}.pdf"
     return StreamingResponse(
         iter([data]),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# --- Multi-regime disclosure exports (ESRS E1 / CDP / EPA GHGRP) -------------
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _regime_doc(inventory_id: str, regime: str, ar_version: str, user: CurrentUser):
+    mapper = REGIME_MAPPERS.get(regime)
+    if mapper is None:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown regime '{regime}'. Use one of {sorted(REGIME_MAPPERS)}.")
+    data = _assemble_disclosure_data(inventory_id, ar_version, user)
+    meta = _disclosure_meta(inventory_id, ar_version, user)
+    return mapper(data, meta), meta
+
+
+def _disclosure_stream(payload: bytes, media_type: str, filename: str) -> StreamingResponse:
+    return StreamingResponse(
+        iter([payload]), media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/inventories/{inventory_id}/report/{regime}.pdf")
+def export_regime_pdf(
+    inventory_id: str, regime: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Human-readable disclosure PDF for a regime (esrs-e1 | cdp | epa-ghgrp)."""
+    doc, meta = _regime_doc(inventory_id, regime, ar_version, user)
+    filename = f"scope1-{doc.filename_slug}-{meta.reporting_year}-{ar_version}.pdf"
+    return _disclosure_stream(render_pdf(doc), "application/pdf", filename)
+
+
+@router.get("/inventories/{inventory_id}/report/{regime}.xlsx")
+def export_regime_xlsx(
+    inventory_id: str, regime: str, ar_version: str = Query("AR5"),
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Structured disclosure workbook for a regime (esrs-e1 | cdp | epa-ghgrp)."""
+    doc, meta = _regime_doc(inventory_id, regime, ar_version, user)
+    filename = f"scope1-{doc.filename_slug}-{meta.reporting_year}-{ar_version}.xlsx"
+    return _disclosure_stream(render_xlsx(doc), _XLSX_MEDIA, filename)
 
 
 @router.get("/records/{record_id}/trace")
@@ -1298,8 +1473,9 @@ def _gas_masses(row: dict) -> GasMasses:
     )
 
 
-def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
-    """Fetch records + sources + facilities + boundaries and roll up the report."""
+def _assemble_combustion(inventory_id: str, ar_version: str, user: CurrentUser):
+    """Roll up combustion records; returns (InventoryReport, list[ReportRecord],
+    facility-name map). The records + names are reused by disclosure exports."""
     records = _guard(store.list_records_for_inventory, inventory_id,
                      access_token=user.access_token, user_id=user.user_id)
     sources = {s["id"]: s for s in _guard(
@@ -1311,9 +1487,48 @@ def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
         access_token=user.access_token, user_id=user.user_id)}
     report_records = [_report_record(rec, sources, facilities, boundaries) for rec in records]
     try:
-        return build_inventory_report(report_records, ar_version)
+        report = build_inventory_report(report_records, ar_version)
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return report, report_records, facilities
+
+
+def _assemble_report(inventory_id: str, ar_version: str, user: CurrentUser):
+    """Combustion-only inventory report (the JSON /report + legacy exports)."""
+    return _assemble_combustion(inventory_id, ar_version, user)[0]
+
+
+def _assemble_disclosure_data(inventory_id: str, ar_version: str, user: CurrentUser) -> DisclosureData:
+    """Combustion report + fugitive + process, so a disclosed gross Scope 1 covers
+    all three direct-emission categories (not combustion only)."""
+    report, report_records, facilities = _assemble_combustion(inventory_id, ar_version, user)
+    kw = {"access_token": user.access_token, "user_id": user.user_id}
+
+    fugitive_lines: list[SourceLine] = []
+    fugitive_total = 0.0
+    for r in _guard(store.list_fugitive_records, inventory_id, **kw):
+        t = fugitive_tco2e(float(r["leaked_kg"]), r["refrigerant"], ar_version)
+        fugitive_total += t
+        fugitive_lines.append(SourceLine(
+            label=r["refrigerant"], gas_or_refrigerant=r["refrigerant"],
+            facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
+            tco2e=t))
+
+    process_lines: list[SourceLine] = []
+    process_total = 0.0
+    for r in _guard(store.list_process_records, inventory_id, **kw):
+        t = process_tco2e(float(r["emission_kg"]), r["gas_species"], ar_version)
+        process_total += t
+        process_lines.append(SourceLine(
+            label=r["process_type"], gas_or_refrigerant=r["gas_species"],
+            facility_id=r.get("facility_id"), facility_name=facilities.get(r.get("facility_id")),
+            tco2e=t))
+
+    return DisclosureData(
+        combustion=report, fugitive_tco2e=fugitive_total, process_tco2e=process_total,
+        fugitive_lines=fugitive_lines, process_lines=process_lines,
+        report_records=report_records,
+    )
 
 
 def _disclosure_meta(inventory_id: str, ar_version: str, user: CurrentUser) -> DisclosureMeta:
@@ -1347,4 +1562,6 @@ def _report_record(rec: dict, sources: dict, facilities: dict, boundaries: dict)
         facility_name=facilities.get(facility_id),
         source_id=rec["emission_source_id"],
         source_name=source.get("source_name"),
+        fuel=source.get("primary_fuel"),
+        ef_tier=rec.get("ef_tier"),
     )

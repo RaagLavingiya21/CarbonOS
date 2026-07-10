@@ -415,3 +415,31 @@ class OnboardingResponse(BaseModel):
     total: int
     pct: float
     next_key: str | None = None
+
+# --- Bayou credentials (credential-connect) --------------------------------
+
+class SetBayouApiKeyRequest(BaseModel):
+    """Org-admin sets their Bayou API key (stored backend/service-role only)."""
+    bayou_api_key: str = Field(..., min_length=1, description="Bayou API key from their console")
+
+
+class BayouCredentialsResponse(BaseModel):
+    """Current Bayou credential status (API key NOT exposed in response)."""
+    id: str
+    org_id: str
+    is_active: bool
+    configured: bool = False        # a key has been set
+    last_sync: str | None = None
+    next_sync: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class BayouSyncResponse(BaseModel):
+    synced: bool
+    bills_fetched: int = 0          # bills returned by Bayou's /bills
+    bills_parsed: int = 0           # subset already unlocked/parsed
+    queued: int = 0                 # new extractions ingested into the review queue
+    reason: str | None = None
+    last_sync: str | None = None
+    next_sync: str | None = None

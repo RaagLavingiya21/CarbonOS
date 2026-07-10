@@ -144,3 +144,73 @@ idempotent migrations (`bcdd94d`), multi-meter PDF/OCR + evals + routes + UI (`f
   EcoVadis) — both design-partner-driven; revisit when pilots are known.
 - Residual-mix default for non-Green-e US RECs (documented gray area).
 - Prod migration discipline — adopt Supabase migration CLI vs. manual SQL Editor.
+
+## V2 Status (2026-07-07 ongoing)
+
+### Priority 1 — Target-Setting (SBTi-style reduction tracking) ✅
+
+**Complete:** Org-level base-year + future target (amount or % reduction) with org-scoped RLS.
+
+**Backend:**
+- Migration 049: s2_targets table with immutable base/target totals, mutable status/notes
+- Store: s2_targets_store.py with list/get/create/update/delete 
+- Schemas: CreateTargetRequest, TargetDTO with from_row() factory
+- Routes: GET /targets (list), GET /targets/active, POST /targets (create with validation), PATCH (update status/notes), DELETE
+- Tests: list_targets, create_target, create_target_needs_amount_or_pct (all passing)
+- Suite: 560 passing
+
+**Frontend:**
+- Page: /scope-2/targets with empty state, active target highlight, other targets list
+- Create form: year selectors (1975–2075), base-year + target emissions, absolute/percentage toggle, trajectory type (linear/exponential), optional notes
+- Progress card: displays base/target emissions, % reduction, progress bar, status badge
+- Linked from main /scope-2 dashboard
+- Build: Next.js passes cleanly
+
+**Commits:** c423cec (backend), 66a8c73 (frontend)
+
+### Next Priorities
+
+**Priority 2:** Real-doc OCR evals (user supplies redacted bills → calibrate REVIEW_THRESHOLD ~0.85)
+**Priority 3:** Aggregator binding (fetch real PDFs from provider, pipe to OCR intake)
+
+### Pending DB Tasks
+- Apply migration 049 to dev/prod databases
+
+### Priority 2 — OCR eval corpus + REVIEW_THRESHOLD calibration ✅ (infra)
+
+Synthetic-first (no real bills yet). All under `evals/scope2_ocr/` + one config knob.
+
+**Built:**
+- `synthetic.py` — Pillow bill-image generator; BillSpec/MeterSpec; clean/moderate/hard difficulty tiers (blur, rotation, low-res, fade, seeded noise); auto-labels with `canonical_mwh` from the real `normalize_to_mwh`. Deterministic per seed.
+- `generate_corpus.py` — CLI writing `<name>.png` + `<name>.json` pairs into a gitignored `corpus/` dir.
+- `calibration.py` — pure `Observation`/`sweep_threshold`/`recommend_threshold` (smallest cutoff meeting review-recall floor, default 0.95) + `observations_from_rows`.
+- `run_calibration.py` — API-gated live runner: extract→score→sweep→recommend; JSON report.
+- `langsmith_tracking.py` — opt-in, eval-layer-only adapter (`S2_OCR_LANGSMITH=1` + key); lazy-imports langsmith; logs experiment metrics + recommended threshold + dataset. Production OCR path stays LangChain-free. No-op + offline when disabled.
+- `s2_ingestion/ocr.py` — `REVIEW_THRESHOLD` now env-overridable (`S2_OCR_REVIEW_THRESHOLD`, default 0.85) so a calibrated value deploys without code change.
+- New golden case `degraded_lowconf_elec` (correct read, low confidence → review false-positive) guards the threshold path.
+- Tests: synthetic determinism/labels/tiers, calibration precision-recall math, langsmith no-op-when-disabled, threshold env override. Full suite 613 passing, ruff clean.
+
+**Remaining (needs a key):** one live `run_calibration` pass over a generated corpus to read the recommended threshold, set it as the default, and confirm review_recall ≥ 0.95. Synthetic bills are a proxy for real scan messiness — re-calibrate on real redacted bills when available (drop them in the gitignored corpus dir).
+
+### P2 calibration run + empty-extraction fix (2026-07-08)
+
+Ran the live calibration over a 30-bill synthetic corpus (seed 0). Outcome: the
+threshold sweep was **flat** — extracted meters came back ≥0.99 confidence and
+correct, so there was no signal to move REVIEW_THRESHOLD (recommended 0.50 is a
+degenerate "everything passes" artifact). **Kept the default 0.85.** Real
+threshold calibration needs real messy bills; synthetic renders are too legible.
+
+The run *did* surface a real gap: **4/30 bills failed extraction entirely** (model
+returned no meters) — invisible to the per-meter review metric and silently
+excluded from the MWh coverage rate. Fixed:
+- `s2_ingestion/ocr.py::bill_review_reasons` — bill-level review reasons (errored,
+  or zero meters extracted).
+- `extract-doc` route now routes empty/failed extractions to review (was
+  `needs_review=False`) and returns bill-level `review_reasons` (schema updated).
+- Scorecard tracks `extraction_empty` per case + `extraction_failure_rate`
+  aggregate; new golden case `empty_extraction`.
+- Tests: bill_review_reasons unit, extract-doc empty-extraction route, golden
+  empty-extraction. Suite 616 passing, ruff clean.
+
+Threshold calibration itself is **deferred to real redacted bills** (drop into the
+gitignored corpus dir, `run_calibration` re-usable as-is).

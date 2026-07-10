@@ -7,3 +7,7 @@ frontend/.env.local
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Generated on demand by evals/scope2_ocr/generate_corpus.py; not committed
+# (a few golden cases in cases/ + labels/ are the committed regression set).
+evals/scope2_ocr/corpus/

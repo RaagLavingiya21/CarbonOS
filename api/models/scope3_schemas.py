@@ -265,3 +265,194 @@ class TargetDTO(BaseModel):
     inventory_base_id: int | None = None
     status: str
     assurance_required: bool
+
+
+# --- Epic G: disclosure -----------------------------------------------------
+
+
+class DisclosureCalcRequest(BaseModel):
+    inventory_id: int
+    framework: str  # esrs_e1 | sb253 | ifrs_s2
+
+
+class DisclosureDatapointDTO(BaseModel):
+    key: str
+    label: str
+    value: float | None = None
+    text: str | None = None
+    unit: str
+    source_ref: str | None = None
+    flag: str
+
+
+class DisclosureResultDTO(BaseModel):
+    framework: str
+    format_version: str
+    is_provisional: bool
+    datapoints: list[DisclosureDatapointDTO] = Field(default_factory=list)
+    category_breakdown: list[DisclosureDatapointDTO] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+# --- Epic E: progress -------------------------------------------------------
+
+
+class ProgressTrackRequest(BaseModel):
+    base_inventory_id: int
+    current_inventory_id: int
+    target_id: int | None = None
+    # {reporting_year: target_kg_co2e}; JSON object keys are strings.
+    trajectory: dict[str, float] = Field(default_factory=dict)
+
+
+class ProgressResultDTO(BaseModel):
+    current_year: int
+    base_total_kg: float
+    real_total_kg: float
+    actual_total_kg: float
+    trajectory_target_kg: float | None = None
+    on_track: bool | None = None
+    method_delta_kg: float
+    notes: list[str] = Field(default_factory=list)
+
+
+class RecalcRequest(BaseModel):
+    trigger: str
+    significance_pct: float
+    threshold_pct: float | None = None
+
+
+class RecalcResultDTO(BaseModel):
+    trigger: str
+    significance_pct: float
+    threshold_pct: float
+    recalc_required: bool
+    rationale: str
+
+
+# --- Epic F: suppliers ------------------------------------------------------
+
+
+class SupplierCreateRequest(BaseModel):
+    name: str
+    scope3_category: int
+    emissions_kg: float = 0.0
+    spend_usd: float = 0.0
+    pcf_received: bool = False
+    dq_score: float | None = None
+    supplier_sbt_status: str = "none"
+
+
+class SupplierDTO(BaseModel):
+    supplier_id: int
+    org_id: str
+    name: str
+    scope3_category: int
+    emissions_kg: float
+    spend_usd: float
+    pcf_received: bool
+    dq_score: float | None = None
+    supplier_sbt_status: str
+
+
+class CohortRequest(BaseModel):
+    hotspot_categories: list[int]
+    top_n: int = 20
+    basis: str = "emissions"  # emissions | spend
+
+
+class CohortDTO(BaseModel):
+    basis: str
+    hotspot_categories: list[int]
+    emissions_covered_pct: float
+    members: list[SupplierDTO] = Field(default_factory=list)
+
+
+class SupplierScorecardDTO(BaseModel):
+    supplier_count: int
+    pcf_coverage_pct: float
+    emissions_covered_pct: float
+    avg_dq: float | None = None
+    sbt_committed_count: int
+    sbt_validated_count: int
+
+
+# --- Epic H: use-phase ------------------------------------------------------
+
+
+class UsePhaseCalcRequest(BaseModel):
+    product_ref: str = "product"
+    energy_per_use_kwh: float = 0.0
+    water_l_per_use: float = 0.0
+    standby_power_w: float = 0.0
+    fuel_kwh_per_use: float = 0.0
+    uses_per_year: float
+    lifetime_years: float
+    units_sold: float
+    region: str | None = None
+    mode: str = "direct"  # direct | indirect
+    include_standby: bool = True
+
+
+class UsePhaseResultDTO(BaseModel):
+    product_name: str
+    units_sold: float
+    kg_co2e: float
+    direct_or_indirect: str
+    method: str
+    ef_source: str
+    dq_note: str
+    breakdown: dict[str, float] = Field(default_factory=dict)
+
+
+# --- Epic I: levers / MAC / claims ------------------------------------------
+
+
+class LeverDTO(BaseModel):
+    lever_id: str
+    name: str
+    category: int
+    abatement_pct: float
+    cost_per_tco2e: float
+    applicability: list[str] = Field(default_factory=list)
+    source: str
+
+
+class MacRequest(BaseModel):
+    # {scope3_category: tCO2e}; JSON object keys are strings.
+    category_totals_tco2e: dict[str, float]
+    sub_sector: str | None = None
+
+
+class MacPointDTO(BaseModel):
+    lever_id: str
+    name: str
+    category: int
+    abatement_tco2e: float
+    cost_per_tco2e: float
+    cumulative_abatement_tco2e: float
+
+
+class ClaimAssessRequest(BaseModel):
+    claim_text: str
+    primary_data_share: float = 0.0
+    assured: bool = False
+    jurisdiction: str = "EU"
+    offset_based: bool = False
+
+
+class ComplianceFlagDTO(BaseModel):
+    rule_id: str
+    jurisdiction: str
+    framework: str
+    verdict: str
+    note: str
+
+
+class ClaimAssessmentDTO(BaseModel):
+    claim_text: str
+    jurisdiction: str
+    substantiable: bool
+    substantiation_reason: str
+    ruleset_version: str
+    flags: list[ComplianceFlagDTO] = Field(default_factory=list)
