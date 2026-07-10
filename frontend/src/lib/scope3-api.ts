@@ -177,6 +177,122 @@ export type QuestionnaireDetail = {
   mappings: QuestionMapping[];
 };
 
+// --- Epic D: SBTi / FLAG targets -------------------------------------------
+
+export type TargetWizardPayload = {
+  inventory_id: number;
+  base_year: number;
+  target_year: number;
+  reduction_pct: number;
+  method: string;
+  horizon: string;
+  version: string;
+  covered_categories: number[];
+  sector: string;
+  flag_kg_co2e: number;
+};
+
+export type TrajectoryPoint = { year: number; target_kg_co2e: number };
+
+export type Ambition = {
+  chosen_reduction_pct: number;
+  reference_reduction_pct: number;
+  meets_reference: boolean;
+  note: string;
+};
+
+export type FlagInfo = {
+  is_flag_required: boolean;
+  flag_share: number;
+  reason: string;
+  no_deforestation_commitment_date: string | null;
+};
+
+export type DraftTarget = {
+  version: string;
+  horizon: string;
+  category_class: string;
+  scope3_target_mandatory: boolean;
+  base_year_assurance_required: boolean;
+  total_scope3_kg: number;
+  required_categories: number[];
+  coverage_gap: number[];
+  meets_requirement: boolean | null;
+  trajectory: TrajectoryPoint[];
+  ambition: Ambition;
+  flag: FlagInfo | null;
+  notes: string[];
+};
+
+export type Target = {
+  target_id: number;
+  org_id: string;
+  type: string;
+  method: string;
+  sbti_version: string;
+  base_year: number | null;
+  target_year: number | null;
+  reduction_pct: number | null;
+  inventory_base_id: number | null;
+  status: string;
+  assurance_required: boolean;
+};
+
+// --- Epic E: progress tracking ---------------------------------------------
+
+export type ProgressTrackPayload = {
+  base_inventory_id: number;
+  current_inventory_id: number;
+  target_id: number | null;
+  trajectory: Record<string, number>;
+};
+
+export type ProgressResult = {
+  current_year: number;
+  base_total_kg: number;
+  real_total_kg: number;
+  actual_total_kg: number;
+  trajectory_target_kg: number | null;
+  on_track: boolean | null;
+  method_delta_kg: number;
+  notes: string[];
+};
+
+export type RecalcPayload = {
+  trigger: string;
+  significance_pct: number;
+  threshold_pct: number | null;
+};
+
+export type RecalcResult = {
+  trigger: string;
+  significance_pct: number;
+  threshold_pct: number;
+  recalc_required: boolean;
+  rationale: string;
+};
+
+// --- Epic G: disclosure ----------------------------------------------------
+
+export type DisclosureDatapoint = {
+  key: string;
+  label: string;
+  value: number | null;
+  text: string | null;
+  unit: string;
+  source_ref: string | null;
+  flag: string;
+};
+
+export type DisclosureResult = {
+  framework: string;
+  format_version: string;
+  is_provisional: boolean;
+  datapoints: DisclosureDatapoint[];
+  category_breakdown: DisclosureDatapoint[];
+  notes: string[];
+};
+
 async function getAccessToken(): Promise<string | null> {
   if (!hasSupabaseConfig()) return null;
   const supabase = createSupabaseBrowserClient();
@@ -280,6 +396,53 @@ export const scope3Api = {
     const response = await fetch(
       `${BACKEND_URL}/scope-3/questionnaires/${id}/export?format=${format}`,
       { method: "POST", headers },
+    );
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        detail = (await response.json())?.detail ?? detail;
+      } catch {
+        /* non-JSON error body */
+      }
+      throw new Error(`Scope 3 API ${response.status}: ${detail}`);
+    }
+    return response.blob();
+  },
+
+  // Epic D: SBTi / FLAG targets
+  targetWizard: (payload: TargetWizardPayload) =>
+    request<DraftTarget>("/scope-3/targets/wizard", { method: "POST", body: payload }),
+  createTarget: (payload: TargetWizardPayload) =>
+    request<Target>("/scope-3/targets", { method: "POST", body: payload }),
+  listTargets: () => request<Target[]>("/scope-3/targets"),
+
+  // Epic E: progress tracking
+  trackProgress: (payload: ProgressTrackPayload) =>
+    request<ProgressResult>("/scope-3/progress/track", { method: "POST", body: payload }),
+  listProgress: () => request<Record<string, unknown>[]>("/scope-3/progress"),
+  recalcCheck: (payload: RecalcPayload) =>
+    request<RecalcResult>("/scope-3/progress/recalc", { method: "POST", body: payload }),
+
+  // Epic G: disclosure
+  listFrameworks: () => request<string[]>("/scope-3/disclosures/frameworks"),
+  calculateDisclosure: (inventoryId: number, framework: string) =>
+    request<DisclosureResult>("/scope-3/disclosures/calculate", {
+      method: "POST",
+      body: { inventory_id: inventoryId, framework },
+    }),
+  exportDisclosure: async (
+    inventoryId: number,
+    framework: string,
+    format: "csv" | "markdown",
+  ) => {
+    const headers = new Headers();
+    const token = await getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(
+      `${BACKEND_URL}/scope-3/disclosures/export?inventory_id=${inventoryId}&framework=${encodeURIComponent(
+        framework,
+      )}&format=${format}`,
+      { method: "GET", headers },
     );
     if (!response.ok) {
       let detail = response.statusText;

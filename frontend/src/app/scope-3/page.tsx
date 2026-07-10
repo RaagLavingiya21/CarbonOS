@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Boxes, ClipboardList, Layers, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Boxes,
+  ClipboardList,
+  FileText,
+  Layers,
+  ShieldCheck,
+  Target,
+  TrendingDown,
+} from "lucide-react";
 
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +37,24 @@ const ENTRIES = [
     icon: ClipboardList,
     title: "Answer a customer questionnaire",
     body: "Upload an inbound CDP / EcoVadis / customer request, auto-detect the framework, map answers from your inventory, then export or submit.",
+  },
+  {
+    href: "/scope-3/targets",
+    icon: Target,
+    title: "Set science-based targets",
+    body: "Build an SBTi-conformant Scope 3 reduction target: pick an ambition, preview the trajectory and coverage gaps, then save the draft.",
+  },
+  {
+    href: "/scope-3/progress",
+    icon: TrendingDown,
+    title: "Track progress",
+    body: "Compare a base and current inventory to see like-for-like reductions vs your target — real cuts separated from method changes.",
+  },
+  {
+    href: "/scope-3/disclosures",
+    icon: FileText,
+    title: "Generate a disclosure",
+    body: "Map your inventory onto ESRS E1 / SB253 / IFRS S2 datapoints — every value sourced — then export CSV or Markdown.",
   },
 ];
 
